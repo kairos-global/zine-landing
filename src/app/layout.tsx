@@ -4,8 +4,8 @@ import { ReactNode } from 'react'
 import { Space_Grotesk } from 'next/font/google'
 
 export const metadata = {
-  title: 'Zine Hub',
-  description: 'A hub for zine discovery and culture',
+  title: 'Kairos Zine',
+  description: 'Discover your local creative community',
 }
 
 const spaceGrotesk = Space_Grotesk({
