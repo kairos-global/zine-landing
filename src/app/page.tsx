@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Navbar from './components/Navbar';
 import BubbleGrid from './components/BubbleGrid';
 import RollingQuotes from './components/RollingQuotes';
+import AnnouncementsBox from './components/AnnouncementsBox';
 
 export default function Home() {
   return (
@@ -13,6 +14,11 @@ export default function Home() {
       </section>
 
       <RollingQuotes />
+
+      {/* Fixed Announcements Box - Top Right */}
+      <div className="fixed top-21 right-25 z-0">
+        <AnnouncementsBox />
+      </div>
 
       {/* Fixed Kairos Graphic Bottom-Right */}
       <div className="fixed bottom-[-30px] right-[-30px] z-0 w-[900px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">

@@ -80,7 +80,7 @@ export default function RollingQuotes() {
   return (
     <div
       ref={containerRef}
-      className="fixed left-0 top-0 h-full w-[440px] overflow-hidden pointer-events-none z-0"
+      className="fixed left-0 top-0 h-full w-[440px] overflow-hidden pointer-events-none z-1"
     >
       <div
         ref={innerRef}
