@@ -2,32 +2,50 @@ import Bubble from "./Bubble";
 
 const BubbleGrid = () => {
   const bubbles = [
-    { label: "Map", color: "F26565" },          // Red
-    { label: "Feature Me", color: "65CBF1" },   // Blue
-    { label: "About", color: "FFFFFF" },        // White
-    { label: "Advertise", color: "82E385" },    // Green
-    { label: "Share Feedback", color: "F2DC6F" }, // Yellow
-    { label: "Distribute", color: "D16FF2" },   // Purple
+    { label: "Map", color: "F26565", href: "/map" },
+    { label: "Feature Me", color: "65CBF1", href: "/feature-me" },
+    { label: "About", color: "FFFFFF", href: "/about" },
+    { label: "Advertise", color: "82E385", href: "/advertise" },
+    { label: "Share Feedback", color: "F2DC6F", href: "/share-feedback" },
+    { label: "Distribute", color: "D16FF2", href: "/distribute" },
+    { label: "Past Issues", color: "A4A4A4", href: "/past-issues" },
   ];
 
   return (
-    <section className="flex relative z-10 flex-col items-center gap-12 p-2">
-      {/* Top bubble */}
-      <div>
-        <Bubble label={bubbles[0].label} color={bubbles[0].color} />
+    <section className="relative w-full h-[500px] z-10">
+      {/* Red - Map */}
+      <div className="absolute top-[0px] left-[300px]">
+        <Bubble {...bubbles[0]} />
       </div>
 
-      {/* Middle row with 3 */}
-      <div className="flex gap-12">
-        <Bubble label={bubbles[1].label} color={bubbles[1].color} />
-        <Bubble label={bubbles[2].label} color={bubbles[2].color} />
-        <Bubble label={bubbles[3].label} color={bubbles[3].color} />
+      {/* Blue - Feature Me */}
+      <div className="absolute top-[200px] left-[175px]">
+        <Bubble {...bubbles[1]} />
       </div>
 
-      {/* Bottom column */}
-      <div className="flex flex-col items-center gap-6">
-        <Bubble label={bubbles[4].label} color={bubbles[4].color} />
-        <Bubble label={bubbles[5].label} color={bubbles[5].color} />
+      {/* White - About */}
+      <div className="absolute top-[0px] left-[550px]">
+        <Bubble {...bubbles[2]} />
+      </div>
+
+      {/* Green - Advertise */}
+      <div className="absolute top-[200px] left-[675px]">
+        <Bubble {...bubbles[3]} />
+      </div>
+
+      {/* Yellow - Share Feedback */}
+      <div className="absolute top-[400px] left-[300px]">
+        <Bubble {...bubbles[4]} />
+      </div>
+
+      {/* Purple - Distribute */}
+      <div className="absolute top-[400px] left-[550px]">
+        <Bubble {...bubbles[5]} />
+      </div>
+
+      {/* Gray - Past Issues */}
+      <div className="absolute top-[200px] left-[425px]">
+        <Bubble {...bubbles[6]} />
       </div>
     </section>
   );
