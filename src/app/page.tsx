@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import Navbar from './components/Navbar';
 import BubbleGrid from './components/BubbleGrid';
 import RollingQuotes from './components/RollingQuotes';
 import AnnouncementsBox from './components/AnnouncementsBox';
@@ -7,7 +6,6 @@ import AnnouncementsBox from './components/AnnouncementsBox';
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col bg-[#F0EBCC] text-black relative overflow-hidden">
-      <Navbar />
 
       <section className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center">
         <BubbleGrid />

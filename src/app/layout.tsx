@@ -2,6 +2,8 @@
 import './globals.css'
 import { ReactNode } from 'react'
 import { Space_Grotesk } from 'next/font/google'
+import Navbar from './components/Navbar'
+
 
 export const metadata = {
   title: 'Kairos Zine',
@@ -17,7 +19,10 @@ const spaceGrotesk = Space_Grotesk({
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={spaceGrotesk.variable}>
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        {children}
+      </body>
     </html>
   )
 }
