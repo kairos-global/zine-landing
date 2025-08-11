@@ -6,8 +6,8 @@ import Navbar from './components/Navbar'
 
 
 export const metadata = {
-  title: 'Kairos Zine',
-  description: 'Discover your local creative community',
+  title: 'Zineground',
+  description: 'Zineground is a zine distribution network.',
 }
 
 const spaceGrotesk = Space_Grotesk({
