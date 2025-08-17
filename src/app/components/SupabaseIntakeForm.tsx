@@ -31,15 +31,15 @@ export default function SupabaseIntakeForm({
   title?: string;
   successMessage?: string;
   buttonLabel?: string;
-  defaultValues?: Record<string, any>;
+  defaultValues?: Record<string, string | number>;
 }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Record<string, any>>(defaultValues);
+  const [formData, setFormData] = useState<Record<string, string | number>>(defaultValues);
 
   useMemo(() => new Set(fields.filter(f => f.required).map(f => f.name)), [fields]);
 
-  function handleChange(name: string, value: any) {
+  function handleChange(name: string, value: string | number) {
     setFormData(prev => ({ ...prev, [name]: value }));
   }
 

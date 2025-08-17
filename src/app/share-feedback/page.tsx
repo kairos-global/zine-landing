@@ -2,7 +2,7 @@ const ShareFeedbackPage = () => {
   return (
     <div className="p-6 min-h-screen flex flex-col items-center justify-start">
       <h1 className="text-3xl font-bold mb-6 text-center">Share Feedback</h1>
-      <p>We'd love to hear your thoughts about ZineGround and how we can improve.</p>
+      <p>We&apos;d love to hear your thoughts about ZineGround and how we can improve.</p>
       <div className="w-full max-w-3xl aspect-[4/5]">
         <iframe
           src="https://form.typeform.com/to/RtHpU3yA"

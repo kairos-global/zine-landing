@@ -1,5 +1,6 @@
 // app/past-issues/page.tsx
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -33,9 +34,11 @@ export default async function PastIssues() {
           <Link key={i.slug} href={`/issues/${i.slug}`} className="group overflow-hidden rounded-xl border">
             <div className="aspect-[3/4] w-full bg-neutral-100">
               {i.cover_img_url && (
-                <img
+                <Image
                   src={i.cover_img_url}
                   alt={i.title}
+                  width={300}
+                  height={400}
                   className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
                 />
               )}

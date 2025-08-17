@@ -7,15 +7,6 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-type Issue = {
-  id: string;
-  slug: string;
-  title: string;
-  published_at: string | null;
-  pdf_url: string | null;         // you kept full URLs
-  cover_img_url: string | null;   // you kept full URLs
-};
-
 export default async function IssuePage({ params }: { params: { slug: string } }) {
   // 1) Issue
   const { data: issue, error } = await supabase
