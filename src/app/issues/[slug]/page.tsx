@@ -7,12 +7,15 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-export default async function IssuePage({ params }: { params: { slug: string } }) {
+export default async function IssuePage({ params }: { params: Promise<{ slug: string }> }) {
+  // Await the params since they're now async in Next.js 15
+  const { slug } = await params;
+  
   // 1) Issue
   const { data: issue, error } = await supabase
     .from("issues")
     .select("id,slug,title,published_at,pdf_url,cover_img_url")
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .single();
 
   if (error || !issue) return <div className="p-6">Issue not found.</div>;
