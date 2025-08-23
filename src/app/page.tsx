@@ -6,6 +6,8 @@ import AnnouncementsBox from './components/AnnouncementsBox';
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col bg-[#F0EBCC] text-black relative overflow-hidden">
+      <div className="fixed inset-0 -z-10 bg-[#F0EBCC]" aria-hidden="true" />
+
       <section className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center">
         <BubbleGrid />
       </section>
