@@ -17,11 +17,11 @@ export default function Home() {
         <AnnouncementsBox />
       </div>
 
-      {/* Fixed Kairos Graphic – hide on small screens */}
+      {/* Fixed Landing Page Graphic – hide on small screens */}
       <div className="hidden md:block fixed bottom-[-30px] right-[-30px] z-0 w-[900px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
         <Image
-          src="/images/kairos-bp.jpg"
-          alt="Kairos Graphic"
+          src="/images/landing-page-graphic.jpg"
+          alt="Landing Page Graphic"
           width={600}
           height={400}
           className="w-full h-auto object-cover"
