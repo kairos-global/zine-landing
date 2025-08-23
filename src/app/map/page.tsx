@@ -1,9 +1,13 @@
+// src/app/map/page.tsx
+import MapClient from "./MapClient";
+
+export const dynamic = "force-dynamic"; // always render fresh
+
 export default function MapPage() {
-    return (
-      <div className="p-6 text-center">
-        <h1 className="text-3xl font-bold">Map</h1>
-        <p>Explore locations of zine distributors, zine features, and other zine activity around you.</p>
-      </div>
-    );
-  }
-  
+  // Server component just renders the client map.
+  return (
+    <main className="relative min-h-screen">
+      <MapClient />
+    </main>
+  );
+}
