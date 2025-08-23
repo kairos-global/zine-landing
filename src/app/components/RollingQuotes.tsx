@@ -59,10 +59,10 @@ export default function RollingQuotes() {
 
     const scroll = () => {
       if (innerRef.current && containerRef.current) {
-        pos += 0.4; // adjust speed here
+        pos += 0.4; // speed
         innerRef.current.style.transform = `translateY(-${pos}px)`;
 
-        // Reset position when halfway through
+        // loop halfway through list
         if (innerRef.current.scrollHeight / 2 - pos <= 0) {
           pos = 0;
         }
@@ -78,11 +78,10 @@ export default function RollingQuotes() {
     <div
       ref={containerRef}
       className="
-        fixed overflow-hidden pointer-events-none
-        z-0
-        w-full h-[40vh] inset-x-0 top-0
-        md:left-0 md:top-0 md:inset-x-auto
-        md:h-full md:w-[440px]
+        fixed pointer-events-none overflow-hidden z-0
+        inset-x-0 top-0 bottom-0 w-full   /* mobile: fill viewport height */
+        md:inset-x-auto md:bottom-auto md:left-0 md:top-0 md:w-[440px] md:h-full /* desktop: original */
+        pb-[env(safe-area-inset-bottom)]  /* avoid iOS home indicator overlap */
       "
     >
       <div
@@ -90,8 +89,7 @@ export default function RollingQuotes() {
         className="
           flex flex-col text-gray-500 opacity-40
           text-sm sm:text-base lg:text-lg
-          px-4 py-8 space-y-7
-          will-change-transform
+          px-4 py-8 space-y-7 will-change-transform
         "
       >
         {[...quotes, ...quotes].map((quote, i) => (
