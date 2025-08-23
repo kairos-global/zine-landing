@@ -9,7 +9,15 @@ interface BubbleProps {
 const Bubble = ({ label, color, href }: BubbleProps) => {
   const bubbleContent = (
     <div
-      className={`flex items-center justify-center w-34 h-34 rounded-full border-5 border-black shadow-md text-black font-medium hover:bg-gray-100 transition z-10`}
+      className="
+        flex items-center justify-center
+        aspect-square
+        w-28 sm:w-28 md:w-30 lg:w-34
+        rounded-full border-[5px] border-black shadow-md
+        text-black font-medium
+        hover:bg-gray-100 transition
+        z-10
+      "
       style={{ backgroundColor: `#${color}` }}
     >
       {label}

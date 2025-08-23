@@ -6,20 +6,19 @@ import AnnouncementsBox from './components/AnnouncementsBox';
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col bg-[#F0EBCC] text-black relative overflow-hidden">
-
       <section className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center">
         <BubbleGrid />
       </section>
 
       <RollingQuotes />
 
-      {/* Fixed Announcements Box - Top Right */}
-      <div className="fixed top-21 right-25 z-0">
+      {/* Fixed Announcements Box – hide on small screens */}
+      <div className="hidden md:block fixed top-21 right-25 z-0">
         <AnnouncementsBox />
       </div>
 
-      {/* Fixed Kairos Graphic Bottom-Right */}
-      <div className="fixed bottom-[-30px] right-[-30px] z-0 w-[900px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
+      {/* Fixed Kairos Graphic – hide on small screens */}
+      <div className="hidden md:block fixed bottom-[-30px] right-[-30px] z-0 w-[900px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
         <Image
           src="/images/kairos-bp.jpg"
           alt="Kairos Graphic"

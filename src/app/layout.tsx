@@ -1,28 +1,27 @@
 // src/app/layout.tsx
-import './globals.css'
-import { ReactNode } from 'react'
-import { Space_Grotesk } from 'next/font/google'
-import Navbar from './components/Navbar'
-
+import './globals.css';
+import { ReactNode } from 'react';
+import { Space_Grotesk } from 'next/font/google';
+import Navbar from './components/Navbar';
 
 export const metadata = {
   title: 'Zineground',
   description: 'Zineground is a zine distribution network.',
-}
+};
 
 const spaceGrotesk = Space_Grotesk({
-    subsets: ['latin'],
-    weight: ['400', '500', '600', '700'],
-    variable: '--font-space-grotesk',
-  })
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-space-grotesk',
+});
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={spaceGrotesk.variable}>
-      <body>
+      <body className="bg-[#F0EBCC] text-black antialiased min-h-screen overflow-x-hidden">
         <Navbar />
         {children}
       </body>
     </html>
-  )
+  );
 }

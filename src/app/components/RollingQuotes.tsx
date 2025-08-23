@@ -60,14 +60,12 @@ export default function RollingQuotes() {
     const scroll = () => {
       if (innerRef.current && containerRef.current) {
         pos += 0.4; // adjust speed here
-
         innerRef.current.style.transform = `translateY(-${pos}px)`;
 
         // Reset position when halfway through
         if (innerRef.current.scrollHeight / 2 - pos <= 0) {
           pos = 0;
         }
-
         animationFrame = requestAnimationFrame(scroll);
       }
     };
@@ -79,11 +77,22 @@ export default function RollingQuotes() {
   return (
     <div
       ref={containerRef}
-      className="fixed left-0 top-0 h-full w-[440px] overflow-hidden pointer-events-none z-1"
+      className="
+        fixed overflow-hidden pointer-events-none
+        z-0
+        w-full h-[40vh] inset-x-0 top-0
+        md:left-0 md:top-0 md:inset-x-auto
+        md:h-full md:w-[440px]
+      "
     >
       <div
         ref={innerRef}
-        className="flex flex-col text-gray-500 opacity-44 text-lg px-4 py-8 space-y-7 will-change-transform"
+        className="
+          flex flex-col text-gray-500 opacity-40
+          text-sm sm:text-base lg:text-lg
+          px-4 py-8 space-y-7
+          will-change-transform
+        "
       >
         {[...quotes, ...quotes].map((quote, i) => (
           <p key={i} className="leading-snug">{quote}</p>
