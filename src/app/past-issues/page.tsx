@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
+import MakeZineButton from "./MakeZineButton"; // ✅ new import
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,10 +17,11 @@ export default async function PastIssues() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6">
-      {/* Always-visible heading */}
-      <h1 className="mb-4 sm:mb-6 text-2xl sm:text-3xl font-semibold">
-        Past Issues
-      </h1>
+      {/* Heading + Button */}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl sm:text-3xl font-semibold">Past Issues</h1>
+        <MakeZineButton />
+      </div>
 
       <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
         {issues?.map((i) => (
