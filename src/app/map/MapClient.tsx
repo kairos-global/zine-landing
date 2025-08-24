@@ -29,6 +29,26 @@ type DistributorRow = {
 
 type IssueOption = { slug: string; title: string | null };
 
+/** DB row helper types (to avoid any) */
+type IssueRowLite = { slug: string; title: string | null };
+
+type FeatureJoinedRow = {
+  id: string | number;
+  title: string | null;
+  lat: number | string;
+  lng: number | string;
+  issue_id: number | null;
+  issues: { slug: string | null } | null;
+};
+
+type DistributorDbRow = {
+  id: string | number;
+  name: string | null;
+  lat: number | string;
+  lng: number | string;
+  issue_id: number | null;
+};
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -88,13 +108,13 @@ export default function MapClient() {
         .from("issues")
         .select("slug,title,published_at")
         .order("published_at", { ascending: false });
+
       if (!aborted) {
-        setIssuesList(
-          (data ?? []).map((i: any) => ({
-            slug: i.slug as string,
-            title: (i.title as string) ?? i.slug,
-          }))
-        );
+        const issues = ((data ?? []) as IssueRowLite[]).map((i) => ({
+          slug: i.slug,
+          title: i.title ?? i.slug,
+        }));
+        setIssuesList(issues);
       }
     })();
     return () => {
@@ -136,15 +156,16 @@ export default function MapClient() {
           .select("id,title,lat,lng,issue_id,issues:issues!inner(slug)");
         if (issueSlug) fQuery = fQuery.eq("issues.slug", issueSlug);
         const { data } = await fQuery;
-        fData =
-          (data as any[])?.map((r) => ({
-            id: r.id,
-            title: r.title ?? "Feature",
-            lat: Number(r.lat),
-            lng: Number(r.lng),
-            issue_id: r.issue_id ?? null,
-            issues: r.issues ?? null,
-          })) ?? [];
+
+        const rows = (data ?? []) as unknown as FeatureJoinedRow[];
+        fData = rows.map((r) => ({
+          id: r.id,
+          title: r.title ?? "Feature",
+          lat: Number(r.lat),
+          lng: Number(r.lng),
+          issue_id: r.issue_id ?? null,
+          issues: r.issues ?? null,
+        }));
       }
 
       // distributors
@@ -153,14 +174,15 @@ export default function MapClient() {
         let dQuery = supabase.from("distributors").select("id,name,lat,lng,issue_id");
         if (issueId) dQuery = dQuery.eq("issue_id", issueId);
         const { data } = await dQuery;
-        dData =
-          (data as any[])?.map((r) => ({
-            id: r.id,
-            name: r.name ?? "Distributor",
-            lat: Number(r.lat),
-            lng: Number(r.lng),
-            issue_id: r.issue_id ?? null,
-          })) ?? [];
+
+        const rows = (data ?? []) as DistributorDbRow[];
+        dData = rows.map((r) => ({
+          id: r.id,
+          name: r.name ?? "Distributor",
+          lat: Number(r.lat),
+          lng: Number(r.lng),
+          issue_id: r.issue_id ?? null,
+        }));
       }
 
       if (!aborted) {
@@ -201,7 +223,7 @@ export default function MapClient() {
       <div className="absolute left-1/2 -translate-x-1/2 top-3 z-[500]">
         <div className="rounded-2xl border-4 border-black bg-[#AAEEFF] shadow-md px-3 py-2 flex items-center gap-2 sm:gap-3">
           <button
-            className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base ${
+            className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base text-black ${
               view === "both" ? "bg-white" : "bg-white/70"
             }`}
             onClick={() => setView("both")}
@@ -209,7 +231,7 @@ export default function MapClient() {
             All ({countF + countD})
           </button>
           <button
-            className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base ${
+            className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base text-black ${
               view === "features" ? "bg-white" : "bg-white/70"
             }`}
             onClick={() => setView("features")}
@@ -217,7 +239,7 @@ export default function MapClient() {
             Features ({countF})
           </button>
           <button
-            className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base ${
+            className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base text-black ${
               view === "distributors" ? "bg-white" : "bg-white/70"
             }`}
             onClick={() => setView("distributors")}
@@ -229,7 +251,7 @@ export default function MapClient() {
           <select
             value={issueSlug}
             onChange={(e) => setIssueSlug(e.target.value)}
-            className="ml-2 rounded-md border-2 border-black bg-white px-2 py-1 text-sm sm:text-base"
+            className="ml-2 rounded-md border-2 border-black bg-white px-2 py-1 text-sm sm:text-base text-black"
             aria-label="Filter by issue"
           >
             <option value="">All issues</option>
