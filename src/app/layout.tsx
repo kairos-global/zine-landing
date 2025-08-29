@@ -2,6 +2,7 @@
 import './globals.css';
 import { ReactNode } from 'react';
 import { Space_Grotesk } from 'next/font/google';
+import { ClerkProvider } from "@clerk/nextjs";
 import Navbar from './components/Navbar';
 
 export const metadata = {
@@ -15,13 +16,15 @@ const spaceGrotesk = Space_Grotesk({
   variable: '--font-space-grotesk',
 });
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={spaceGrotesk.variable}>
-      <body className="bg-[#F0EBCC] text-black antialiased min-h-screen overflow-x-hidden">
-        <Navbar />
-        {children}
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className={spaceGrotesk.variable}>
+        <body className="bg-[#F0EBCC] text-black antialiased min-h-screen overflow-x-hidden">
+          <Navbar />
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

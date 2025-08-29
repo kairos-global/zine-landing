@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -13,6 +14,9 @@ const Navbar = () => {
     { label: 'Feature Me!', href: '/feature-me' },
     { label: 'Advertise', href: '/advertise' },
   ];
+
+  const buttonCls =
+    "rounded-md border border-black bg-white/80 hover:bg-white px-3 py-2 text-sm font-medium text-black";
 
   return (
     <nav className="w-full px-6 py-4 flex justify-between items-center bg-[#AAEEFF] border-b-3 border-black z-50 relative">
@@ -30,6 +34,20 @@ const Navbar = () => {
           </li>
         ))}
       </ul>
+
+      {/* Right-side auth button (single rectangular button) */}
+      <div className="hidden md:block">
+        <SignedOut>
+          <SignInButton mode="modal" forceRedirectUrl="/dashboard">
+            <button className={buttonCls}>Login</button>
+          </SignInButton>
+        </SignedOut>
+        <SignedIn>
+          <Link href="/dashboard" className={buttonCls}>
+            Dashboard
+          </Link>
+        </SignedIn>
+      </div>
 
       {/* Mobile toggle */}
       <button
@@ -51,6 +69,22 @@ const Navbar = () => {
                 </Link>
               </li>
             ))}
+
+            {/* Mobile auth button at bottom of sheet */}
+            <li className="pt-2">
+              <SignedOut>
+                <SignInButton mode="modal" forceRedirectUrl="/dashboard">
+                  <button className={buttonCls} onClick={() => setOpen(false)}>
+                    Login
+                  </button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <Link href="/dashboard" className={buttonCls} onClick={() => setOpen(false)}>
+                  Dashboard
+                </Link>
+              </SignedIn>
+            </li>
           </ul>
         </div>
       )}

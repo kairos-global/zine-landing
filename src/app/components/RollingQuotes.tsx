@@ -78,7 +78,7 @@ export default function RollingQuotes() {
     <div
       ref={containerRef}
       className="
-        fixed pointer-events-none overflow-hidden z-0
+        fixed pointer-events-none overflow-hidden z-5
         inset-x-0 top-0 bottom-0 w-full   /* mobile: fill viewport height */
         md:inset-x-auto md:bottom-auto md:left-0 md:top-0 md:w-[440px] md:h-full /* desktop: original */
         pb-[env(safe-area-inset-bottom)]  /* avoid iOS home indicator overlap */

@@ -3,25 +3,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-/** Supabase (browser) */
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true } }
-);
-
-/** ------- Types (align with your tables) -------- */
-type IssueRow = {
-  id: string;
-  title: string | null;
-  slug: string | null;
-  status: string | null;
-  cover_img_url: string | null;
-  pdf_url: string | null;
-  published_at: string | null;
-};
 
 /** Module keys (final labels) */
 type ModuleKey = "A_BASICS" | "B_FILES" | "C_TRACKING" | "D_QR" | "E_LINKS";
@@ -81,120 +62,64 @@ export default function ZineMatPage() {
 
   /** ---------- ONE-SHOT SAVE (draft or publish) ---------- */
   async function handleSave(publish: boolean) {
-    const { data: authData } = await supabase.auth.getUser();
-    const userId = authData.user?.id ?? null;
-
-    // 1) create issue row
     const reserveSlug =
       slug.trim() || `issue-${Date.now().toString().slice(-6)}`;
-    const published_at = publish
-      ? (date || new Date().toISOString().slice(0, 10))
-      : null;
 
-    const { data: newIssue, error: insertErr } = await supabase
-      .from("issues")
-      .insert({
+    const payload = {
+      issue: {
         title: title.trim(),
         slug: reserveSlug,
         status: publish ? "published" : "draft",
-        published_at,
-        user_id: userId ?? null,
-      })
-      .select("*")
-      .single();
+        published_at: publish
+          ? (date || new Date().toISOString().slice(0, 10))
+          : null,
+      },
+      features,
+      events,
+      advertisers,
+      distributors,
+      links: linktree,
+      wantQR,
+    };
 
-    if (insertErr || !newIssue) {
-      console.error(insertErr);
-      alert("Could not save the issue.");
+    const fd = new FormData();
+    fd.append("issue", JSON.stringify(payload.issue));
+    fd.append("features", JSON.stringify(payload.features));
+    fd.append("events", JSON.stringify(payload.events));
+    fd.append("advertisers", JSON.stringify(payload.advertisers));
+    fd.append("distributors", JSON.stringify(payload.distributors));
+    fd.append("links", JSON.stringify(payload.links));
+    fd.append("wantQR", JSON.stringify(payload.wantQR));
+    if (coverFile) fd.append("cover", coverFile);
+    if (pdfFile) fd.append("pdf", pdfFile);
+
+    const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
+
+    if (res.status === 401) {
+      window.location.href = "/sign-in?redirect_url=/ZineMat";
       return;
     }
 
-    const issueId = (newIssue as IssueRow).id;
-
-    // 2) upload files if provided
-    if (coverFile) {
-      const coverPath = `issues/${issueId}/cover-${Date.now()}-${coverFile.name}`;
-      const { data: up1, error: upErr1 } = await supabase.storage
-        .from("zine-assets")
-        .upload(coverPath, coverFile, { cacheControl: "3600", upsert: false });
-      if (upErr1) console.error(upErr1);
-      if (up1) {
-        const { data: pub } = supabase.storage
-          .from("zine-assets")
-          .getPublicUrl(up1.path);
-        await supabase
-          .from("issues")
-          .update({ cover_img_url: pub.publicUrl })
-          .eq("id", issueId);
-      }
+    // ---- tolerant to non-JSON errors ----
+    let json: any = null;
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      json = await res.json();
+    } else {
+      const text = await res.text();
+      console.error("Non-JSON response:", text);
+      alert("Server error. Check console for details.");
+      return;
     }
+    // -------------------------------------
 
-    if (pdfFile) {
-      const pdfPath = `issues/${issueId}/zine-${Date.now()}-${pdfFile.name}`;
-      const { data: up2, error: upErr2 } = await supabase.storage
-        .from("zine-assets")
-        .upload(pdfPath, pdfFile, { cacheControl: "3600", upsert: false });
-      if (upErr2) console.error(upErr2);
-      if (up2) {
-        const { data: pub2 } = supabase.storage
-          .from("zine-assets")
-          .getPublicUrl(up2.path);
-        await supabase
-          .from("issues")
-          .update({ pdf_url: pub2.publicUrl })
-          .eq("id", issueId);
-      }
-    }
-
-    // 3) insert tracking data (optional)
-    if (features.length)
-      await supabase.from("features").insert(
-        features.map((f) => ({
-          issue_id: issueId,
-          name: f.name,
-          url: f.url ?? null,
-        }))
-      );
-    if (events.length)
-      await supabase.from("features").insert(
-        events.map((e) => ({
-          issue_id: issueId,
-          name: e.name,
-          url: e.url ?? null,
-          type: "event",
-        }))
-      );
-    if (advertisers.length)
-      await supabase.from("advertisers").insert(
-        advertisers.map((a) => ({
-          issue_id: issueId,
-          name: a.name,
-          website: a.website ?? null,
-        }))
-      );
-    if (distributors.length)
-      await supabase.from("distributors").insert(
-        distributors.map((d) => ({
-          issue_id: issueId,
-          name: d.name,
-          website: d.website ?? null,
-          active: true,
-        }))
-      );
-
-    // 4) optional links (persist if you add a table)
-
-    // 5) QR (optional)
-    if (wantQR) {
-      const { error: qrErr } = await supabase.rpc(
-        "generate_missing_redirects_for_issue",
-        { p_issue_id: issueId }
-      );
-      if (qrErr) console.error(qrErr);
+    if (!json.ok) {
+      alert(json?.error?.message || "Could not save the zine.");
+      return;
     }
 
     alert(publish ? "Published!" : "Draft saved.");
-    router.push("/past-issues");
+    router.push(`/past-issues?new=${json.issue_id}`);
   }
 
   /** remove a module from the grid */
