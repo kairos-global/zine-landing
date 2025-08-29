@@ -10,14 +10,13 @@ import { createClient } from "@supabase/supabase-js";
 
 type ViewMode = "both" | "features" | "distributors";
 
-/** Rows as we use them in the map */
 type FeatureRow = {
   id: string | number;
-  name: string | null;
-  url: string | null;
+  title: string | null;
   lat: number;
   lng: number;
-  issue_slug: string | null;
+  issue_id: string | number | null;
+  issues?: { slug: string | null } | null;
 };
 
 type DistributorRow = {
@@ -25,23 +24,35 @@ type DistributorRow = {
   name: string | null;
   lat: number;
   lng: number;
-  issue_slug: string | null;
+  issue_id?: string | number | null;
 };
 
 type IssueOption = { slug: string; title: string | null };
+
+type IssueRowLite = { slug: string; title: string | null; published_at?: string | null };
+
+type FeatureJoinedRow = {
+  id: string | number;
+  title: string | null;
+  lat: number | string | null;
+  lng: number | string | null;
+  issue_id: string | number | null;
+  issues: { slug: string | null } | null;
+};
+
+type DistributorDbRow = {
+  id: string | number;
+  name: string | null;
+  lat: number | string | null;
+  lng: number | string | null;
+  issue_id: string | number | null;
+};
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   { auth: { persistSession: false } }
 );
-
-/** Simple helper: if someone saved "colabsai.com" make it clickable */
-function ensureAbsoluteUrl(u?: string | null) {
-  if (!u) return null;
-  if (/^https?:\/\//i.test(u)) return u;
-  return `https://${u}`;
-}
 
 /** Brand markers */
 const makeDot = (hex: string): DivIcon =>
@@ -56,16 +67,19 @@ const makeDot = (hex: string): DivIcon =>
     iconAnchor: [10, 10],
   });
 
-const ICON_FEATURE = makeDot("#65CBF1");   // blue
-const ICON_DISTRIB = makeDot("#D16FF2");   // purple
+// Feature pins = Feature Me blue, Distributor pins = Distribute purple
+const ICON_FEATURE = makeDot("#65CBF1");
+const ICON_DISTRIB = makeDot("#D16FF2");
 
 function FitBoundsOnce({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   const map = useMap();
   useEffect(() => {
     if (!bounds) return;
     try {
-      map.fitBounds(bounds as any, { padding: [32, 32] });
-    } catch {}
+      map.fitBounds(bounds, { padding: [32, 32] });
+    } catch {
+      /* no-op */
+    }
   }, [bounds, map]);
   return null;
 }
@@ -85,21 +99,20 @@ export default function MapClient() {
   const [features, setFeatures] = useState<FeatureRow[]>([]);
   const [distributors, setDistributors] = useState<DistributorRow[]>([]);
 
-  /** Load dropdown options once (published issues only) */
+  /** Load dropdown options once */
   useEffect(() => {
     let aborted = false;
     (async () => {
       const { data } = await supabase
         .from("issues")
-        .select("slug,title,status,published_at")
+        .select("slug,title,published_at,status")
         .eq("status", "published")
-        .not("published_at", "is", null)
         .order("published_at", { ascending: false });
 
       if (!aborted) {
-        const issues = (data ?? []).map((i: any) => ({
-          slug: i.slug as string,
-          title: (i.title as string | null) ?? i.slug,
+        const issues = ((data ?? []) as IssueRowLite[]).map((i) => ({
+          slug: i.slug,
+          title: i.title ?? i.slug,
         }));
         setIssuesList(issues);
       }
@@ -121,81 +134,71 @@ export default function MapClient() {
   /** fetch data when filters change */
   useEffect(() => {
     let aborted = false;
-
     async function run() {
       setLoading(true);
 
-      // --- FEATURES (only those with coordinates, from published issues) ---
-      let fRows: FeatureRow[] = [];
-      if (view === "both" || view === "features") {
-        let f = supabase
-          .from("features")
-          .select(
-            `
-            id,
-            name,
-            url,
-            lat,
-            lng,
-            issues!inner ( slug, status )
-          `
-          )
-          .not("lat", "is", null)
-          .not("lng", "is", null)
-          .eq("issues.status", "published");
-
-        if (issueSlug) f = f.eq("issues.slug", issueSlug);
-
-        const { data } = await f;
-        fRows =
-          (data ?? []).map((r: any) => ({
-            id: r.id,
-            name: r.name ?? "Feature",
-            url: r.url ?? null,
-            lat: Number(r.lat),
-            lng: Number(r.lng),
-            issue_slug: r.issues?.slug ?? null,
-          })) ?? [];
+      // resolve issue id if filtering by slug
+      let issueId: string | number | null = null;
+      if (issueSlug) {
+        const { data: issue } = await supabase
+          .from("issues")
+          .select("id,slug")
+          .eq("slug", issueSlug)
+          .maybeSingle();
+        issueId = (issue?.id as string | number | undefined) ?? null;
       }
 
-      // --- DISTRIBUTORS (only those with coordinates, from published issues) ---
-      let dRows: DistributorRow[] = [];
+      // features (join to published issues)
+      let fData: FeatureRow[] = [];
+      if (view === "both" || view === "features") {
+        let fQuery = supabase
+          .from("features")
+          .select("id,title,lat,lng,issue_id,issues:issues!inner(slug,status)");
+        fQuery = fQuery.eq("issues.status", "published");
+        if (issueSlug) fQuery = fQuery.eq("issues.slug", issueSlug);
+
+        const { data } = await fQuery;
+        const rows = (data ?? []) as unknown as FeatureJoinedRow[];
+        fData = rows
+          .filter((r) => r.lat != null && r.lng != null)
+          .map((r) => ({
+            id: r.id,
+            title: r.title ?? "Feature",
+            lat: Number(r.lat),
+            lng: Number(r.lng),
+            issue_id: r.issue_id ?? null,
+            issues: r.issues ?? null,
+          }));
+      }
+
+      // distributors (by parent issue & published)
+      let dData: DistributorRow[] = [];
       if (view === "both" || view === "distributors") {
-        let d = supabase
+        // If issue filter applied, use it; otherwise rely on RLS that hides drafts.
+        let dQuery = supabase
           .from("distributors")
-          .select(
-            `
-            id,
-            name,
-            lat,
-            lng,
-            issues!inner ( slug, status )
-          `
-          )
-          .not("lat", "is", null)
-          .not("lng", "is", null)
-          .eq("issues.status", "published");
+          .select("id,name,lat,lng,issue_id,issues:issue_id(*)");
+        if (issueId) dQuery = dQuery.eq("issue_id", issueId);
+        const { data } = await dQuery;
 
-        if (issueSlug) d = d.eq("issues.slug", issueSlug);
-
-        const { data } = await d;
-        dRows =
-          (data ?? []).map((r: any) => ({
+        const rows = (data ?? []) as unknown as DistributorDbRow[];
+        dData = rows
+          .filter((r) => r.lat != null && r.lng != null)
+          .map((r) => ({
             id: r.id,
             name: r.name ?? "Distributor",
             lat: Number(r.lat),
             lng: Number(r.lng),
-            issue_slug: r.issues?.slug ?? null,
-          })) ?? [];
+            issue_id: r.issue_id ?? null,
+          }));
       }
 
       if (!aborted) {
-        setFeatures(fRows);
-        setDistributors(dRows);
+        setFeatures(fData);
+        setDistributors(dData);
         setLoading(false);
       }
     }
-
     run();
     return () => {
       aborted = true;
@@ -203,16 +206,18 @@ export default function MapClient() {
   }, [view, issueSlug]);
 
   /** bounds */
-  const bounds = useMemo(() => {
+  const bounds = useMemo<L.LatLngBoundsExpression | null>(() => {
     const pts: [number, number][] = [];
     if (view !== "distributors") {
       features.forEach((f) => {
-        if (isFinite(f.lat) && isFinite(f.lng)) pts.push([f.lat, f.lng]);
+        if (Number.isFinite(f.lat) && Number.isFinite(f.lng))
+          pts.push([f.lat, f.lng]);
       });
     }
     if (view !== "features") {
       distributors.forEach((d) => {
-        if (isFinite(d.lat) && isFinite(d.lng)) pts.push([d.lat, d.lng]);
+        if (Number.isFinite(d.lat) && Number.isFinite(d.lng))
+          pts.push([d.lat, d.lng]);
       });
     }
     if (pts.length === 0) return null;
@@ -270,7 +275,12 @@ export default function MapClient() {
       </div>
 
       {/* Map */}
-      <MapContainer center={[40.73, -73.93]} zoom={11} className="w-full h-[calc(100vh-0px)]" preferCanvas>
+      <MapContainer
+        center={[40.73, -73.93]}
+        zoom={11}
+        className="w-full h-[calc(100vh-0px)]"
+        preferCanvas
+      >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -282,20 +292,12 @@ export default function MapClient() {
           features.map((f) => (
             <Marker key={`f-${f.id}`} position={[f.lat, f.lng]} icon={ICON_FEATURE}>
               <Popup>
-                <div className="min-w-[200px]">
-                  <div className="font-semibold">{f.name ?? "Feature"}</div>
-                  {f.issue_slug && (
-                    <a href={`/issues/${f.issue_slug}`} className="underline text-sm block">
+                <div className="min-w-[180px]">
+                  <div className="font-semibold">Feature</div>
+                  <div className="text-sm">{f.title ?? "—"}</div>
+                  {f.issues?.slug && (
+                    <a href={`/issues/${f.issues.slug}`} className="underline text-sm">
                       View issue
-                    </a>
-                  )}
-                  {ensureAbsoluteUrl(f.url) && (
-                    <a
-                      className="underline text-xs text-blue-700"
-                      href={ensureAbsoluteUrl(f.url)!}
-                      target="_blank"
-                    >
-                      {f.url}
                     </a>
                   )}
                 </div>
@@ -308,13 +310,9 @@ export default function MapClient() {
           distributors.map((d) => (
             <Marker key={`d-${d.id}`} position={[d.lat, d.lng]} icon={ICON_DISTRIB}>
               <Popup>
-                <div className="min-w-[200px]">
-                  <div className="font-semibold">{d.name ?? "Distributor"}</div>
-                  {d.issue_slug && (
-                    <a href={`/issues/${d.issue_slug}`} className="underline text-sm block">
-                      View issue
-                    </a>
-                  )}
+                <div className="min-w-[180px]">
+                  <div className="font-semibold">Distributor</div>
+                  <div className="text-sm">{d.name ?? "—"}</div>
                 </div>
               </Popup>
             </Marker>

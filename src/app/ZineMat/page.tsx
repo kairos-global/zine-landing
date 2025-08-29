@@ -7,7 +7,11 @@ import { useRouter } from "next/navigation";
 /** Module keys (final labels) */
 type ModuleKey = "A_BASICS" | "B_FILES" | "C_TRACKING" | "D_QR" | "E_LINKS";
 
-/** ------- Page -------- */
+/** API response from /api/zinemat/submit */
+type SubmitOk = { ok: true; issue_id: string };
+type SubmitErr = { ok: false; error: { message: string } };
+type SubmitResp = SubmitOk | SubmitErr;
+
 export default function ZineMatPage() {
   const router = useRouter();
 
@@ -69,7 +73,7 @@ export default function ZineMatPage() {
       issue: {
         title: title.trim(),
         slug: reserveSlug,
-        status: publish ? "published" : "draft",
+        status: publish ? "published" as const : "draft" as const,
         published_at: publish
           ? (date || new Date().toISOString().slice(0, 10))
           : null,
@@ -100,21 +104,16 @@ export default function ZineMatPage() {
       return;
     }
 
-    // ---- tolerant to non-JSON errors ----
-    let json: any = null;
-    const ct = res.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
-      json = await res.json();
-    } else {
-      const text = await res.text();
-      console.error("Non-JSON response:", text);
-      alert("Server error. Check console for details.");
+    let json: SubmitResp;
+    try {
+      json = (await res.json()) as SubmitResp;
+    } catch {
+      alert("Server did not return JSON.");
       return;
     }
-    // -------------------------------------
 
     if (!json.ok) {
-      alert(json?.error?.message || "Could not save the zine.");
+      alert(json.error?.message ?? "Could not save the zine.");
       return;
     }
 

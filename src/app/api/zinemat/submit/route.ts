@@ -1,140 +1,190 @@
-import { currentUser } from "@clerk/nextjs/server";
+// src/app/api/zinemat/submit/route.ts
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+/** ---------- Supabase (server, service role) ---------- */
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!; // required for server writes
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY!; // server-only
+const sb = createClient(SUPABASE_URL, SERVICE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
-export async function POST(req: Request) {
+/** ---------- Types for payload parsing ---------- */
+type IssuePayload = {
+  title: string;
+  slug: string;
+  status: "draft" | "published";
+  published_at: string | null; // yyyy-mm-dd or null
+};
+
+type FE = { id: number; name: string; url?: string };
+type ADV = { id: number; name: string; website?: string };
+type DIST = { id: number; name: string; website?: string };
+type LinkItem = { id: number; label: string; url: string };
+
+/** ---------- Helpers ---------- */
+function parseJSON<T>(fd: FormData, key: string): T | null {
+  const raw = fd.get(key);
+  if (!raw) return null;
   try {
-    const user = await currentUser();
-    if (!user) {
-      return NextResponse.json(
-        { ok: false, error: { message: "Sign in required." } },
-        { status: 401 }
-      );
-    }
+    return JSON.parse(String(raw)) as T;
+  } catch {
+    return null;
+  }
+}
 
-    const form = await req.formData();
+const normalizeUrl = (u?: string | null): string | null => {
+  if (!u) return null;
+  const t = u.trim();
+  if (!t) return null;
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t}`;
+};
 
-    const parseJSON = <T,>(key: string, fallback: T): T => {
-      try {
-        const raw = form.get(key);
-        return raw ? (JSON.parse(String(raw)) as T) : fallback;
-      } catch {
-        return fallback;
-      }
-    };
-
-    const issue        = parseJSON<any>("issue", {});
-    const features     = parseJSON<any[]>("features", []);
-    const events       = parseJSON<any[]>("events", []);
-    const advertisers  = parseJSON<any[]>("advertisers", []);
-    const distributors = parseJSON<any[]>("distributors", []);
-    const links        = parseJSON<any[]>("links", []);
-    const wantQR       = parseJSON<boolean>("wantQR", true);
-
-    const cover = form.get("cover") as File | null;
-    const pdf   = form.get("pdf") as File | null;
-
-    const supabase = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false },
-    });
-
-    // 1) Insert issue
-    const slug = issue?.slug || `issue-${Date.now().toString().slice(-6)}`;
-    const { data: issueRow, error: issueErr } = await supabase
-      .from("issues")
-      .insert({
-        slug,
-        title: issue?.title ?? null,
-        status: issue?.status ?? "draft",
-        published_at: issue?.published_at ?? null,
-      })
-      .select("id")
-      .single();
-
-    if (issueErr || !issueRow) {
-      return NextResponse.json({ ok: false, error: issueErr }, { status: 400 });
-    }
-
-    const issueId: string = issueRow.id as string;
-    const ts = Date.now();
-
-    // 2) Upload files (bucket: Zineground/{covers|pdfs})
-    let coverUrl: string | null = null;
-    let pdfUrl: string | null = null;
-
-    if (cover) {
-      const key = `covers/${issueId}-${ts}-${cover.name}`;
-      const { data, error } = await supabase.storage
-        .from("Zineground")
-        .upload(key, cover, { upsert: false });
-      if (!error && data) {
-        coverUrl = supabase.storage.from("Zineground").getPublicUrl(data.path).data.publicUrl;
-      }
-    }
-
-    if (pdf) {
-      const key = `pdfs/${issueId}-${ts}-${pdf.name}`;
-      const { data, error } = await supabase.storage
-        .from("Zineground")
-        .upload(key, pdf, { upsert: false });
-      if (!error && data) {
-        pdfUrl = supabase.storage.from("Zineground").getPublicUrl(data.path).data.publicUrl;
-      }
-    }
-
-    if (coverUrl || pdfUrl) {
-      await supabase.from("issues")
-        .update({ cover_img_url: coverUrl, pdf_url: pdfUrl })
-        .eq("id", issueId);
-    }
-
-    // 3) Related rows
-    const has = (a: any[]) => Array.isArray(a) && a.length > 0;
-
-    if (has(features)) {
-      await supabase.from("features").insert(
-        features.map((f) => ({ issue_id: issueId, type: "feature", name: f?.name ?? null, url: f?.url ?? null }))
-      );
-    }
-    if (has(events)) {
-      await supabase.from("features").insert(
-        events.map((e) => ({ issue_id: issueId, type: "event", name: e?.name ?? null, url: e?.url ?? null }))
-      );
-    }
-    if (has(advertisers)) {
-      await supabase.from("advertisers").insert(
-        advertisers.map((a) => ({ issue_id: issueId, name: a?.name ?? null, website: a?.website ?? null }))
-      );
-    }
-    if (has(distributors)) {
-      await supabase.from("distributors").insert(
-        distributors.map((d) => ({ issue_id: issueId, name: d?.name ?? null, website: d?.website ?? null, active: true }))
-      );
-    }
-    if (has(links)) {
-      await supabase.from("issue_links").insert(
-        links.map((l, i: number) => ({ issue_id: issueId, label: l?.label ?? null, url: l?.url ?? null, sort_order: i }))
-      );
-    }
-
-    if (wantQR) {
-      try {
-        await supabase.rpc("generate_missing_redirects_for_issue", { p_issue_id: issueId });
-      } catch { /* ignore if function missing */ }
-    }
-
-    return NextResponse.json({ ok: true, issue_id: issueId });
-  } catch (e: any) {
-    console.error("zinemat/submit error:", e);
+/** ---------- POST ---------- */
+export async function POST(req: Request) {
+  // Require sign-in for ANY write
+  const { userId } = await auth();
+  if (!userId) {
     return NextResponse.json(
-      { ok: false, error: { message: e?.message || "Server error" } },
+      { ok: false, error: { message: "Sign in required." } },
+      { status: 401 }
+    );
+  }
+
+  const form = await req.formData();
+
+  // Payload pieces
+  const issue = parseJSON<IssuePayload>(form, "issue");
+  const features = parseJSON<FE[]>(form, "features") ?? [];
+  const events = parseJSON<FE[]>(form, "events") ?? [];
+  const advertisers = parseJSON<ADV[]>(form, "advertisers") ?? [];
+  const distributors = parseJSON<DIST[]>(form, "distributors") ?? [];
+  const links = parseJSON<LinkItem[]>(form, "links") ?? [];
+  const wantQR = Boolean(parseJSON<boolean>(form, "wantQR"));
+
+  if (!issue) {
+    return NextResponse.json(
+      { ok: false, error: { message: "Bad payload." } },
+      { status: 400 }
+    );
+  }
+
+  // 1) create the issue
+  const { data: created, error: insErr } = await sb
+    .from("issues")
+    .insert({
+      title: issue.title,
+      slug: issue.slug,
+      status: issue.status,
+      published_at: issue.published_at,
+      created_by: userId,
+      created_by_email: null,
+    })
+    .select("id")
+    .single();
+
+  if (insErr || !created) {
+    return NextResponse.json(
+      { ok: false, error: { message: "Failed to create issue." } },
       { status: 500 }
     );
   }
+
+  const issueId: string = created.id;
+
+  // 2) uploads (cover & pdf)
+  const cover = form.get("cover");
+  if (cover && cover instanceof File) {
+    const path = `issues/${issueId}/cover-${Date.now()}-${cover.name}`;
+    const { data: up, error } = await sb.storage
+      .from("zine-assets")
+      .upload(path, cover, { cacheControl: "3600", upsert: false });
+    if (!error && up) {
+      const { data: pub } = sb.storage.from("zine-assets").getPublicUrl(up.path);
+      await sb.from("issues").update({ cover_img_url: pub.publicUrl }).eq("id", issueId);
+    }
+  }
+
+  const pdf = form.get("pdf");
+  if (pdf && pdf instanceof File) {
+    const path = `issues/${issueId}/zine-${Date.now()}-${pdf.name}`;
+    const { data: up, error } = await sb.storage
+      .from("zine-assets")
+      .upload(path, pdf, { cacheControl: "3600", upsert: false });
+    if (!error && up) {
+      const { data: pub } = sb.storage.from("zine-assets").getPublicUrl(up.path);
+      await sb.from("issues").update({ pdf_url: pub.publicUrl }).eq("id", issueId);
+    }
+  }
+
+  // 3) inserts for tracking data
+  if (features.length) {
+    await sb.from("features").insert(
+      features.map((f) => ({
+        issue_id: issueId,
+        type: "feature",
+        name: f.name,
+        url: normalizeUrl(f.url ?? null),
+      }))
+    );
+  }
+
+  if (events.length) {
+    await sb.from("features").insert(
+      events.map((e) => ({
+        issue_id: issueId,
+        type: "event",
+        name: e.name,
+        url: normalizeUrl(e.url ?? null),
+      }))
+    );
+  }
+
+  if (advertisers.length) {
+    await sb.from("advertisers").insert(
+      advertisers.map((a) => ({
+        issue_id: issueId,
+        name: a.name,
+        website: normalizeUrl(a.website ?? null),
+      }))
+    );
+  }
+
+  if (distributors.length) {
+    await sb.from("distributors").insert(
+      distributors.map((d) => ({
+        issue_id: issueId,
+        name: d.name,
+        website: normalizeUrl(d.website ?? null),
+        active: true,
+      }))
+    );
+  }
+
+  if (links.length) {
+    await sb.from("issue_links").insert(
+      links.map((l, i) => ({
+        issue_id: issueId,
+        label: l.label,
+        url: normalizeUrl(l.url),
+        sort_order: i,
+      }))
+    );
+  }
+
+  // 5) optional QR generation (Option A)
+  if (wantQR) {
+    try {
+      await sb.rpc("generate_missing_redirects_for_issue", { p_issue_id: issueId });
+    } catch (err) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("QR rpc failed (non-blocking):", err);
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, issue_id: issueId });
 }
