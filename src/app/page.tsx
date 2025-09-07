@@ -22,10 +22,10 @@ export default function Home() {
       {/* Fixed Landing Page Graphic – hide on small screens */}
       <div className="hidden md:block fixed bottom-[-30px] right-[-30px] z-0 w-[900px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
         <Image
-          src="/images/kairos-bp.jpg"
+          src="/images/ZG_Collage.png"
           alt="Landing Page Graphic"
-          width={600}
-          height={400}
+          width={450}
+          height={300}
           className="w-full h-auto object-cover"
           priority
         />

@@ -1,8 +1,25 @@
 // src/app/ZineMat/page.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+
+/** ---------- Shared geocode helper (module scope) ---------- */
+async function geocodeAddress(address?: string): Promise<{ lat?: number; lng?: number }> {
+  if (!address || !address.trim()) return {};
+  try {
+    const q = encodeURIComponent(address.trim());
+    const res = await fetch(`/api/geocode?query=${q}`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    if (typeof data.lat === "number" && typeof data.lng === "number") {
+      return { lat: data.lat, lng: data.lng };
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
 
 /** Module keys (final labels) */
 type ModuleKey = "A_BASICS" | "B_FILES" | "C_TRACKING" | "D_QR" | "E_LINKS";
@@ -31,13 +48,24 @@ export default function ZineMatPage() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
 
-  /** C) Tracking entries (mini) */
-  type FE = { id: number; name: string; url?: string };
-  type ADV = { id: number; name: string; website?: string };
-  type DIST = { id: number; name: string; website?: string };
+  /** ---------- Tracking entry types ---------- */
+  type BaseTracking = {
+    id: number;
+    name: string;
+    website?: string;   // free text
+    address?: string;   // user-selected or typed text
+    active: boolean;
+    lat?: number;       // from geocode/selection
+    lng?: number;       // from geocode/selection
+  };
+
+  type FE = BaseTracking;   // Features
+  type EV = BaseTracking;   // Events
+  type ADV = BaseTracking;  // Advertisers
+  type DIST = BaseTracking; // Distributors (address required on add)
 
   const [features, setFeatures] = useState<FE[]>([]);
-  const [events, setEvents] = useState<FE[]>([]);
+  const [events, setEvents] = useState<EV[]>([]);
   const [advertisers, setAdvertisers] = useState<ADV[]>([]);
   const [distributors, setDistributors] = useState<DIST[]>([]);
 
@@ -73,7 +101,7 @@ export default function ZineMatPage() {
       issue: {
         title: title.trim(),
         slug: reserveSlug,
-        status: publish ? "published" as const : "draft" as const,
+        status: (publish ? "published" : "draft") as "published" | "draft",
         published_at: publish
           ? (date || new Date().toISOString().slice(0, 10))
           : null,
@@ -211,9 +239,7 @@ export default function ZineMatPage() {
               relative
               grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4
               gap-0
-              /* mobile: simple separators */
               divide-y sm:divide-y-0
-              /* desktop: cell borders */
               sm:[&>.mat-cell]:border sm:[&>.mat-cell]:border-black/15
             "
           >
@@ -271,6 +297,7 @@ export default function ZineMatPage() {
               </div>
             )}
 
+            {/* ----------------- C) TRACKING (UPDATED) ----------------- */}
             {active.includes("C_TRACKING") && (
               <div className="mat-cell">
                 <Card
@@ -279,72 +306,84 @@ export default function ZineMatPage() {
                   accent="#82E385"
                 >
                   <Subhead>Features</Subhead>
-                  <RowAdd
-                    onAdd={(name, url) =>
-                      setFeatures((arr) => [...arr, { id: Date.now(), name, url }])
-                    }
+                  <TrackingRowAdd
+                    onAdd={async (raw) => {
+                      let { lat, lng } = raw;
+                      if (raw.address && (lat == null || lng == null)) {
+                        const g = await geocodeAddress(raw.address);
+                        lat = g.lat; lng = g.lng;
+                      }
+                      setFeatures((arr) => [
+                        ...arr,
+                        { id: Date.now(), ...raw, lat, lng },
+                      ]);
+                    }}
+                    addressOptional
                   />
-                  <List
-                    items={features.map((f) => ({
-                      id: f.id,
-                      primary: f.name,
-                      secondary: f.url,
-                    }))}
-                  />
+                  <TrackingList items={features} />
 
                   <Subhead className="mt-3">Events</Subhead>
-                  <RowAdd
-                    onAdd={(name, url) =>
-                      setEvents((arr) => [...arr, { id: Date.now(), name, url }])
-                    }
-                    urlPlaceholder="https://event"
+                  <TrackingRowAdd
+                    onAdd={async (raw) => {
+                      let { lat, lng } = raw;
+                      if (raw.address && (lat == null || lng == null)) {
+                        const g = await geocodeAddress(raw.address);
+                        lat = g.lat; lng = g.lng;
+                      }
+                      setEvents((arr) => [
+                        ...arr,
+                        { id: Date.now(), ...raw, lat, lng },
+                      ]);
+                    }}
+                    addressOptional
                   />
-                  <List
-                    items={events.map((f) => ({
-                      id: f.id,
-                      primary: f.name,
-                      secondary: f.url,
-                    }))}
-                  />
+                  <TrackingList items={events} />
 
                   <Subhead className="mt-3">Advertisers</Subhead>
-                  <RowAdd
-                    onAdd={(name, url) =>
+                  <TrackingRowAdd
+                    onAdd={async (raw) => {
+                      let { lat, lng } = raw;
+                      if (raw.address && (lat == null || lng == null)) {
+                        const g = await geocodeAddress(raw.address);
+                        lat = g.lat; lng = g.lng;
+                      }
                       setAdvertisers((arr) => [
                         ...arr,
-                        { id: Date.now(), name, website: url },
-                      ])
-                    }
-                    urlPlaceholder="https://website"
+                        { id: Date.now(), ...raw, lat, lng },
+                      ]);
+                    }}
+                    addressOptional
                   />
-                  <List
-                    items={advertisers.map((a) => ({
-                      id: a.id,
-                      primary: a.name,
-                      secondary: a.website,
-                    }))}
-                  />
+                  <TrackingList items={advertisers} />
 
                   <Subhead className="mt-3">Distributors</Subhead>
-                  <RowAdd
-                    onAdd={(name, url) =>
+                  <TrackingRowAdd
+                    onAdd={async (raw) => {
+                      if (!raw.address?.trim()) {
+                        alert("Distributors require an address.");
+                        return;
+                      }
+                      let { lat, lng } = raw;
+                      if (lat == null || lng == null) {
+                        const g = await geocodeAddress(raw.address);
+                        lat = g.lat; lng = g.lng;
+                      }
+                      if (lat == null || lng == null) {
+                        alert("We couldn't find that address. Please pick a suggestion or try a more specific address.");
+                        return;
+                      }
                       setDistributors((arr) => [
                         ...arr,
-                        { id: Date.now(), name, website: url },
-                      ])
-                    }
-                    urlPlaceholder="https://website"
+                        { id: Date.now(), ...raw, lat, lng },
+                      ]);
+                    }}
+                    addressOptional={false}
                   />
-                  <List
-                    items={distributors.map((d) => ({
-                      id: d.id,
-                      primary: d.name,
-                      secondary: d.website,
-                    }))}
-                  />
+                  <TrackingList items={distributors} />
                 </Card>
               </div>
             )}
+            {/* --------------------------------------------------------- */}
 
             {active.includes("D_QR") && (
               <div className="mat-cell">
@@ -511,6 +550,7 @@ function Input({
   );
 }
 
+/** Legacy RowAdd (kept for E) Links) */
 function RowAdd({
   onAdd,
   namePlaceholder = "Name",
@@ -551,30 +591,264 @@ function RowAdd({
   );
 }
 
-function List({
+/** ------------ AddressAutocomplete (Mapbox-like) ------------ */
+function AddressAutocomplete({
+  value,
+  onSelect,     // fires when user picks a suggestion
+  placeholder,
+  required = false,
+}: {
+  value?: string;
+  onSelect: (v: { address: string; lat?: number; lng?: number }) => void;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const [input, setInput] = useState(value ?? "");
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<
+    { id: string; label: string; lat?: number; lng?: number }[]
+  >([]);
+  const [hi, setHi] = useState<number>(-1); // highlighted index
+  const [loading, setLoading] = useState(false);
+  const [t, setT] = useState<any>(null);
+
+  // keep internal input in sync if parent updates value
+  useEffect(() => {
+    if (value !== undefined && value !== input) setInput(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  async function fetchSuggestions(q: string) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/geocode/suggest?query=${encodeURIComponent(q)}&limit=5`);
+      const data = await res.json();
+      setItems(data?.suggestions ?? []);
+      setOpen(true);
+      setHi(-1);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // close dropdown when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      if (!el.closest?.('[data-ac-root="1"]')) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <div className="relative" data-ac-root="1">
+      <input
+        className={`w-full rounded-xl border px-3 py-2 ${required ? "required:[&]:" : ""}`}
+        placeholder={placeholder}
+        value={input}
+        onChange={(e) => {
+          const v = e.target.value;
+          setInput(v);
+          clearTimeout(t);
+          setT(setTimeout(() => {
+            if (v.trim().length < 3) { setItems([]); setOpen(false); return; }
+            fetchSuggestions(v.trim());
+          }, 250));
+        }}
+        onFocus={() => {
+          if (items.length) setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (!open || !items.length) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setHi((i) => Math.min(i + 1, items.length - 1)); }
+          if (e.key === "ArrowUp")   { e.preventDefault(); setHi((i) => Math.max(i - 1, 0)); }
+          if (e.key === "Enter" && hi >= 0) {
+            e.preventDefault();
+            const sel = items[hi];
+            setInput(sel.label);
+            setOpen(false);
+            onSelect({ address: sel.label, lat: sel.lat, lng: sel.lng });
+          }
+          if (e.key === "Escape") setOpen(false);
+        }}
+      />
+      {open && (
+        <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow-lg max-h-60 overflow-auto">
+          {loading && <div className="px-3 py-2 text-sm text-gray-500">Searching…</div>}
+          {!loading && !items.length && (
+            <div className="px-3 py-2 text-sm text-gray-500">No results</div>
+          )}
+          {items.map((it, idx) => (
+            <button
+              key={it.id}
+              onMouseEnter={() => setHi(idx)}
+              onMouseLeave={() => setHi(-1)}
+              onClick={() => {
+                setInput(it.label);
+                setOpen(false);
+                onSelect({ address: it.label, lat: it.lat, lng: it.lng });
+              }}
+              className={`block w-full text-left px-3 py-2 text-sm ${
+                idx === hi ? "bg-black/5" : ""
+              }`}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** ------------ TrackingRowAdd & TrackingList ------------ */
+function TrackingRowAdd({
+  onAdd,
+  addressOptional,
+}: {
+  onAdd: (v: {
+    name: string;
+    website?: string;
+    address?: string;
+    active: boolean;
+    lat?: number;
+    lng?: number;
+  }) => void;
+  addressOptional: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [website, setWebsite] = useState("");
+  const [address, setAddress] = useState("");
+  const [coords, setCoords] = useState<{ lat?: number; lng?: number }>({});
+  const [active, setActive] = useState(true);
+
+  return (
+    <div className="grid gap-2 md:grid-cols-5">
+      <input
+        className="rounded-xl border px-3 py-2 md:col-span-2"
+        placeholder="Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <input
+        className="rounded-xl border px-3 py-2"
+        placeholder="website (plain text)"
+        value={website}
+        onChange={(e) => setWebsite(e.target.value)}
+      />
+      {/* Autocomplete address input */}
+      <AddressAutocomplete
+        value={address}
+        placeholder={addressOptional ? "address (optional)" : "address *"}
+        required={!addressOptional}
+        onSelect={(v) => {
+          setAddress(v.address);
+          setCoords({ lat: v.lat, lng: v.lng });
+        }}
+      />
+      <div className="flex items-center gap-2">
+        <label className="text-sm flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+          />
+          Active
+        </label>
+        <button
+          onClick={async () => {
+            if (!name.trim()) return;
+            if (!addressOptional && !address.trim()) return;
+
+            let lat = coords.lat, lng = coords.lng;
+
+            // Fallback geocode if user typed but didn't choose a suggestion
+            if (address && (lat == null || lng == null)) {
+              const g = await geocodeAddress(address);
+              lat = g.lat; lng = g.lng;
+            }
+
+            // For required address rows (Distributors), enforce coords
+            if (!addressOptional && address.trim() && (lat == null || lng == null)) {
+              alert("We couldn't find that address. Please pick a suggestion or try a more specific address.");
+              return;
+            }
+
+            onAdd({
+              name: name.trim(),
+              website: website.trim() || undefined,
+              address: address.trim() || undefined,
+              active,
+              lat, lng,
+            });
+
+            setName("");
+            setWebsite("");
+            setAddress("");
+            setCoords({});
+            setActive(true);
+          }}
+          className="ml-auto rounded-xl bg-black px-3 py-2 text-sm text-white"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TrackingList({
   items,
 }: {
-  items: { id: number; primary: string; secondary?: string }[];
+  items: {
+    id: number;
+    name: string;
+    website?: string;
+    address?: string;
+    active: boolean;
+    lat?: number;
+    lng?: number;
+  }[];
 }) {
   if (!items.length)
     return <div className="text-sm text-gray-600">No items yet</div>;
   return (
-    <div className="space-y-2">
+    <div className="mt-2 space-y-2">
       {items.map((it) => (
         <div key={it.id} className="rounded-lg border p-2 text-sm">
-          <div className="font-medium">{it.primary}</div>
-          {it.secondary ? (
-            <a className="text-xs underline" href={it.secondary} target="_blank">
-              {it.secondary}
-            </a>
+          <div className="flex items-center justify-between">
+            <div className="font-medium">{it.name}</div>
+            <span
+              className={`text-xs rounded-full px-2 py-0.5 border ${
+                it.active ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-50"
+              }`}
+            >
+              {it.active ? "active" : "inactive"}
+            </span>
+          </div>
+          {it.website ? (
+            <div className="text-xs break-all">{it.website}</div>
           ) : (
-            <div className="text-xs text-gray-600">No link</div>
+            <div className="text-xs text-gray-600">No website</div>
           )}
+          {it.address ? (
+            <div className="text-xs">{it.address}</div>
+          ) : (
+            <div className="text-xs text-gray-600">No address</div>
+          )}
+          {typeof it.lat === "number" && typeof it.lng === "number" ? (
+            <div className="text-[10px] text-gray-500">
+              ({it.lat.toFixed(5)}, {it.lng.toFixed(5)})
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
   );
 }
+/** ----------------------------------------------------------- */
 
 function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
