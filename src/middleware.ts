@@ -1,21 +1,24 @@
-// src/middleware.ts
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-// Only /dashboard is protected (later). Everything else just gets Clerk context.
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)"]);
+export function middleware(request: NextRequest) {
+  const isLoggedIn = request.cookies.get("__session"); // Clerk uses this
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    const { userId } = await auth();
-    if (!userId) {
-      return Response.json({ ok: false, error: { message: "Sign in required." } }, { status: 401 });
-    }
+  const path = request.nextUrl.pathname;
+
+  const isProtected =
+    path.startsWith("/zinemat") ||
+    path.startsWith("/dashboard");
+
+  if (isProtected && !isLoggedIn) {
+    const redirectUrl = new URL("/sign-in", request.url);
+    redirectUrl.searchParams.set("redirect_url", path);
+    return NextResponse.redirect(redirectUrl);
   }
-});
+
+  return NextResponse.next();
+}
 
 export const config = {
-  matcher: [
-    "/api/(.*)",       // run Clerk on API routes so auth/currentUser works
-    "/dashboard(.*)",  // protected area
-  ],
+  matcher: ["/zinemat/:path*", "/dashboard/:path*"],
 };

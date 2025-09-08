@@ -18,7 +18,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
-        <Link href="/ZineMat" className="rounded-xl border p-4 bg-white hover:bg-black/5">
+        <Link href="/zinemat" className="rounded-xl border p-4 bg-white hover:bg-black/5">
           <div className="text-lg font-semibold">Make a Zine</div>
           <div className="text-sm text-gray-600">Open ZineMat</div>
         </Link>
