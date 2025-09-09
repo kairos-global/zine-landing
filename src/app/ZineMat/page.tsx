@@ -1,4 +1,4 @@
-// src/app/zinemat/page.tsx
+// src/app/ZineMat/page.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -38,10 +38,19 @@ const SECTION_META: Record<
   { label: string; accent: string; required?: boolean }
 > = {
   BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
-  UPLOAD: { label: "B) Cover Upload (optional file becomes required by flow)", accent: "#F2DC6F", required: true },
+  UPLOAD: {
+    label: "B) Cover Upload (optional file becomes required by flow)",
+    accent: "#F2DC6F",
+    required: true,
+  },
   INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
   CODEGEN: { label: "D) Code Gen (QR)", accent: "#D16FF2" },
 };
+
+/** Safe stand-in for legacy arrays we still POST.
+ * Keeps shape open while avoiding `any`.
+ */
+type LegacyEntity = Record<string, unknown>;
 
 export default function ZineMatPage() {
   const router = useRouter();
@@ -90,13 +99,15 @@ export default function ZineMatPage() {
         title: basics.title.trim(),
         slug: slugBase,
         status: (publish ? "published" : "draft") as "published" | "draft",
-        published_at: publish ? (basics.date || new Date().toISOString().slice(0, 10)) : null,
+        published_at: publish
+          ? basics.date || new Date().toISOString().slice(0, 10)
+          : null,
       },
-      // Legacy arrays kept for API compatibility
-      features: [] as any[],
-      events: [] as any[],
-      advertisers: [] as any[],
-      distributors: [] as any[],
+      // Legacy arrays kept for API compatibility — typed, not `any[]`
+      features: [] as LegacyEntity[],
+      events: [] as LegacyEntity[],
+      advertisers: [] as LegacyEntity[],
+      distributors: [] as LegacyEntity[],
       // New generalized interactivity
       links,
       // If any link wants a QR, your backend can generate redirects on save/publish
@@ -154,7 +165,8 @@ export default function ZineMatPage() {
             linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)
           `,
-          backgroundSize: "24px 24px, 24px 24px, 120px 120px, 120px 120px",
+          backgroundSize:
+            "24px 24px, 24px 24px, 120px 120px, 120px 120px",
         }}
       />
 
@@ -188,12 +200,18 @@ export default function ZineMatPage() {
           {/* Pinned required sections */}
           <div className="p-4 sm:p-5 space-y-4">
             {/* BASICS (required) */}
-            <Card title={SECTION_META.BASICS.label} accent={SECTION_META.BASICS.accent}>
+            <Card
+              title={SECTION_META.BASICS.label}
+              accent={SECTION_META.BASICS.accent}
+            >
               <BasicsSection value={basics} onChange={setBasics} />
             </Card>
 
             {/* UPLOAD (required) */}
-            <Card title={SECTION_META.UPLOAD.label} accent={SECTION_META.UPLOAD.accent}>
+            <Card
+              title={SECTION_META.UPLOAD.label}
+              accent={SECTION_META.UPLOAD.accent}
+            >
               <UploadsSection file={coverFile} onChange={setCoverFile} />
             </Card>
 
@@ -220,7 +238,9 @@ export default function ZineMatPage() {
 
         {/* Toolkit (inactive sections) */}
         <div className="mt-6 rounded-2xl border bg-white/90">
-          <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
+          <div className="px-4 py-3 border-b font-semibold text-sm">
+            Toolkit
+          </div>
           <div className="p-4 grid gap-3 sm:grid-cols-2">
             {(["INTERACTIVITY", "CODEGEN"] as SectionKey[])
               .filter((k) => !active.includes(k))
@@ -230,7 +250,9 @@ export default function ZineMatPage() {
                   className="rounded-xl border p-3 bg-white flex items-center justify-between"
                   style={{ borderColor: `${SECTION_META[k].accent}55` }}
                 >
-                  <div className="text-sm font-medium">{SECTION_META[k].label}</div>
+                  <div className="text-sm font-medium">
+                    {SECTION_META[k].label}
+                  </div>
                   <button
                     onClick={() => addSection(k)}
                     className="rounded-md border px-3 py-1 text-xs hover:bg-white"
@@ -241,9 +263,9 @@ export default function ZineMatPage() {
                 </div>
               ))}
             {/* If everything is active, show a tiny hint */}
-            {(["INTERACTIVITY", "CODEGEN"] as SectionKey[]).every((k) => active.includes(k)) && (
-              <div className="text-sm text-gray-600">All tools in use.</div>
-            )}
+            {(["INTERACTIVITY", "CODEGEN"] as SectionKey[]).every((k) =>
+              active.includes(k)
+            ) && <div className="text-sm text-gray-600">All tools in use.</div>}
           </div>
         </div>
 
@@ -269,7 +291,10 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: `${accent}55` }}>
+    <div
+      className="rounded-2xl border bg-white shadow-sm"
+      style={{ borderColor: `${accent}55` }}
+    >
       <div
         className="flex items-center justify-between rounded-t-2xl border-b px-3 py-2"
         style={{ background: `${accent}22`, borderColor: `${accent}55` }}
@@ -284,7 +309,10 @@ function Card({
             Remove
           </button>
         ) : (
-          <span className="rounded-md border px-2 py-0.5 text-[10px] text-gray-500" title="Required">
+          <span
+            className="rounded-md border px-2 py-0.5 text-[10px] text-gray-500"
+            title="Required"
+          >
             Required
           </span>
         )}
