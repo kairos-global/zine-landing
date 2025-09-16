@@ -1,24 +1,13 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+// src/middleware.ts
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-export function middleware(request: NextRequest) {
-  const isLoggedIn = request.cookies.get("__session"); // Clerk uses this
+export default clerkMiddleware();
 
-  const path = request.nextUrl.pathname;
-
-  const isProtected =
-    path.startsWith("/zinemat") ||
-    path.startsWith("/dashboard");
-
-  if (isProtected && !isLoggedIn) {
-    const redirectUrl = new URL("/sign-in", request.url);
-    redirectUrl.searchParams.set("redirect_url", path);
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  return NextResponse.next();
-}
-
+// 👇 Define which routes are protected by Clerk
 export const config = {
-  matcher: ["/zinemat/:path*", "/dashboard/:path*"],
+  matcher: [
+    "/api/:path*",       // protect all API routes (includes /api/zinemat/submit)
+    "/zinemat/:path*",   // protect zinemat pages
+    "/dashboard/:path*", // protect dashboard pages
+  ],
 };

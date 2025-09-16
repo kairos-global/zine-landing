@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 
 /** ---------- Types shared with child sections ---------- */
 export type Basics = {
@@ -38,54 +39,58 @@ const SECTION_META: Record<
   { label: string; accent: string; required?: boolean }
 > = {
   BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
-  UPLOAD: {
-    label: "B) Cover Upload (optional file becomes required by flow)",
-    accent: "#F2DC6F",
-    required: true,
-  },
+  UPLOAD: { label: "B) Uploads", accent: "#F2DC6F", required: false },
   INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
   CODEGEN: { label: "D) Code Gen (QR)", accent: "#D16FF2" },
 };
 
-/** Safe stand-in for legacy arrays we still POST.
- * Keeps shape open while avoiding `any`.
- */
+/** Safe stand-in for legacy arrays we still POST */
 type LegacyEntity = Record<string, unknown>;
 
 export default function ZineMatPage() {
   const router = useRouter();
+  const { isSignedIn } = useUser();
+
+  /** Redirect to Clerk if not signed in */
+  if (typeof window !== "undefined" && !isSignedIn) {
+    window.location.href = "/sign-in?redirect_url=/zinemat";
+    return null;
+  }
 
   /** Core state */
   const [basics, setBasics] = useState<Basics>({ title: "", date: null });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
 
-  /** Layout state: which optional sections are active on the board */
-  const [active, setActive] = useState<SectionKey[]>([
-    "BASICS",
-    "UPLOAD",
-    // Optional sections start in the toolkit by default
-  ]);
+  /** Layout state */
+  const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
 
   const addSection = (key: SectionKey) =>
     setActive((cur) => (cur.includes(key) ? cur : [...cur, key]));
-
   const removeSection = (key: SectionKey) =>
     setActive((cur) => cur.filter((k) => k !== key));
 
-  /** --- Checklist & publish enablement --- */
+  /** --- Checklist --- */
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
-    const coverOk = !!coverFile; // Upload required by your spec
-    const interactivityOk = true; // optional
-    return { basics: basicsOk, cover: coverOk, interactivity: interactivityOk };
+    const coverOk = !!coverFile;
+    return { basics: basicsOk, cover: coverOk };
   }, [basics.title, coverFile]);
 
+  const canSaveDraft = checklist.basics;
   const canPublish = checklist.basics && checklist.cover;
 
-  /** ---------- Save (draft or publish) ---------- */
+  /** ---------- Save ---------- */
   async function handleSave(publish: boolean) {
-    // Simple slug from title; fall back to timestamp
+    if (publish && !canPublish) {
+      alert("Publishing requires an upload.");
+      return;
+    }
+    if (!publish && !canSaveDraft) {
+      alert("Please add a title before saving.");
+      return;
+    }
+
     const slugBase =
       basics.title
         .toLowerCase()
@@ -103,14 +108,11 @@ export default function ZineMatPage() {
           ? basics.date || new Date().toISOString().slice(0, 10)
           : null,
       },
-      // Legacy arrays kept for API compatibility — typed, not `any[]`
       features: [] as LegacyEntity[],
       events: [] as LegacyEntity[],
       advertisers: [] as LegacyEntity[],
       distributors: [] as LegacyEntity[],
-      // New generalized interactivity
       links,
-      // If any link wants a QR, your backend can generate redirects on save/publish
       wantQR: links.some((l) => l.generateQR),
     };
 
@@ -125,12 +127,6 @@ export default function ZineMatPage() {
     if (coverFile) fd.append("cover", coverFile);
 
     const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
-
-    if (res.status === 401) {
-      // Middleware protects this route, but fallback just in case
-      window.location.href = "/sign-in?redirect_url=/zinemat";
-      return;
-    }
 
     let json: SubmitResp;
     try {
@@ -158,15 +154,12 @@ export default function ZineMatPage() {
         style={{
           backgroundColor: "#E2E2E2",
           backgroundImage: `
-            /* minor grid (24px) */
             linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px),
-            /* major grid (120px) */
             linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)
           `,
-          backgroundSize:
-            "24px 24px, 24px 24px, 120px 120px, 120px 120px",
+          backgroundSize: "24px 24px, 24px 24px, 120px 120px, 120px 120px",
         }}
       />
 
@@ -174,10 +167,10 @@ export default function ZineMatPage() {
         {/* Top bar */}
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">ZineMat</h1>
-
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleSave(false)}
+              disabled={!canSaveDraft}
               className="rounded-xl border px-3 py-1 text-sm hover:bg-white"
             >
               Save Draft
@@ -188,7 +181,7 @@ export default function ZineMatPage() {
               className={`rounded-xl px-3 py-1 text-sm font-medium ${
                 canPublish ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"
               }`}
-              title={canPublish ? "Publish" : "Needs Basics + Cover"}
+              title={canPublish ? "Publish" : "Needs Basics + Upload"}
             >
               Publish
             </button>
@@ -197,27 +190,15 @@ export default function ZineMatPage() {
 
         {/* Active board */}
         <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
-          {/* Pinned required sections */}
           <div className="p-4 sm:p-5 space-y-4">
-            {/* BASICS (required) */}
-            <Card
-              title={SECTION_META.BASICS.label}
-              accent={SECTION_META.BASICS.accent}
-            >
+            {/* BASICS always pinned */}
+            <Card title={SECTION_META.BASICS.label} accent={SECTION_META.BASICS.accent}>
               <BasicsSection value={basics} onChange={setBasics} />
             </Card>
 
-            {/* UPLOAD (required) */}
-            <Card
-              title={SECTION_META.UPLOAD.label}
-              accent={SECTION_META.UPLOAD.accent}
-            >
-              <UploadsSection file={coverFile} onChange={setCoverFile} />
-            </Card>
-
-            {/* Optional sections currently active */}
+            {/* Optional sections */}
             {active
-              .filter((k) => k !== "BASICS" && k !== "UPLOAD")
+              .filter((k) => k !== "BASICS")
               .map((k) => (
                 <Card
                   key={k}
@@ -225,6 +206,9 @@ export default function ZineMatPage() {
                   accent={SECTION_META[k].accent}
                   onRemove={() => removeSection(k)}
                 >
+                  {k === "UPLOAD" && (
+                    <UploadsSection file={coverFile} onChange={setCoverFile} />
+                  )}
                   {k === "INTERACTIVITY" && (
                     <InteractivitySection links={links} onChange={setLinks} />
                   )}
@@ -236,13 +220,11 @@ export default function ZineMatPage() {
           </div>
         </div>
 
-        {/* Toolkit (inactive sections) */}
+        {/* Toolkit */}
         <div className="mt-6 rounded-2xl border bg-white/90">
-          <div className="px-4 py-3 border-b font-semibold text-sm">
-            Toolkit
-          </div>
+          <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
           <div className="p-4 grid gap-3 sm:grid-cols-2">
-            {(["INTERACTIVITY", "CODEGEN"] as SectionKey[])
+            {(["UPLOAD", "INTERACTIVITY", "CODEGEN"] as SectionKey[])
               .filter((k) => !active.includes(k))
               .map((k) => (
                 <div
@@ -250,9 +232,7 @@ export default function ZineMatPage() {
                   className="rounded-xl border p-3 bg-white flex items-center justify-between"
                   style={{ borderColor: `${SECTION_META[k].accent}55` }}
                 >
-                  <div className="text-sm font-medium">
-                    {SECTION_META[k].label}
-                  </div>
+                  <div className="text-sm font-medium">{SECTION_META[k].label}</div>
                   <button
                     onClick={() => addSection(k)}
                     className="rounded-md border px-3 py-1 text-xs hover:bg-white"
@@ -262,14 +242,13 @@ export default function ZineMatPage() {
                   </button>
                 </div>
               ))}
-            {/* If everything is active, show a tiny hint */}
-            {(["INTERACTIVITY", "CODEGEN"] as SectionKey[]).every((k) =>
+            {(["UPLOAD", "INTERACTIVITY", "CODEGEN"] as SectionKey[]).every((k) =>
               active.includes(k)
             ) && <div className="text-sm text-gray-600">All tools in use.</div>}
           </div>
         </div>
 
-        {/* Checklist footer */}
+        {/* Checklist */}
         <div className="mt-6 rounded-2xl border bg-white p-4">
           <FinalChecklist checklist={checklist} />
         </div>
@@ -278,7 +257,7 @@ export default function ZineMatPage() {
   );
 }
 
-/** ------- presentational card ------- */
+/** ------- Card ------- */
 function Card({
   title,
   accent,
@@ -309,10 +288,7 @@ function Card({
             Remove
           </button>
         ) : (
-          <span
-            className="rounded-md border px-2 py-0.5 text-[10px] text-gray-500"
-            title="Required"
-          >
+          <span className="rounded-md border px-2 py-0.5 text-[10px] text-gray-500">
             Required
           </span>
         )}
