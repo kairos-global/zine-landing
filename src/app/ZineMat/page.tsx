@@ -1,12 +1,19 @@
 // src/app/ZineMat/page.tsx
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import { createClient } from "@supabase/supabase-js";
 import toast from "react-hot-toast";
 
-/** ---------- Types shared with child sections ---------- */
+/** ---------- Supabase ---------- */
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+/** ---------- Types ---------- */
 export type Basics = {
   title: string;
   date?: string | null;
@@ -27,11 +34,6 @@ import InteractivitySection from "./components/InteractivitySection";
 import FinalChecklist from "./components/FinalChecklist";
 import CodeGenSection from "./components/CodeGenSection";
 
-/** ---------- API response types ---------- */
-type SubmitOk = { ok: true; issue_id: string };
-type SubmitErr = { ok: false; error: { message: string } };
-type SubmitResp = SubmitOk | SubmitErr;
-
 /** ---------- Section registry ---------- */
 type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY" | "CODEGEN";
 
@@ -50,15 +52,48 @@ type LegacyEntity = Record<string, unknown>;
 
 export default function ZineMatPage() {
   const router = useRouter();
-  const { isSignedIn } = useUser();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
+  const { isSignedIn, user } = useUser();
 
-  /** Core state (always top-level, no conditional hooks) */
+  /** Core state */
   const [basics, setBasics] = useState<Basics>({ title: "", date: null });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
+  const [loading, setLoading] = useState<boolean>(!!editId);
 
-  /** Checklist (also always top-level) */
+  /** Fetch existing issue if editing */
+  useEffect(() => {
+    if (!editId) return;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("issues")
+        .select("*")
+        .eq("id", editId)
+        .single();
+
+      if (error) {
+        console.error("Error fetching issue:", error);
+        toast.error("Could not load issue.");
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        setBasics({
+          title: data.title ?? "",
+          date: data.published_at,
+        });
+        if (data.links) setLinks(data.links);
+      }
+
+      setLoading(false);
+    })();
+  }, [editId]);
+
+  /** Checklist */
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
     const coverOk = !!coverFile;
@@ -82,17 +117,8 @@ export default function ZineMatPage() {
   const removeSection = (key: SectionKey) =>
     setActive((cur) => cur.filter((k) => k !== key));
 
-  /** Save */
-  async function handleSave(publish: boolean) {
-    if (publish && !canPublish) {
-      toast.error("Publishing requires an upload.");
-      return;
-    }
-    if (!publish && !canSaveDraft) {
-      toast.error("Please add a title before saving.");
-      return;
-    }
-
+  /** Helpers */
+  function buildPayload(status: "draft" | "published") {
     const slugBase =
       basics.title
         .toLowerCase()
@@ -101,53 +127,95 @@ export default function ZineMatPage() {
         .replace(/\s+/g, "-")
         .slice(0, 48) || `issue-${Date.now().toString().slice(-6)}`;
 
-    const payload = {
-      issue: {
-        title: basics.title.trim(),
-        slug: slugBase,
-        status: (publish ? "published" : "draft") as "published" | "draft",
-        published_at: publish
+    return {
+      title: basics.title.trim(),
+      slug: slugBase,
+      status,
+      published_at:
+        status === "published"
           ? basics.date || new Date().toISOString().slice(0, 10)
           : null,
-      },
-      features: [] as LegacyEntity[],
-      events: [] as LegacyEntity[],
-      advertisers: [] as LegacyEntity[],
-      distributors: [] as LegacyEntity[],
       links,
       wantQR: links.some((l) => l.generateQR),
+      ...(user ? { user_id: user.id } : {}),
     };
+  }
 
-    const fd = new FormData();
-    fd.append("issue", JSON.stringify(payload.issue));
-    fd.append("features", JSON.stringify(payload.features));
-    fd.append("events", JSON.stringify(payload.events));
-    fd.append("advertisers", JSON.stringify(payload.advertisers));
-    fd.append("distributors", JSON.stringify(payload.distributors));
-    fd.append("links", JSON.stringify(payload.links));
-    fd.append("wantQR", JSON.stringify(payload.wantQR));
-    if (coverFile) fd.append("cover", coverFile);
+  /** Create new draft */
+  async function createDraft() {
+    const payload = buildPayload("draft");
+    const { data, error } = await supabase
+      .from("issues")
+      .insert([payload])
+      .select("id")
+      .single();
 
-    let json: SubmitResp | null = null;
-    try {
-      const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
-      json = (await res.json()) as SubmitResp;
-    } catch (err) {
-      console.error("Network/parse error:", err);
-      toast.error("Server did not return JSON.");
+    if (error) {
+      console.error("Draft error:", error);
+      toast.error("Could not save draft.");
       return;
     }
 
-    if (!json || !json.ok) {
-      toast.error(json?.error?.message ?? "Could not save the zine.");
+    toast.success("Draft saved.");
+    router.push(`/zinemat?id=${data.id}`);
+  }
+
+  /** Update existing draft */
+  async function updateDraft() {
+    if (!editId) return;
+    const payload = buildPayload("draft");
+    const { error } = await supabase
+      .from("issues")
+      .update(payload)
+      .eq("id", editId);
+
+    if (error) {
+      console.error("Update error:", error);
+      toast.error("Could not save changes.");
       return;
     }
 
-    toast.success(publish ? "Published!" : "Draft saved.");
-    router.push(`/past-issues?new=${json.issue_id}`);
+    toast.success("Changes saved.");
+  }
+
+  /** Publish */
+  async function publishIssue() {
+    const payload = buildPayload("published");
+    let result;
+    if (editId) {
+      result = await supabase
+        .from("issues")
+        .update(payload)
+        .eq("id", editId)
+        .select("id")
+        .single();
+    } else {
+      result = await supabase
+        .from("issues")
+        .insert([payload])
+        .select("id")
+        .single();
+    }
+
+    if (result.error) {
+      console.error("Publish error:", result.error);
+      toast.error("Could not publish issue.");
+      return;
+    }
+
+    toast.success("Published!");
+    router.push(`/past-issues?new=${result.data.id}`);
   }
 
   /** UI */
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-gray-600">
+        Loading issue…
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen text-black">
       {/* GLOBAL cutting-mat background */}
@@ -170,15 +238,27 @@ export default function ZineMatPage() {
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">ZineMat</h1>
           <div className="flex items-center gap-2">
+            {/* Save Draft */}
             <button
-              onClick={() => handleSave(false)}
-              disabled={!canSaveDraft}
-              className="rounded-xl border px-3 py-1 text-sm hover:bg-white"
+              onClick={createDraft}
+              disabled={!canSaveDraft || !!editId}
+              className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
             >
               Save Draft
             </button>
+
+            {/* Save Changes */}
             <button
-              onClick={() => handleSave(true)}
+              onClick={updateDraft}
+              disabled={!editId}
+              className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
+            >
+              Save Changes
+            </button>
+
+            {/* Publish */}
+            <button
+              onClick={publishIssue}
               disabled={!canPublish}
               className={`rounded-xl px-3 py-1 text-sm font-medium ${
                 canPublish ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"

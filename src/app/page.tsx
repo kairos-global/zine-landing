@@ -15,18 +15,18 @@ export default function Home() {
       <RollingQuotes />
 
       {/* Fixed Announcements Box – hide on small screens */}
-      <div className="hidden md:block fixed top-21 right-25 z-10">
+      <div className="hidden md:block fixed top-[80px] right-[70px] z-10">
         <AnnouncementsBox />
       </div>
 
       {/* Fixed Landing Page Graphic – hide on small screens */}
-      <div className="hidden md:block fixed bottom-[-30px] right-[-30px] z-0 w-[900px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
+      <div className="hidden md:block fixed bottom-[-30px] right-[-30px] z-0 w-[725px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
         <Image
           src="/images/ZG_Collage.png"
           alt="Landing Page Graphic"
-          width={450}
-          height={300}
-          className="w-full h-auto object-cover"
+          width={900}
+          height={600}
+          className="w-full h-full object-cover"
           priority
         />
       </div>
