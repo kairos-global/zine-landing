@@ -52,18 +52,20 @@ export default function ZineMatPage() {
   const router = useRouter();
   const { isSignedIn } = useUser();
 
-  if (typeof window !== "undefined" && !isSignedIn) {
-    window.location.href = "/sign-in?redirect_url=/zinemat";
-    return null;
-  }
-
-  /** Core state */
+  /** Core state (always called, no conditional hooks) */
   const [basics, setBasics] = useState<Basics>({ title: "", date: null });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
-
-  /** Layout state */
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
+
+  /** Redirect placeholder if not signed in */
+  if (typeof window !== "undefined" && !isSignedIn) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-gray-700">
+        Redirecting to sign in…
+      </div>
+    );
+  }
 
   const addSection = (key: SectionKey) =>
     setActive((cur) => (cur.includes(key) ? cur : [...cur, key]));
