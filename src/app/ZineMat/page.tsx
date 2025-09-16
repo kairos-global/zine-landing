@@ -52,11 +52,21 @@ export default function ZineMatPage() {
   const router = useRouter();
   const { isSignedIn } = useUser();
 
-  /** Core state (always called, no conditional hooks) */
+  /** Core state (always top-level, no conditional hooks) */
   const [basics, setBasics] = useState<Basics>({ title: "", date: null });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
+
+  /** Checklist (also always top-level) */
+  const checklist = useMemo(() => {
+    const basicsOk = basics.title.trim().length > 0;
+    const coverOk = !!coverFile;
+    return { basics: basicsOk, cover: coverOk };
+  }, [basics.title, coverFile]);
+
+  const canSaveDraft = checklist.basics;
+  const canPublish = checklist.basics && checklist.cover;
 
   /** Redirect placeholder if not signed in */
   if (typeof window !== "undefined" && !isSignedIn) {
@@ -71,16 +81,6 @@ export default function ZineMatPage() {
     setActive((cur) => (cur.includes(key) ? cur : [...cur, key]));
   const removeSection = (key: SectionKey) =>
     setActive((cur) => cur.filter((k) => k !== key));
-
-  /** Checklist */
-  const checklist = useMemo(() => {
-    const basicsOk = basics.title.trim().length > 0;
-    const coverOk = !!coverFile;
-    return { basics: basicsOk, cover: coverOk };
-  }, [basics.title, coverFile]);
-
-  const canSaveDraft = checklist.basics;
-  const canPublish = checklist.basics && checklist.cover;
 
   /** Save */
   async function handleSave(publish: boolean) {
