@@ -4,11 +4,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import toast from "react-hot-toast";
 
 /** ---------- Types shared with child sections ---------- */
 export type Basics = {
   title: string;
-  date?: string | null; // yyyy-mm-dd or null
+  date?: string | null;
 };
 
 export type InteractiveLink = {
@@ -51,7 +52,6 @@ export default function ZineMatPage() {
   const router = useRouter();
   const { isSignedIn } = useUser();
 
-  /** Redirect to Clerk if not signed in */
   if (typeof window !== "undefined" && !isSignedIn) {
     window.location.href = "/sign-in?redirect_url=/zinemat";
     return null;
@@ -70,7 +70,7 @@ export default function ZineMatPage() {
   const removeSection = (key: SectionKey) =>
     setActive((cur) => cur.filter((k) => k !== key));
 
-  /** --- Checklist --- */
+  /** Checklist */
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
     const coverOk = !!coverFile;
@@ -80,14 +80,14 @@ export default function ZineMatPage() {
   const canSaveDraft = checklist.basics;
   const canPublish = checklist.basics && checklist.cover;
 
-  /** ---------- Save ---------- */
+  /** Save */
   async function handleSave(publish: boolean) {
     if (publish && !canPublish) {
-      alert("Publishing requires an upload.");
+      toast.error("Publishing requires an upload.");
       return;
     }
     if (!publish && !canSaveDraft) {
-      alert("Please add a title before saving.");
+      toast.error("Please add a title before saving.");
       return;
     }
 
@@ -126,29 +126,29 @@ export default function ZineMatPage() {
     fd.append("wantQR", JSON.stringify(payload.wantQR));
     if (coverFile) fd.append("cover", coverFile);
 
-    const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
-
-    let json: SubmitResp;
+    let json: SubmitResp | null = null;
     try {
+      const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
       json = (await res.json()) as SubmitResp;
-    } catch {
-      alert("Server did not return JSON.");
+    } catch (err) {
+      console.error("Network/parse error:", err);
+      toast.error("Server did not return JSON.");
       return;
     }
 
-    if (!json.ok) {
-      alert(json.error?.message ?? "Could not save the zine.");
+    if (!json || !json.ok) {
+      toast.error(json?.error?.message ?? "Could not save the zine.");
       return;
     }
 
-    alert(publish ? "Published!" : "Draft saved.");
+    toast.success(publish ? "Published!" : "Draft saved.");
     router.push(`/past-issues?new=${json.issue_id}`);
   }
 
-  /** ---------- UI ---------- */
+  /** UI */
   return (
     <div className="relative min-h-screen text-black">
-      {/* GLOBAL cutting-mat background (grey grid) */}
+      {/* GLOBAL cutting-mat background */}
       <div
         className="hidden sm:block fixed inset-0 -z-10 pointer-events-none"
         style={{
@@ -191,12 +191,9 @@ export default function ZineMatPage() {
         {/* Active board */}
         <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
           <div className="p-4 sm:p-5 space-y-4">
-            {/* BASICS always pinned */}
             <Card title={SECTION_META.BASICS.label} accent={SECTION_META.BASICS.accent}>
               <BasicsSection value={basics} onChange={setBasics} />
             </Card>
-
-            {/* Optional sections */}
             {active
               .filter((k) => k !== "BASICS")
               .map((k) => (
@@ -257,7 +254,7 @@ export default function ZineMatPage() {
   );
 }
 
-/** ------- Card ------- */
+/** Card */
 function Card({
   title,
   accent,
