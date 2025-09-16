@@ -25,7 +25,7 @@ const Navbar = () => {
       </Link>
 
       {/* Desktop links */}
-      <ul className="hidden md:flex items-center gap-16 text-xl font-normal text-black">
+      <ul className="hidden md:flex items-center gap-14 text-xl font-normal text-black">
         {links.map(({ label, href }, idx) => (
           <li key={idx}>
             <Link href={href} className="hover:underline hover:text-black">
