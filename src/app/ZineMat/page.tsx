@@ -51,9 +51,10 @@ type LegacyEntity = Record<string, unknown>;
 export default function ZineMatPage() {
   const router = useRouter();
 
-  // ✅ Fix: prevent useSearchParams from running during prerender
-  const searchParams = typeof window !== "undefined" ? useSearchParams() : null;
-  const editId = searchParams?.get("id") ?? null;
+// ✅ Safe usage
+const searchParams = useSearchParams();
+const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
+
 
   const { isSignedIn, user } = useUser();
 
