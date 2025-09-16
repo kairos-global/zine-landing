@@ -50,8 +50,11 @@ type LegacyEntity = Record<string, unknown>;
 
 export default function ZineMatPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const editId = searchParams.get("id");
+
+  // ✅ Fix: prevent useSearchParams from running during prerender
+  const searchParams = typeof window !== "undefined" ? useSearchParams() : null;
+  const editId = searchParams?.get("id") ?? null;
+
   const { isSignedIn, user } = useUser();
 
   const [basics, setBasics] = useState<Basics>({ title: "", date: null });
@@ -154,7 +157,6 @@ export default function ZineMatPage() {
         return;
       }
       toast.success("Draft saved.");
-      // ✅ redirect to dashboard library after draft save
       router.push(`/dashboard/library?new=${json.issue_id}`);
     } catch (e) {
       console.error("Draft submit error:", e);
@@ -188,41 +190,6 @@ export default function ZineMatPage() {
   async function publishIssue() {
     if (!canPublish) return;
 
-    if (!editId) {
-      const issue = {
-        title: basics.title.trim(),
-        slug: slugFromTitle(),
-        status: "published" as const,
-        published_at: basics.date || new Date().toISOString().slice(0, 10),
-      };
-
-      const fd = new FormData();
-      fd.append("issue", JSON.stringify(issue));
-      fd.append("features", JSON.stringify([] as LegacyEntity[]));
-      fd.append("events", JSON.stringify([] as LegacyEntity[]));
-      fd.append("advertisers", JSON.stringify([] as LegacyEntity[]));
-      fd.append("distributors", JSON.stringify([] as LegacyEntity[]));
-      fd.append("links", JSON.stringify(links));
-      fd.append("wantQR", JSON.stringify(links.some((l) => l.generateQR)));
-      if (coverFile) fd.append("cover", coverFile);
-
-      try {
-        const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
-        const json = (await res.json()) as { ok: boolean; issue_id?: string; error?: { message: string } };
-        if (!json.ok || !json.issue_id) {
-          toast.error(json?.error?.message ?? "Could not publish.");
-          return;
-        }
-        toast.success("Published!");
-        // ✅ redirect to past issues after publish
-        router.push(`/past-issues?new=${json.issue_id}`);
-      } catch (e) {
-        console.error("Publish submit error:", e);
-        toast.error("Server error publishing.");
-      }
-      return;
-    }
-
     const payload = {
       title: basics.title.trim(),
       slug: slugFromTitle(),
@@ -232,22 +199,21 @@ export default function ZineMatPage() {
       ...(user ? { user_id: user.id } : {}),
     };
 
-    const result = await supabase
+    const { data, error } = await supabase
       .from("issues")
       .update(payload)
       .eq("id", editId)
       .select("id")
       .single();
 
-    if (result.error || !result.data) {
-      console.error("Publish update error:", result.error);
+    if (error || !data) {
+      console.error("Publish error:", error);
       toast.error("Could not publish.");
       return;
     }
 
     toast.success("Published!");
-    // ✅ redirect to past issues after publish
-    router.push(`/past-issues?new=${result.data.id}`);
+    router.push(`/dashboard/library?new=${data.id}`);
   }
 
   /** UI */
@@ -261,7 +227,6 @@ export default function ZineMatPage() {
 
   return (
     <div className="relative min-h-screen text-black">
-      {/* GLOBAL cutting-mat background */}
       <div
         className="hidden sm:block fixed inset-0 -z-10 pointer-events-none"
         style={{
@@ -277,11 +242,9 @@ export default function ZineMatPage() {
       />
 
       <div className="max-w-[1120px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Top bar */}
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">ZineMat</h1>
           <div className="flex items-center gap-2">
-            {/* Save Draft */}
             <button
               onClick={createDraft}
               disabled={!canSaveDraft || !!editId}
@@ -290,7 +253,6 @@ export default function ZineMatPage() {
               Save Draft
             </button>
 
-            {/* Save Changes */}
             <button
               onClick={updateDraft}
               disabled={!editId}
@@ -299,7 +261,6 @@ export default function ZineMatPage() {
               Save Changes
             </button>
 
-            {/* Publish */}
             <button
               onClick={publishIssue}
               disabled={!canPublish}
@@ -313,7 +274,6 @@ export default function ZineMatPage() {
           </div>
         </div>
 
-        {/* Active board */}
         <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
           <div className="p-4 sm:p-5 space-y-4">
             <Card title={SECTION_META.BASICS.label} accent={SECTION_META.BASICS.accent}>
@@ -342,7 +302,6 @@ export default function ZineMatPage() {
           </div>
         </div>
 
-        {/* Toolkit */}
         <div className="mt-6 rounded-2xl border bg-white/90">
           <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
           <div className="p-4 grid gap-3 sm:grid-cols-2">
