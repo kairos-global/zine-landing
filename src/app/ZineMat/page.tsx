@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
@@ -48,13 +49,26 @@ const SECTION_META: Record<
 
 type LegacyEntity = Record<string, unknown>;
 
-export default function ZineMatPage() {
+/** ---------- Suspense Wrapper ---------- */
+export default function ZineMatPageWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen text-gray-600">
+          Loading…
+        </div>
+      }
+    >
+      <ZineMatPage />
+    </Suspense>
+  );
+}
+
+/** ---------- Main Page ---------- */
+function ZineMatPage() {
   const router = useRouter();
-
-// ✅ Safe usage
-const searchParams = useSearchParams();
-const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
-
+  const searchParams = useSearchParams();
+  const editId = searchParams?.get("id") ?? null;
 
   const { isSignedIn, user } = useUser();
 
@@ -104,7 +118,7 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
   const canSaveDraft = checklist.basics;
   const canPublish = checklist.basics && checklist.cover;
 
-  if (typeof window !== "undefined" && !isSignedIn) {
+  if (isSignedIn === false) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-700">
         Redirecting to sign in…
@@ -151,8 +165,15 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
     if (coverFile) fd.append("cover", coverFile);
 
     try {
-      const res = await fetch("/api/zinemat/submit", { method: "POST", body: fd });
-      const json = (await res.json()) as { ok: boolean; issue_id?: string; error?: { message: string } };
+      const res = await fetch("/api/zinemat/submit", {
+        method: "POST",
+        body: fd,
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        issue_id?: string;
+        error?: { message: string };
+      };
       if (!json.ok || !json.issue_id) {
         toast.error(json?.error?.message ?? "Could not save draft.");
         return;
@@ -178,7 +199,10 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
       ...(user ? { user_id: user.id } : {}),
     };
 
-    const { error } = await supabase.from("issues").update(payload).eq("id", editId);
+    const { error } = await supabase
+      .from("issues")
+      .update(payload)
+      .eq("id", editId);
     if (error) {
       console.error("Update error:", error);
       toast.error("Could not save changes.");
@@ -238,7 +262,8 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
             linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)
           `,
-          backgroundSize: "24px 24px, 24px 24px, 120px 120px, 120px 120px",
+          backgroundSize:
+            "24px 24px, 24px 24px, 120px 120px, 120px 120px",
         }}
       />
 
@@ -277,7 +302,10 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
 
         <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
           <div className="p-4 sm:p-5 space-y-4">
-            <Card title={SECTION_META.BASICS.label} accent={SECTION_META.BASICS.accent}>
+            <Card
+              title={SECTION_META.BASICS.label}
+              accent={SECTION_META.BASICS.accent}
+            >
               <BasicsSection value={basics} onChange={setBasics} />
             </Card>
             {active
@@ -293,10 +321,16 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
                     <UploadsSection file={coverFile} onChange={setCoverFile} />
                   )}
                   {k === "INTERACTIVITY" && (
-                    <InteractivitySection links={links} onChange={setLinks} />
+                    <InteractivitySection
+                      links={links}
+                      onChange={setLinks}
+                    />
                   )}
                   {k === "CODEGEN" && (
-                    <CodeGenSection links={links} onChangeLinks={setLinks} />
+                    <CodeGenSection
+                      links={links}
+                      onChangeLinks={setLinks}
+                    />
                   )}
                 </Card>
               ))}
@@ -304,7 +338,9 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
         </div>
 
         <div className="mt-6 rounded-2xl border bg-white/90">
-          <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
+          <div className="px-4 py-3 border-b font-semibold text-sm">
+            Toolkit
+          </div>
           <div className="p-4 grid gap-3 sm:grid-cols-2">
             {(["UPLOAD", "INTERACTIVITY", "CODEGEN"] as SectionKey[])
               .filter((k) => !active.includes(k))
@@ -314,7 +350,9 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
                   className="rounded-xl border p-3 bg-white flex items-center justify-between"
                   style={{ borderColor: `${SECTION_META[k].accent}55` }}
                 >
-                  <div className="text-sm font-medium">{SECTION_META[k].label}</div>
+                  <div className="text-sm font-medium">
+                    {SECTION_META[k].label}
+                  </div>
                   <button
                     onClick={() => addSection(k)}
                     className="rounded-md border px-3 py-1 text-xs hover:bg-white"
@@ -324,9 +362,13 @@ const editId = typeof window !== "undefined" ? searchParams?.get("id") : null;
                   </button>
                 </div>
               ))}
-            {(["UPLOAD", "INTERACTIVITY", "CODEGEN"] as SectionKey[]).every((k) =>
-              active.includes(k)
-            ) && <div className="text-sm text-gray-600">All tools in use.</div>}
+            {(["UPLOAD", "INTERACTIVITY", "CODEGEN"] as SectionKey[]).every(
+              (k) => active.includes(k)
+            ) && (
+              <div className="text-sm text-gray-600">
+                All tools in use.
+              </div>
+            )}
           </div>
         </div>
 
