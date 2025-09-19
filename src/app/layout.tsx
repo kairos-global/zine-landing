@@ -9,6 +9,9 @@ import { Toaster } from 'react-hot-toast';
 export const metadata = {
   title: 'Zineground',
   description: 'Zineground is a zine distribution network.',
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 const spaceGrotesk = Space_Grotesk({
