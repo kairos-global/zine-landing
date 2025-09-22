@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
-import QRCode from "qrcode";
+import QRCode from "qrcode-generator";
+import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // must use service key for server uploads
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export async function POST(req: Request) {
   const formData = await req.formData();
 
-  // ---------- Extract Basics ----------
   const title = formData.get("title") as string;
   const date = formData.get("date") as string;
   const userId = formData.get("userId") as string;
@@ -66,44 +66,54 @@ export async function POST(req: Request) {
       const shortPath = `r/${linkId}`;
       const fullRedirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${shortPath}`;
 
-      // Generate QR Code
-      const qrDataUrl = await QRCode.toDataURL(fullRedirectUrl);
-      const qrBuffer = Buffer.from(qrDataUrl.split(",")[1], "base64");
+      try {
+        // ✅ Generate QR Code SVG
+        const qr = QRCode(0, 'L');
+        qr.addData(fullRedirectUrl);
+        qr.make();
+        const svg = qr.createSvgTag({ scalable: true });
 
-      // Upload QR image
-      const { data: qrData, error: qrErr } = await supabase.storage
-        .from("zineground")
-        .upload(`issues/${issueId}/qr/${linkId}.png`, qrBuffer, {
-          contentType: "image/png",
-          upsert: true,
+        // ✅ Convert SVG to PNG using sharp
+        const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
+
+        // ✅ Upload to Supabase
+        const { data: qrData, error: qrErr } = await supabase.storage
+          .from("zineground")
+          .upload(`issues/${issueId}/qr/${linkId}.png`, pngBuffer, {
+            contentType: "image/png",
+            upsert: true,
+          });
+
+        if (qrErr) {
+          console.error("QR Upload Error:", qrErr);
+          return null;
+        }
+
+        // ✅ Insert into issue_links
+        const { error: insertErr } = await supabase.from("issue_links").insert({
+          id: linkId,
+          issue_id: issueId,
+          label: link.label,
+          url: link.url,
+          generate_qr: link.generateQR,
+          qr_path: qrData.path,
+          redirect_path: shortPath,
         });
 
-      if (qrErr) {
-        console.error("QR Upload Error:", qrErr);
+        if (insertErr) {
+          console.error("Insert Error:", insertErr);
+          return null;
+        }
+
+        return {
+          ...link,
+          redirect_path: shortPath,
+          qr_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`,
+        };
+      } catch (err) {
+        console.error("QR Generation Error:", err);
         return null;
       }
-
-      // Insert into issue_links table
-      const { error: insertErr } = await supabase.from("issue_links").insert({
-        id: linkId,
-        issue_id: issueId,
-        label: link.label,
-        url: link.url,
-        generate_qr: link.generateQR,
-        qr_path: qrData.path,
-        redirect_path: shortPath,
-      });
-
-      if (insertErr) {
-        console.error("Insert Error:", insertErr);
-        return null;
-      }
-
-      return {
-        ...link,
-        redirect_path: shortPath,
-        qr_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`,
-      };
     })
   );
 
