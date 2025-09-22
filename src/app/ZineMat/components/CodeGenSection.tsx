@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import QRCode from "qrcode-generator";
 import type { InteractiveLink } from "../page";
 
 export default function CodeGenSection({
@@ -16,6 +18,17 @@ export default function CodeGenSection({
       links.map((l) => (l.id === id ? { ...l, generateQR: !l.generateQR } : l))
     );
 
+  const generateQRDataURL = (url: string): string => {
+    try {
+      const qr = QRCode(0, "L");
+      qr.addData(url);
+      qr.make();
+      return qr.createDataURL(4); // size multiplier
+    } catch (err) {
+      return "";
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-700 leading-snug">
@@ -23,36 +36,52 @@ export default function CodeGenSection({
       </p>
 
       {qrLinks.length === 0 ? (
-        <div className="text-sm text-gray-600">No QR links yet. Toggle them on in <b>Interactivity</b>.</div>
+        <div className="text-sm text-gray-600">
+          No QR links yet. Toggle them on in <b>Interactivity</b>.
+        </div>
       ) : (
         <div className="space-y-3">
-          {qrLinks.map((link) => (
-            <div
-              key={link.id}
-              className="rounded-lg border px-4 py-3 text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-            >
-              {/* Left side */}
-              <div className="flex-1">
-                <div className="font-semibold text-base text-black">
-                  {link.label || "Unnamed Link"}
+          {qrLinks.map((link) => {
+            const qrDataURL = generateQRDataURL(link.url);
+            return (
+              <div
+                key={link.id}
+                className="rounded-lg border px-4 py-3 text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+              >
+                {/* Left side */}
+                <div className="flex-1">
+                  <div className="font-semibold text-base text-black">
+                    {link.label || "Unnamed Link"}
+                  </div>
+                  <div className="text-sm text-gray-600 break-words">
+                    {link.url}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600 break-words">{link.url}</div>
-              </div>
 
-              {/* Right side */}
-              <div className="flex flex-col items-center gap-2">
-                <button
-                  className="px-3 py-1.5 text-sm bg-black text-white rounded"
-                  onClick={() => alert("QR preview coming soon")}
-                >
-                  Generate QR Code
-                </button>
-                <div className="w-20 h-20 border border-gray-300 rounded flex items-center justify-center text-xs text-gray-400">
-                  QR
+                {/* Right side */}
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    className="px-3 py-1.5 text-sm bg-black text-white rounded"
+                    onClick={() => toggleQR(link.id)}
+                  >
+                    {link.generateQR ? "Remove QR" : "Generate QR"}
+                  </button>
+
+                  {qrDataURL ? (
+                    <img
+                      src={qrDataURL}
+                      alt="QR Code"
+                      className="w-20 h-20 border border-gray-300 rounded object-contain"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 border border-gray-300 rounded flex items-center justify-center text-xs text-gray-400">
+                      QR
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
