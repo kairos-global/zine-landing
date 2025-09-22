@@ -113,6 +113,47 @@ function ZineMatPage() {
   const addSection = (key: SectionKey) => setActive((cur) => (cur.includes(key) ? cur : [...cur, key]));
   const removeSection = (key: SectionKey) => setActive((cur) => cur.filter((k) => k !== key));
 
+  const handleSubmit = async (mode: "draft" | "edit" | "publish") => {
+    if (!user) return;
+
+    const formData = new FormData();
+    formData.append("title", basics.title);
+    formData.append("date", basics.date || "");
+    formData.append("userId", user.id);
+    if (editId) formData.append("issueId", editId);
+    else formData.append("issueId", crypto.randomUUID());
+
+    if (coverFile) formData.append("cover", coverFile);
+    if (pdfFile) formData.append("pdf", pdfFile);
+
+    formData.append("interactiveLinks", JSON.stringify(links));
+
+    try {
+      const res = await fetch("/api/zinemat/submit", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        toast.error(
+          typeof result.error === "string"
+            ? result.error
+            : result.error?.message || "Something went wrong."
+        );
+        return;
+      }
+
+      toast.success("Saved successfully!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(
+        typeof err === "string" ? err : err?.message || "Unexpected error occurred."
+      );
+    }
+  };
+
   if (isSignedIn === false) {
     return <div className="flex items-center justify-center min-h-screen text-gray-700">Redirecting to sign in…</div>;
   }
@@ -140,9 +181,23 @@ function ZineMatPage() {
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">ZineMat</h1>
           <div className="flex items-center gap-2">
-            <button className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50">Save Draft</button>
-            <button className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50">Save Changes</button>
             <button
+              onClick={() => handleSubmit("draft")}
+              disabled={!canSaveDraft}
+              className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
+            >
+              Save Draft
+            </button>
+            <button
+              onClick={() => handleSubmit("edit")}
+              disabled={!editId}
+              className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
+            >
+              Save Changes
+            </button>
+            <button
+              onClick={() => handleSubmit("publish")}
+              disabled={!canPublish}
               className={`rounded-xl px-3 py-1 text-sm font-medium ${canPublish ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"}`}
               title={canPublish ? "Publish" : "Needs Basics + Upload"}
             >
@@ -159,7 +214,12 @@ function ZineMatPage() {
             {active
               .filter((k) => k !== "BASICS")
               .map((k) => (
-                <Card key={k} title={SECTION_META[k].label} accent={SECTION_META[k].accent} onRemove={() => removeSection(k)}>
+                <Card
+                  key={k}
+                  title={SECTION_META[k as SectionKey].label}
+                  accent={SECTION_META[k as SectionKey].accent}
+                  onRemove={() => removeSection(k)}
+                >
                   {k === "UPLOAD" && (
                     <UploadsSection
                       coverFile={coverFile}
@@ -214,7 +274,17 @@ function ZineMatPage() {
   );
 }
 
-function Card({ title, accent, onRemove, children }: { title: string; accent: string; onRemove?: () => void; children: React.ReactNode }) {
+function Card({
+  title,
+  accent,
+  onRemove,
+  children,
+}: {
+  title: string;
+  accent: string;
+  onRemove?: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <div className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: `${accent}55` }}>
       <div
