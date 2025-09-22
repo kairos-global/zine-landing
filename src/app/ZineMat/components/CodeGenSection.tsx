@@ -1,4 +1,3 @@
-// src/app/zinemat/components/CodeGenSection.tsx
 "use client";
 
 import type { InteractiveLink } from "../page";
@@ -18,44 +17,47 @@ export default function CodeGenSection({
     );
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-700">
-        Choose which links should get a QR. We’ll generate them automatically on{" "}
-        <b>Save/Publish</b>.
+    <div className="space-y-4">
+      <p className="text-sm text-gray-700 leading-snug">
+        QR codes will be auto-generated for any links you've selected. Use this section to preview which links will get codes on <b>Save/Publish</b>.
       </p>
 
-      {links.length === 0 ? (
-        <div className="text-sm text-gray-600">
-          No links yet. Add some in <b>Interactivity</b>.
-        </div>
+      {qrLinks.length === 0 ? (
+        <div className="text-sm text-gray-600">No QR links yet. Toggle them on in <b>Interactivity</b>.</div>
       ) : (
-        <div className="space-y-2">
-          {links.map((l) => (
+        <div className="space-y-3">
+          {qrLinks.map((link) => (
             <div
-              key={l.id}
-              className="rounded-lg border p-2 text-sm flex items-center justify-between"
+              key={link.id}
+              className="rounded-lg border px-4 py-3 text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3"
             >
-              <div className="min-w-0">
-                <div className="font-medium truncate">
-                  {l.type}{l.label ? ` — ${l.label}` : ""}
+              {/* Left side */}
+              <div className="flex-1">
+                <div className="font-semibold text-base text-black">
+                  {link.label || "Unnamed Link"}
                 </div>
-                <div className="text-xs text-gray-600 break-all">{l.url}</div>
+                <div className="text-sm text-gray-600 break-words">{link.url}</div>
               </div>
-              <label className="text-xs flex items-center gap-2 ml-3 shrink-0">
-                <input
-                  type="checkbox"
-                  checked={l.generateQR}
-                  onChange={() => toggleQR(l.id)}
-                />
-                QR
-              </label>
+
+              {/* Right side */}
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  className="px-3 py-1.5 text-sm bg-black text-white rounded"
+                  onClick={() => alert("QR preview coming soon")}
+                >
+                  Generate QR Code
+                </button>
+                <div className="w-20 h-20 border border-gray-300 rounded flex items-center justify-center text-xs text-gray-400">
+                  QR
+                </div>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="text-xs text-gray-600">
-        Selected for QR: <b>{qrLinks.length}</b> / {links.length}
+      <div className="text-xs text-gray-500 pt-1">
+        QR Codes Selected: <b>{qrLinks.length}</b> / {links.length}
       </div>
     </div>
   );

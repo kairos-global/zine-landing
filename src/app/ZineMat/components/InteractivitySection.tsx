@@ -4,7 +4,6 @@ export type InteractiveLink = {
   id: string;
   label: string;
   url: string;
-  type: "website" | "instagram" | "soundcloud" | "map" | "custom";
   generateQR: boolean;
 };
 
@@ -20,7 +19,6 @@ export default function InteractivitySection({
     const fd = new FormData(e.currentTarget);
     const label = (fd.get("label") as string)?.trim() ?? "";
     let url = (fd.get("url") as string)?.trim() ?? "";
-    const type = (fd.get("type") as InteractiveLink["type"]) || "website";
     const generateQR = fd.get("qr") === "on";
 
     if (!url) return;
@@ -30,7 +28,6 @@ export default function InteractivitySection({
       id: crypto.randomUUID(),
       label,
       url,
-      type,
       generateQR,
     };
     onChange([...links, next]);
@@ -46,22 +43,11 @@ export default function InteractivitySection({
   return (
     <div className="space-y-3">
       {/* Add link */}
-      <form onSubmit={add} className="grid gap-2 md:grid-cols-5 items-end">
-        <select
-          name="type"
-          className="rounded-xl border px-3 py-2"
-          defaultValue="website"
-        >
-          <option value="website">Website</option>
-          <option value="instagram">Instagram</option>
-          <option value="soundcloud">Sound</option>
-          <option value="map">Map</option>
-          <option value="custom">Custom</option>
-        </select>
+      <form onSubmit={add} className="grid gap-2 md:grid-cols-4 items-end">
         <input
           name="label"
-          className="rounded-xl border px-3 py-2 md:col-span-1"
-          placeholder="Label (optional)"
+          className="rounded-xl border px-3 py-2"
+          placeholder="Label"
         />
         <input
           name="url"
@@ -93,7 +79,7 @@ export default function InteractivitySection({
               className="rounded-lg border p-2 text-sm flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
             >
               <div className="font-medium break-words">
-                {l.type}{l.label ? ` — ${l.label}` : ""}
+                {l.label ? `${l.label}` : "Unnamed Link"}
               </div>
               <a
                 className="text-xs underline break-all"
