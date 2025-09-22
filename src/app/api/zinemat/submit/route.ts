@@ -16,13 +16,20 @@ export async function POST(req: Request) {
     const formData = await req.formData();
 
     const title = formData.get("title") as string;
-    const date = formData.get("date") as string;
+    const published_at = formData.get("published_at") as string;
     const userId = formData.get("userId") as string;
     const issueId = formData.get("issueId") as string;
+    const status = (formData.get("status") as string) || "draft"; // "draft" or "published"
 
     if (!title || !userId || !issueId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    // ---------- Generate Slug ----------
+    const slug = title
+      .toLowerCase()
+      .replace(/[^\w\s]/gi, "")
+      .replace(/\s+/g, "-");
 
     // ---------- Upload Files ----------
     const coverFile = formData.get("cover") as File | null;
@@ -31,24 +38,51 @@ export async function POST(req: Request) {
     const uploads = [];
 
     if (coverFile) {
-      const extension = coverFile.type.split("/")[1]; // e.g., "png" or "jpeg"
+      const extension = coverFile.type.split("/")[1];
       const { data, error } = await supabase.storage
-        .from("zineground")
-        .upload(`covers/${issueId}.${extension}`, coverFile, {
-          upsert: true,
-        });
+        .from("Zineground")
+        .upload(`covers/${issueId}.${extension}`, coverFile, { upsert: true });
       if (error) return NextResponse.json({ error }, { status: 500 });
       uploads.push({ type: "cover", path: data.path });
     }
 
     if (pdfFile) {
       const { data, error } = await supabase.storage
-        .from("zineground")
-        .upload(`pdfs/${issueId}.pdf`, pdfFile, {
-          upsert: true,
-        });
+        .from("Zineground")
+        .upload(`issues/${issueId}.pdf`, pdfFile, { upsert: true });
       if (error) return NextResponse.json({ error }, { status: 500 });
       uploads.push({ type: "pdf", path: data.path });
+    }
+
+    // ---------- Insert or Update into issues ----------
+    const { data: existing, error: fetchErr } = await supabase
+      .from("issues")
+      .select("id")
+      .eq("id", issueId)
+      .single();
+
+    if (fetchErr && fetchErr.code !== "PGRST116") {
+      return NextResponse.json({ error: fetchErr }, { status: 500 });
+    }
+
+    const issueData = {
+      id: issueId,
+      title,
+      slug,
+      published_at: published_at || null,
+      user_id: userId,
+      status,
+    };
+
+    if (existing) {
+      const { error: updateErr } = await supabase
+        .from("issues")
+        .update(issueData)
+        .eq("id", issueId);
+      if (updateErr) return NextResponse.json({ error: updateErr }, { status: 500 });
+    } else {
+      const { error: insertErr } = await supabase.from("issues").insert(issueData);
+      if (insertErr) return NextResponse.json({ error: insertErr }, { status: 500 });
     }
 
     // ---------- Handle Interactivity Links ----------
@@ -71,18 +105,14 @@ export async function POST(req: Request) {
         const fullRedirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${shortPath}`;
 
         try {
-          // ✅ Generate QR Code SVG
           const qr = QRCode(0, "L");
           qr.addData(fullRedirectUrl);
           qr.make();
           const svg = qr.createSvgTag({ scalable: true });
-
-          // ✅ Convert SVG to PNG using sharp
           const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
 
-          // ✅ Upload PNG to correct path
           const { data: qrData, error: qrErr } = await supabase.storage
-            .from("zineground")
+            .from("Zineground")
             .upload(`qr-codes/${linkId}.png`, pngBuffer, {
               contentType: "image/png",
               upsert: true,
@@ -93,7 +123,6 @@ export async function POST(req: Request) {
             return null;
           }
 
-          // ✅ Insert into issue_links table
           const { error: insertErr } = await supabase.from("issue_links").insert({
             id: linkId,
             issue_id: issueId,
@@ -124,6 +153,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       status: "ok",
       title,
+      slug,
+      issueId,
       uploads,
       interactiveLinks: processedLinks.filter(Boolean),
     });
