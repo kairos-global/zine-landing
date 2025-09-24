@@ -8,25 +8,25 @@ const supabase = createClient(
 );
 
 export default async function IssuePage({ params }: { params: Promise<{ slug: string }> }) {
-  // Await the params since they're now async in Next.js 15
   const { slug } = await params;
-  
-  // 1) Issue
+
+  // 1) Fetch issue
   const { data: issue, error } = await supabase
     .from("issues")
-    .select("id,slug,title,published_at,pdf_url,cover_img_url")
+    .select("id, slug, title, published_at, pdf_url, cover_img_url, status")
     .eq("slug", slug)
     .single();
 
-  if (error || !issue) return <div className="p-6">Issue not found.</div>;
+  if (error || !issue) {
+    console.error(error);
+    return <div className="p-6">Issue not found.</div>;
+  }
 
-  // 2) Links + features count
-  const [{ data: links }, { data: features }] = await Promise.all([
-    supabase.from("issue_links").select("label,url,sort_order").eq("issue_id", issue.id).order("sort_order"),
-    supabase.from("features").select("id").eq("issue_id", issue.id),
-  ]);
-
-  const featuresCount = features?.length ?? 0;
+  // 2) Fetch interactive links
+  const { data: links } = await supabase
+    .from("issue_links")
+    .select("label,url,qr_path,redirect_path")
+    .eq("issue_id", issue.id);
 
   return (
     <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 md:grid-cols-[220px_1fr]">
@@ -62,7 +62,9 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
                 <a href={issue.pdf_url} target="_blank" className="underline">Open PDF</a>
               </object>
               <div className="mt-2 text-sm opacity-60">
-                Published: {issue.published_at ? issue.published_at.slice(0,10) : "—"}
+                {issue.status === "published"
+                  ? `Published: ${issue.published_at?.slice(0, 10) || "—"}`
+                  : "Draft"}
               </div>
             </>
           ) : (
@@ -76,7 +78,12 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
           {links?.length ? (
             <div className="flex flex-wrap gap-2">
               {links.map((l) => (
-                <a key={l.url} href={l.url} target="_blank" className="rounded-full border px-3 py-1 text-sm">
+                <a
+                  key={l.url}
+                  href={l.url}
+                  target="_blank"
+                  className="rounded-full border px-3 py-1 text-sm"
+                >
                   {l.label}
                 </a>
               ))}
@@ -89,13 +96,15 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
         {/* Locate */}
         <div id="locate" className="rounded-xl border p-4">
           <h2 className="mb-3 text-lg font-semibold">Find on map</h2>
-          <p className="mb-3 text-sm opacity-70">{featuresCount} feature pin{featuresCount===1?"":"s"} in this issue.</p>
+          <p className="mb-3 text-sm opacity-70">
+            Map integration coming soon.
+          </p>
           <div className="flex gap-2">
             <Link
-              href={{ pathname: "/map", query: { view: "features", issue: issue.slug } }}
+              href={{ pathname: "/map", query: { issue: issue.slug } }}
               className="rounded-md border px-3 py-1 text-sm"
             >
-              View this issue’s features
+              View this issue on map
             </Link>
             <Link
               href={{ pathname: "/map", query: { view: "distributors" } }}
