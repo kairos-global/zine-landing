@@ -10,6 +10,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+type InteractiveLink = {
+  label: string;
+  url: string;
+};
+
 export async function POST(req: Request) {
   try {
     // 👇 grab Clerk user directly
@@ -98,11 +103,11 @@ export async function POST(req: Request) {
 
     // ---------- Handle Interactivity Links ----------
     const interactiveLinksRaw = formData.get("interactiveLinks");
-    let interactiveLinks: any[] = [];
+    let interactiveLinks: InteractiveLink[] = [];
 
     if (interactiveLinksRaw) {
       try {
-        interactiveLinks = JSON.parse(interactiveLinksRaw.toString() || "[]");
+        interactiveLinks = JSON.parse(interactiveLinksRaw.toString() || "[]") as InteractiveLink[];
       } catch (e) {
         console.error("⚠️ Invalid JSON in interactiveLinks:", interactiveLinksRaw);
         return NextResponse.json({ error: "Invalid interactivity data" }, { status: 400 });
