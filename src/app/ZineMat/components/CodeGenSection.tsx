@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import QRCode from "qrcode-generator";
 import type { InteractiveLink } from "../page";
 
@@ -32,7 +32,8 @@ export default function CodeGenSection({
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-700 leading-snug">
-        QR codes will be auto-generated for any links you've selected. Use this section to preview which links will get codes on <b>Save/Publish</b>.
+        QR codes will be auto-generated for any links you&apos;ve selected. Use this
+        section to preview which links will get codes on <b>Save/Publish</b>.
       </p>
 
       {qrLinks.length === 0 ? (

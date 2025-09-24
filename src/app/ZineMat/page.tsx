@@ -86,7 +86,7 @@ function ZineMatPage() {
 
         if (linkData) {
           setLinks(
-            linkData.map((l: any) => ({
+            linkData.map((l: { id: string; label: string; url: string; generate_qr: boolean; qr_image_url?: string }) => ({
               id: l.id,
               label: l.label,
               url: l.url,
@@ -146,10 +146,14 @@ function ZineMatPage() {
       }
 
       toast.success("Saved successfully!");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error(
-        typeof err === "string" ? err : err?.message || "Unexpected error occurred."
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : "Unexpected error occurred."
       );
     }
   };
