@@ -22,6 +22,8 @@ export type InteractiveLink = {
   url: string;
   generateQR: boolean;
   qr_image_url?: string;
+  redirect_path?: string | null;
+  qr_path?: string | null;
 };
 
 import BasicsSection from "./components/BasicsSection";

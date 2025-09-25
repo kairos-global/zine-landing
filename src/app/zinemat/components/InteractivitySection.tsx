@@ -5,6 +5,8 @@ export type InteractiveLink = {
   label: string;
   url: string;
   generateQR: boolean;
+  redirect_path?: string | null; // added
+  qr_path?: string | null;       // added
 };
 
 export default function InteractivitySection({
@@ -29,6 +31,8 @@ export default function InteractivitySection({
       label,
       url,
       generateQR,
+      redirect_path: null,
+      qr_path: null,
     };
     onChange([...links, next]);
     e.currentTarget.reset();

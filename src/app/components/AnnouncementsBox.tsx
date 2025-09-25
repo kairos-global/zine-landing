@@ -81,7 +81,7 @@ export default function AnnouncementsBox() {
           style={{ fontSize: `${fontSizePx}px` }}
           className="font-medium px-4 text-center"
         >
-          Sign up to use the Zinemat!
+          Create and share zines with built in QR codes and analytics!
         </div>
       </div>
     );

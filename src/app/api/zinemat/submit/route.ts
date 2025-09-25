@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
+import QRCode from "qrcode"; // 👈 new: for generating PNG QR codes
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,10 @@ export async function POST(req: Request) {
     const status = (formData.get("status") as string) || "draft";
 
     if (!title || !issueId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
     }
 
     // ---------- Generate Slug ----------
@@ -95,10 +99,14 @@ export async function POST(req: Request) {
         .from("issues")
         .update(issueData)
         .eq("id", issueId);
-      if (updateErr) return NextResponse.json({ error: updateErr }, { status: 500 });
+      if (updateErr)
+        return NextResponse.json({ error: updateErr }, { status: 500 });
     } else {
-      const { error: insertErr } = await supabase.from("issues").insert(issueData);
-      if (insertErr) return NextResponse.json({ error: insertErr }, { status: 500 });
+      const { error: insertErr } = await supabase
+        .from("issues")
+        .insert(issueData);
+      if (insertErr)
+        return NextResponse.json({ error: insertErr }, { status: 500 });
     }
 
     // ---------- Handle Interactivity Links ----------
@@ -107,10 +115,18 @@ export async function POST(req: Request) {
 
     if (interactiveLinksRaw) {
       try {
-        interactiveLinks = JSON.parse(interactiveLinksRaw.toString() || "[]") as InteractiveLink[];
+        interactiveLinks = JSON.parse(
+          interactiveLinksRaw.toString() || "[]"
+        ) as InteractiveLink[];
       } catch (e) {
-        console.error("⚠️ Invalid JSON in interactiveLinks:", interactiveLinksRaw);
-        return NextResponse.json({ error: "Invalid interactivity data" }, { status: 400 });
+        console.error(
+          "⚠️ Invalid JSON in interactiveLinks:",
+          interactiveLinksRaw
+        );
+        return NextResponse.json(
+          { error: "Invalid interactivity data" },
+          { status: 400 }
+        );
       }
     }
 
@@ -118,19 +134,20 @@ export async function POST(req: Request) {
 
     for (const link of interactiveLinks) {
       const linkId = randomUUID();
-      const redirect_path = `r/${linkId}`;
 
-      // 👇 Placeholder QR (swap in a real generator if you want server-side QR rendering)
-      const qrSvg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
-          <text x="10" y="20">QR for ${link.url}</text>
-        </svg>
-      `;
-      const qrBuffer = Buffer.from(qrSvg);
+      // 👇 redirect route to track scans
+      const redirect_path = `/qr/${issueId}/${linkId}`;
 
+      // 👇 Generate a QR PNG buffer
+      const qrPngBuffer = await QRCode.toBuffer(
+        `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
+        { type: "png", width: 400 }
+      );
+
+      // 👇 Upload QR to Supabase storage
       const { data: qrData, error: qrErr } = await supabase.storage
         .from("zineground")
-        .upload(`qr-codes/${linkId}.png`, qrBuffer, {
+        .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
           contentType: "image/png",
           upsert: true,
         });
@@ -140,20 +157,26 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const qr_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
+      // 👇 Build public URL for QR
+      const qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
 
+      // 👇 Save link into DB
       const { error: linkErr } = await supabase.from("issue_links").insert({
         id: linkId,
         issue_id: issueId,
         label: link.label,
         url: link.url,
-        qr_path: qrData.path, // internal storage path
-        qr_url,               // full public URL
+        qr_path, // public QR image URL
         redirect_path,
       });
 
       if (!linkErr) {
-        processedLinks.push({ ...link, id: linkId, redirect_path, qr_url });
+        processedLinks.push({
+          ...link,
+          id: linkId,
+          redirect_path,
+          qr_path,
+        });
       }
     }
 

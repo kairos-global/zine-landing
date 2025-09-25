@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import QRCode from "qrcode-generator";
 import type { InteractiveLink } from "../page";
 
@@ -43,7 +42,16 @@ export default function CodeGenSection({
       ) : (
         <div className="space-y-3">
           {qrLinks.map((link) => {
-            const qrDataURL = generateQRDataURL(link.url);
+            // Prefer redirect_path if available, else raw url
+            const targetUrl = link.redirect_path
+              ? `${process.env.NEXT_PUBLIC_SITE_URL}${link.redirect_path}`
+              : link.url;
+
+            // If backend already gave us a qr_path, show that
+            const qrImage = link.qr_path
+              ? link.qr_path
+              : generateQRDataURL(targetUrl);
+
             return (
               <div
                 key={link.id}
@@ -57,6 +65,11 @@ export default function CodeGenSection({
                   <div className="text-sm text-gray-600 break-words">
                     {link.url}
                   </div>
+                  {link.redirect_path && (
+                    <div className="text-xs text-gray-500 break-words">
+                      Redirect: {link.redirect_path}
+                    </div>
+                  )}
                 </div>
 
                 {/* Right side */}
@@ -68,9 +81,9 @@ export default function CodeGenSection({
                     {link.generateQR ? "Remove QR" : "Generate QR"}
                   </button>
 
-                  {qrDataURL ? (
+                  {qrImage ? (
                     <img
-                      src={qrDataURL}
+                      src={qrImage}
                       alt="QR Code"
                       className="w-20 h-20 border border-gray-300 rounded object-contain"
                     />
