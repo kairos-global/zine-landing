@@ -21,9 +21,9 @@ const posthog =
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { issueId: string; linkId: string } }
+  { params }: { params: Promise<{ issueId: string; linkId: string }> }
 ) {
-  const { issueId, linkId } = params;
+  const { issueId, linkId } = await params;
 
   // Look up the link in DB
   const { data: link, error } = await supabase
