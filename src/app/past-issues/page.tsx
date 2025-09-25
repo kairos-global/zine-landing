@@ -12,9 +12,10 @@ const supabase = createClient(
 export default async function PastIssues() {
   const { data: issues, error } = await supabase
     .from("issues")
-    .select("id, slug, title, published_at, cover_img_url")
+    .select("id, slug, title, published_at, cover_img_url, created_at")
     .eq("status", "published") // 👈 only show published issues
-    .order("published_at", { ascending: false });
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false }); // fallback if published_at is null
 
   if (error) {
     console.error("❌ Error fetching issues:", error);
