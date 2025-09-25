@@ -12,6 +12,7 @@ const supabase = createClient(
 );
 
 type InteractiveLink = { label: string; url: string };
+type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
 // --- ensure a profile row exists for the current Clerk user ---
 async function ensureProfileId(clerkId: string) {
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const processedLinks: any[] = [];
+    const processedLinks: ProcessedLink[] = [];
     for (const link of interactiveLinks) {
       const linkId = randomUUID();
       const redirect_path = `/qr/${issueId}/${linkId}`; // tracked redirect

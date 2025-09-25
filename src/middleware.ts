@@ -1,15 +1,19 @@
 // src/middleware.ts
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+const isProtectedRoute = createRouteMatcher([
+  "/dashboard(.*)",
+  "/zinemat(.*)",
+  "/api/zinemat(.*)",
+]);
 
-// 👇 Define which routes are protected by Clerk
+export default clerkMiddleware((auth, req) => {
+  if (isProtectedRoute(req)) {
+    // ✅ call protect() directly on auth
+    auth.protect();
+  }
+});
+
 export const config = {
-  matcher: [
-    "/api/:path*",
-    "/zinemat",         // base route
-    "/zinemat/:path*",  // nested routes
-    "/dashboard",       // base route
-    "/dashboard/:path*",// nested routes
-  ],
-}
+  matcher: ["/((?!_next|.*\\..*).*)"],
+};

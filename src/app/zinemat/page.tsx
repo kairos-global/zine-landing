@@ -163,6 +163,9 @@ function ZineMatPage() {
   if (isSignedIn === false) {
     return <div className="flex items-center justify-center min-h-screen text-gray-700">Redirecting to sign in…</div>;
   }
+  if (isSignedIn === undefined) {
+    return <div className="flex items-center justify-center min-h-screen text-gray-600">Loading…</div>;
+  }
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen text-gray-600">Loading issue…</div>;
   }

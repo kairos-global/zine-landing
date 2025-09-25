@@ -2,9 +2,35 @@
 "use client";
 
 import Link from "next/link";
-import { SignOutButton } from "@clerk/nextjs";
+import { SignOutButton, useUser } from "@clerk/nextjs";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
+  const { isSignedIn, isLoaded } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.push("/sign-in");
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-gray-600">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-gray-600">
+        Redirecting to sign in...
+      </div>
+    );
+  }
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
