@@ -13,9 +13,11 @@ export default async function PastIssues() {
   const { data: issues, error } = await supabase
     .from("issues")
     .select("id, slug, title, published_at, cover_img_url, created_at")
-    .eq("status", "published") // 👈 only show published issues
-    .order("published_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false }); // fallback if published_at is null
+    .eq("status", "published");
+
+  // 🔍 Debug logs
+  console.log("✅ Past Issues Query Result:", issues);
+  console.log("❌ Past Issues Query Error:", error);
 
   if (error) {
     console.error("❌ Error fetching issues:", error);
