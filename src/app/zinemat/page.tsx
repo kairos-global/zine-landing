@@ -130,8 +130,16 @@ function ZineMatPage() {
 
     formData.append("interactiveLinks", JSON.stringify(links));
 
+    // 🆕 choose endpoint based on mode
+    let endpoint = "/api/zinemat/savedraft";
+    if (mode === "edit") {
+      endpoint = "/api/zinemat/savechanges";
+    } else if (mode === "publish") {
+      endpoint = "/api/zinemat/publish";
+    }
+
     try {
-      const res = await fetch("/api/zinemat/submit", {
+      const res = await fetch(endpoint, {
         method: "POST",
         body: formData,
       });
@@ -147,7 +155,13 @@ function ZineMatPage() {
         return;
       }
 
-      toast.success("Saved successfully!");
+      toast.success(
+        mode === "publish"
+          ? "Published successfully!"
+          : mode === "edit"
+          ? "Changes saved!"
+          : "Draft saved!"
+      );
     } catch (err: unknown) {
       console.error(err);
       toast.error(
