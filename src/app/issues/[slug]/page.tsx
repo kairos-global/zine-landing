@@ -7,11 +7,8 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-export default async function IssuePage({ params }: { params: { slug: string } }) {
-  const { slug } = params;
-
-  // 🔍 Debug log
-  console.log("🔍 IssuePage slug param:", slug);
+export default async function IssuePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
 
   // 1) Fetch issue
   const { data: issue, error } = await supabase
@@ -21,7 +18,7 @@ export default async function IssuePage({ params }: { params: { slug: string } }
     .single();
 
   if (error || !issue) {
-    console.error("❌ Issue fetch error:", error);
+    console.error(error);
     return <div className="p-6">Issue not found.</div>;
   }
 
@@ -99,7 +96,9 @@ export default async function IssuePage({ params }: { params: { slug: string } }
         {/* Locate */}
         <div id="locate" className="rounded-xl border p-4">
           <h2 className="mb-3 text-lg font-semibold">Find on map</h2>
-          <p className="mb-3 text-sm opacity-70">Map integration coming soon.</p>
+          <p className="mb-3 text-sm opacity-70">
+            Map integration coming soon.
+          </p>
           <div className="flex gap-2">
             <Link
               href={{ pathname: "/map", query: { issue: issue.slug } }}
