@@ -14,6 +14,22 @@ const supabase = createClient(
 type InteractiveLink = { label: string; url: string };
 type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
+// 🔒 fetch-only: don’t auto-insert profiles
+async function getProfileId(clerkId: string) {
+  const { data: existing, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("clerk_id", clerkId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!existing?.id) {
+    throw new Error("Profile not found for this user. Ensure profile is created at signup.");
+  }
+
+  return existing.id;
+}
+
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
@@ -30,6 +46,9 @@ export async function POST(req: Request) {
       .eq("id", issueId)
       .maybeSingle();
     if (fetchErr || !issue) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+
+    // 🔑 ensure the user actually has a profile
+    await getProfileId(userId);
 
     const title = (formData.get("title") as string) || issue.title;
     const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
@@ -114,6 +133,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("🔥 SaveChanges error:", err);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

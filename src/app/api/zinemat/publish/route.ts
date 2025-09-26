@@ -14,6 +14,22 @@ const supabase = createClient(
 type InteractiveLink = { label: string; url: string };
 type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
+// 🔒 fetch-only: don’t auto-insert profiles
+async function getProfileId(clerkId: string) {
+  const { data: existing, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("clerk_id", clerkId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!existing?.id) {
+    throw new Error("Profile not found for this user. Ensure profile is created at signup.");
+  }
+
+  return existing.id;
+}
+
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
@@ -22,7 +38,9 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const title = formData.get("title") as string;
     const issueId = formData.get("issueId") as string;
-    if (!title || !issueId) return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!title || !issueId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
 
     const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
 
@@ -51,6 +69,9 @@ export async function POST(req: Request) {
       }
     }
 
+    // ✅ fetch the existing profile ID instead of inserting / using Clerk ID directly
+    const profileId = await getProfileId(userId);
+
     await supabase.from("issues").upsert({
       id: issueId,
       title,
@@ -59,7 +80,7 @@ export async function POST(req: Request) {
       pdf_url,
       status: "published",
       published_at: new Date().toISOString(),
-      profile_id: userId,
+      profile_id: profileId,
     });
 
     const interactiveLinksRaw = formData.get("interactiveLinks");
@@ -110,6 +131,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("🔥 Publish error:", err);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
