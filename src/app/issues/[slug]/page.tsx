@@ -7,8 +7,8 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-export default async function IssuePage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function IssuePage({ params }: { params: { slug: string } }) {
+  const { slug } = params;
 
   // 1) Fetch issue
   const { data: issue, error } = await supabase
