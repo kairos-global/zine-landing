@@ -162,6 +162,11 @@ function ZineMatPage() {
           ? "Changes saved!"
           : "Draft saved!"
       );
+
+      // ✅ redirect after short delay
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1200);
     } catch (err: unknown) {
       console.error(err);
       toast.error(
