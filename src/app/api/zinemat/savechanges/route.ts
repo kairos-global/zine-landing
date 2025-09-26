@@ -14,6 +14,15 @@ const supabase = createClient(
 type InteractiveLink = { label: string; url: string };
 type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
+interface IssueUpdate {
+  id?: string;
+  title: string;
+  slug: string;
+  cover_img_url: string | null;
+  pdf_url: string | null;
+  status?: "draft" | "published";
+}
+
 // 🔒 fetch-only: don’t auto-insert profiles
 async function getProfileId(clerkId: string) {
   const { data: existing, error } = await supabase
@@ -78,7 +87,7 @@ export async function POST(req: Request) {
     }
 
     // ✅ Insert if it doesn't exist, update if it does
-    const updates: any = {
+    const updates: IssueUpdate = {
       title,
       slug,
       cover_img_url,
