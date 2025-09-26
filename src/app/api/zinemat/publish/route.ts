@@ -69,24 +69,47 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ fetch the existing profile ID instead of inserting / using Clerk ID directly
+    // ✅ fetch the existing profile ID
     const profileId = await getProfileId(userId);
 
-    await supabase.from("issues").upsert({
-      id: issueId,
+    // ✅ check if issue already exists
+    const { data: existing } = await supabase
+      .from("issues")
+      .select("id, published_at")
+      .eq("id", issueId)
+      .maybeSingle();
+
+    const updates: any = {
       title,
       slug,
       cover_img_url,
       pdf_url,
       status: "published",
-      published_at: new Date().toISOString(),
       profile_id: profileId,
-    });
+    };
 
+    // Only set published_at if this is the first time publishing
+    if (!existing?.published_at) {
+      updates.published_at = new Date().toISOString();
+    }
+
+    if (existing) {
+      await supabase.from("issues").update(updates).eq("id", issueId);
+    } else {
+      updates.id = issueId;
+      if (!updates.published_at) {
+        updates.published_at = new Date().toISOString();
+      }
+      await supabase.from("issues").insert(updates);
+    }
+
+    // 🔗 Interactive links + QR
     const interactiveLinksRaw = formData.get("interactiveLinks");
-    let processedLinks: ProcessedLink[] = [];
+    const processedLinks: ProcessedLink[] = [];
+
     if (interactiveLinksRaw) {
       const interactiveLinks: InteractiveLink[] = JSON.parse(interactiveLinksRaw.toString() || "[]");
+
       for (const link of interactiveLinks) {
         const linkId = randomUUID();
         const redirect_path = `/qr/${issueId}/${linkId}`;
@@ -94,6 +117,7 @@ export async function POST(req: Request) {
           `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
           { type: "png", width: 400 }
         );
+
         const { data: qrData, error: qrErr } = await supabase.storage
           .from("zineground")
           .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {

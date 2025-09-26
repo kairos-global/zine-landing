@@ -39,22 +39,21 @@ export async function POST(req: Request) {
     const issueId = formData.get("issueId") as string;
     if (!issueId) return NextResponse.json({ error: "Missing issueId" }, { status: 400 });
 
-    // fetch existing issue
-    const { data: issue, error: fetchErr } = await supabase
-      .from("issues")
-      .select("*")
-      .eq("id", issueId)
-      .maybeSingle();
-    if (fetchErr || !issue) return NextResponse.json({ error: "Issue not found" }, { status: 404 });
-
     // 🔑 ensure the user actually has a profile
     await getProfileId(userId);
 
-    const title = (formData.get("title") as string) || issue.title;
+    // fetch existing issue
+    const { data: existing } = await supabase
+      .from("issues")
+      .select("id, status, published_at, cover_img_url, pdf_url, title")
+      .eq("id", issueId)
+      .maybeSingle();
+
+    const title = (formData.get("title") as string) || existing?.title || "Untitled";
     const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
 
-    let cover_img_url = issue.cover_img_url;
-    let pdf_url = issue.pdf_url;
+    let cover_img_url = existing?.cover_img_url ?? null;
+    let pdf_url = existing?.pdf_url ?? null;
 
     const coverFile = formData.get("cover") as File | null;
     const pdfFile = formData.get("pdf") as File | null;
@@ -78,17 +77,29 @@ export async function POST(req: Request) {
       }
     }
 
-    await supabase.from("issues").update({
+    // ✅ Insert if it doesn't exist, update if it does
+    const updates: any = {
       title,
       slug,
       cover_img_url,
       pdf_url,
-    }).eq("id", issueId);
+    };
 
+    if (existing) {
+      await supabase.from("issues").update(updates).eq("id", issueId);
+    } else {
+      updates.id = issueId;
+      updates.status = "draft"; // default if created through savechanges
+      await supabase.from("issues").insert(updates);
+    }
+
+    // 🔗 Interactive links + QR
     const interactiveLinksRaw = formData.get("interactiveLinks");
-    let processedLinks: ProcessedLink[] = [];
+    const processedLinks: ProcessedLink[] = [];
+
     if (interactiveLinksRaw) {
       const interactiveLinks: InteractiveLink[] = JSON.parse(interactiveLinksRaw.toString() || "[]");
+
       for (const link of interactiveLinks) {
         const linkId = randomUUID();
         const redirect_path = `/qr/${issueId}/${linkId}`;
@@ -96,6 +107,7 @@ export async function POST(req: Request) {
           `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
           { type: "png", width: 400 }
         );
+
         const { data: qrData, error: qrErr } = await supabase.storage
           .from("zineground")
           .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
