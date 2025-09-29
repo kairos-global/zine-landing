@@ -59,7 +59,7 @@ export default function InteractivitySection({
           placeholder="https://your-link"
         />
         <div className="flex items-center gap-3">
-          <label className="text-sm flex items-center gap-2">
+          <label className="text-md flex items-center gap-2">
             <input type="checkbox" name="qr" defaultChecked />
             QR
           </label>
@@ -75,7 +75,7 @@ export default function InteractivitySection({
       {/* List */}
       <div className="mt-2 space-y-2">
         {links.length === 0 ? (
-          <div className="text-sm text-gray-600">No links yet</div>
+          <div className="text-xs text-gray-500">No links yet</div>
         ) : (
           links.map((l) => (
             <div
