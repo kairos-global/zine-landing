@@ -1,7 +1,7 @@
 "use client";
 
 import QRCode from "qrcode-generator";
-import type { InteractiveLink } from "../page";
+import type { InteractiveLink } from "./InteractivitySection";
 
 export default function CodeGenSection({
   links,
