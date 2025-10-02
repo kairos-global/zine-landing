@@ -12,6 +12,8 @@
     "@clerk/nextjs": "^6.31.6",
     "@supabase/supabase-js": "^2.56.0",
     "clsx": "^2.1.1",
+    "html-to-image": "^1.11.13",
+    "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
     "nanoid": "^5.1.5",
     "next": "^15.4.1",
@@ -24,6 +26,7 @@
     "react-dom": "^19.1.0",
     "react-hot-toast": "^2.6.0",
     "react-leaflet": "^5.0.0",
+    "react-rnd": "^10.5.2",
     "sharp": "^0.34.4",
     "svix": "^1.76.1"
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import UploadImage from "./UploadImage";
 import { PDFDocument, degrees, rgb } from "pdf-lib";
 
@@ -11,6 +11,8 @@ interface MiniZineEditorProps {
 export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
   const [images, setImages] = useState<(File | null)[]>(Array(8).fill(null));
   const [includeGrid, setIncludeGrid] = useState<boolean>(false);
+
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const handleUpload = (index: number, file: File) => {
     const updated = [...images];
@@ -27,14 +29,16 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
   const handleMultiUpload = (files: FileList) => {
     const updated = [...images];
     Array.from(files).forEach((file, idx) => {
-      if (idx < 8) {
-        updated[idx] = file;
-      }
+      if (idx < 8) updated[idx] = file;
     });
-    setImages(updated);
+    setImages(updated.slice(0, 8));
   };
 
-  // helper: draw dashed line
+  const resetAll = () => {
+    setImages(Array(8).fill(null));
+  };
+
+  // helper: draw dashed line (for optional PDF grid)
   const drawDashedLine = (
     page: any,
     start: { x: number; y: number },
@@ -66,90 +70,101 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
     }
   };
 
-  const handleDone = async () => {
-    // 📝 Letter size: 8.5 × 11 in = 612 × 792 points
+  // Build the PDF by reading actual DOM geometry (exact WYSIWYG placement)
+  const buildPdf = async () => {
+    const root = canvasRef.current;
+    if (!root) throw new Error("Canvas root not found");
+
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([612, 792]);
-    const { width, height } = page.getSize();
+    const page = pdfDoc.addPage([792, 612]); // 11x8.5 inches landscape
+    const { width: pageW, height: pageH } = page.getSize();
 
-    const slotWidth = width / 4; // 153 pts
-    const slotHeight = height / 2; // 396 pts
+    // DOM geometry
+    const rootRect = root.getBoundingClientRect();
+    const scaleX = pageW / rootRect.width;
+    const scaleY = pageH / rootRect.height;
 
+    // Optional PDF grid guides
     if (includeGrid) {
       const guideColor = rgb(0.6, 0.6, 0.6);
       const lineWidth = 0.5;
       const dash = 6;
       const gap = 4;
-
-      // Vertical guides
+      // 4 cols, 2 rows like the canvas
+      const slotW = pageW / 4;
+      const slotH = pageH / 2;
       for (let i = 1; i < 4; i++) {
-        const x = i * slotWidth;
-        drawDashedLine(
-          page,
-          { x, y: 0 },
-          { x, y: height },
-          dash,
-          gap,
-          guideColor,
-          lineWidth
-        );
+        const x = i * slotW;
+        drawDashedLine(page, { x, y: 0 }, { x, y: pageH }, dash, gap, guideColor, lineWidth);
       }
-
-      // Horizontal guide
-      drawDashedLine(
-        page,
-        { x: 0, y: slotHeight },
-        { x: width, y: slotHeight },
-        dash,
-        gap,
-        guideColor,
-        lineWidth
-      );
+      drawDashedLine(page, { x: 0, y: slotH }, { x: pageW, y: slotH }, dash, gap, guideColor, lineWidth);
     }
 
-    // --- Place images ---
-    for (let i = 0; i < images.length; i++) {
-      const file = images[i];
+    // Query each slot container in DOM order (top row, then bottom row)
+    const slotEls = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-slot-idx]")
+    );
+
+    for (let slotPos = 0; slotPos < slotEls.length; slotPos++) {
+      const slotEl = slotEls[slotPos];
+      const idxAttr = slotEl.getAttribute("data-slot-idx");
+      if (!idxAttr) continue;
+
+      const idx = Number(idxAttr);
+      const file = images[idx];
       if (!file) continue;
+
+      // Prefer the displayed <img> rect if present (preserves user scaling/placement inside the slot)
+      const imgEl = slotEl.querySelector("img") as HTMLImageElement | null;
+      const rect = (imgEl ?? slotEl).getBoundingClientRect();
+
+      // Convert DOM pixels -> PDF points (and flip Y-axis)
+      const x = (rect.left - rootRect.left) * scaleX;
+      const y = (rootRect.bottom - rect.bottom) * scaleY;
+      const w = rect.width * scaleX;
+      const h = rect.height * scaleY;
 
       const bytes = new Uint8Array(await file.arrayBuffer());
       const img = await pdfDoc.embedPng(bytes).catch(async () => {
         return await pdfDoc.embedJpg(bytes);
       });
 
-      let x = 0;
-      let y = 0;
-      let rotate180 = false;
+      // Determine if this slot is visually in the top row (DOM order: first 4 = top)
+      const isTopRow = slotPos < 4;
 
-      if ([6, 5, 4, 3].includes(i)) {
-        // Top row (rotated)
-        const col = [6, 5, 4, 3].indexOf(i);
-        x = col * slotWidth;
-        y = slotHeight;
-        rotate180 = true;
-      } else {
-        // Bottom row
-        const col = [7, 0, 1, 2].indexOf(i);
-        x = col * slotWidth;
-        y = 0;
-      }
+      // For a 180° rotation around the same visual box, adjust origin by (w, h)
+      const drawX = isTopRow ? x + w : x;
+      const drawY = isTopRow ? y + h : y;
 
       page.drawImage(img, {
-        x,
-        y,
-        width: slotWidth,
-        height: slotHeight,
-        rotate: rotate180 ? degrees(180) : undefined,
+        x: drawX,
+        y: drawY,
+        width: w,
+        height: h,
+        rotate: isTopRow ? degrees(180) : undefined,
       });
     }
 
-    // --- Save and download ---
-    const pdfBytes = await pdfDoc.save();
-    const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "mini-zine.pdf";
-    link.click();
+    return pdfDoc;
+  };
+
+  const handleExport = async () => {
+    try {
+      const pdfDoc = await buildPdf();
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const dd = String(today.getDate()).padStart(2, "0");
+      link.download = `zinemat-${yyyy}${mm}${dd}.pdf`;
+      link.click();
+    } catch (err: any) {
+      console.error("Export failed:", err?.message || err);
+    }
   };
 
   return (
@@ -157,11 +172,21 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
       <button onClick={onBack} className="mb-4 text-sm underline">
         ← Back
       </button>
-      <h2 className="text-lg font-semibold mb-4">Mini Zine (8 panels)</h2>
 
-      {/* Controls row */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-lg font-semibold">Mini Zine (8 panels)</h2>
+        <button
+          onClick={handleExport}
+          disabled={images.every((img) => !img)}
+          className="px-6 py-2 rounded-lg text-white disabled:opacity-50"
+          style={{ backgroundColor: "#3b82f6" }} // same visual as bg-blue-500
+        >
+          Export PDF
+        </button>
+      </div>
+
+      {/* Controls */}
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        {/* Select all 8 uploader */}
         <label className="inline-flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
           <span>+ Select all 8</span>
           <input
@@ -175,7 +200,6 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
           />
         </label>
 
-        {/* Grid checkbox */}
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -185,45 +209,39 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
           />
           Include grid lines in export
         </label>
+
+        <button
+          onClick={resetAll}
+          className="px-3 py-1 text-sm border rounded-lg bg-gray-50 hover:bg-gray-100"
+        >
+          Reset
+        </button>
       </div>
 
-      {/* Grid */}
-      <div className="space-y-6">
-        {/* Top row: 7, 6, 5, 4 (rotated) */}
-        <div className="grid grid-cols-4 gap-3">
-          {[6, 5, 4, 3].map((idx) => (
-            <div key={idx} className="relative rotate-180">
+      {/* Paper background with proportional grid */}
+      <div
+        ref={canvasRef}
+        className="relative mx-auto border border-gray-400 rounded-lg bg-white aspect-[11/8.5] max-w-2xl"
+      >
+        <div className="absolute inset-0 grid grid-cols-4 grid-rows-2">
+          {[6, 5, 4, 3, 7, 0, 1, 2].map((idx, i) => (
+            <div
+              key={idx}
+              data-slot-idx={idx}  // <-- non-visual data hook for exact placement export
+              className={`relative w-full h-full ${includeGrid ? "border border-gray-300" : ""}`}
+            >
+              {/* Pass rotated flag ONLY for the top row (UI) */}
               <UploadImage
                 index={idx}
                 file={images[idx]}
                 onUpload={handleUpload}
                 onRemove={handleRemove}
+                rotated={i < 4}
               />
             </div>
           ))}
         </div>
-
-        {/* Bottom row: 8, 1, 2, 3 */}
-        <div className="grid grid-cols-4 gap-3">
-          {[7, 0, 1, 2].map((idx) => (
-            <UploadImage
-              key={idx}
-              index={idx}
-              file={images[idx]}
-              onUpload={handleUpload}
-              onRemove={handleRemove}
-            />
-          ))}
-        </div>
       </div>
-
-      <button
-        onClick={handleDone}
-        disabled={images.every((img) => !img)}
-        className="mt-6 px-6 py-2 rounded-lg bg-blue-500 text-white disabled:opacity-50"
-      >
-        Export PDF
-      </button>
     </div>
   );
 }
