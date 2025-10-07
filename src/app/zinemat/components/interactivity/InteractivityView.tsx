@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 
 import BasicsSection, { Basics } from "./BasicsSection";
 import UploadsSection from "./UploadsSection";
-import InteractivitySection from "./InteractivitySection";
+import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
 import CodeGenSection from "./CodeGenSection";
 import FinalChecklist from "./FinalChecklist";
 
@@ -19,7 +19,10 @@ const supabase = createClient(
 
 type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY" | "CODEGEN";
 
-const SECTION_META: Record<SectionKey, { label: string; accent: string; required?: boolean }> = {
+const SECTION_META: Record<
+  SectionKey,
+  { label: string; accent: string; required?: boolean }
+> = {
   BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
   UPLOAD: { label: "B) Uploads", accent: "#F2DC6F" },
   INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
@@ -35,7 +38,7 @@ export default function InteractivityView() {
   const [basics, setBasics] = useState<Basics>({ title: "", date: null });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [links, setLinks] = useState<any[]>([]);
+  const [links, setLinks] = useState<InteractiveLink[]>([]);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
 
@@ -61,7 +64,7 @@ export default function InteractivityView() {
 
         const { data: linkData } = await supabase
           .from("issue_links")
-          .select("id, label, url, generate_qr, qr_image_url")
+          .select("id, label, url, generate_qr, redirect_path, qr_path")
           .eq("issue_id", editId);
 
         if (linkData) {
@@ -71,7 +74,8 @@ export default function InteractivityView() {
               label: l.label,
               url: l.url,
               generateQR: l.generate_qr,
-              qr_image_url: l.qr_image_url,
+              redirect_path: l.redirect_path,
+              qr_path: l.qr_path,
             }))
           );
         }
@@ -141,9 +145,17 @@ export default function InteractivityView() {
   };
 
   if (isSignedIn === false)
-    return <div className="flex items-center justify-center min-h-screen">Redirecting to sign in…</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Redirecting to sign in…
+      </div>
+    );
   if (isSignedIn === undefined || loading)
-    return <div className="flex items-center justify-center min-h-screen">Loading…</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Loading…
+      </div>
+    );
 
   // ✅ UI matches your old design
   return (
@@ -181,7 +193,10 @@ export default function InteractivityView() {
       {/* Section cards */}
       <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
         <div className="p-4 sm:p-5 space-y-4">
-          <Card title={SECTION_META.BASICS.label} accent={SECTION_META.BASICS.accent}>
+          <Card
+            title={SECTION_META.BASICS.label}
+            accent={SECTION_META.BASICS.accent}
+          >
             <BasicsSection value={basics} onChange={setBasics} />
           </Card>
 
@@ -225,7 +240,9 @@ export default function InteractivityView() {
                 className="rounded-xl border p-3 bg-white flex items-center justify-between"
                 style={{ borderColor: `${SECTION_META[k].accent}55` }}
               >
-                <div className="text-sm font-medium">{SECTION_META[k].label}</div>
+                <div className="text-sm font-medium">
+                  {SECTION_META[k].label}
+                </div>
                 <button
                   onClick={() => addSection(k)}
                   className="rounded-md border px-3 py-1 text-xs hover:bg-white"
@@ -258,7 +275,10 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border bg-white shadow-sm" style={{ borderColor: `${accent}55` }}>
+    <div
+      className="rounded-2xl border bg-white shadow-sm"
+      style={{ borderColor: `${accent}55` }}
+    >
       <div
         className="flex items-center justify-between rounded-t-2xl border-b px-3 py-2"
         style={{ background: `${accent}22`, borderColor: `${accent}55` }}

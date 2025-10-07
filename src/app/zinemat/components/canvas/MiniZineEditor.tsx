@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import UploadImage from "./UploadImage";
-import { PDFDocument, degrees, rgb } from "pdf-lib";
+import { PDFDocument, degrees, rgb, PDFPage, RGB } from "pdf-lib";
 
 interface MiniZineEditorProps {
   onBack: () => void;
@@ -40,12 +40,12 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
 
   // helper: draw dashed line (for optional PDF grid)
   const drawDashedLine = (
-    page: any,
+    page: PDFPage,
     start: { x: number; y: number },
     end: { x: number; y: number },
     dashLength: number,
     gapLength: number,
-    color: any,
+    color: RGB,
     thickness: number
   ) => {
     const dx = end.x - start.x;
@@ -162,8 +162,12 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
       const dd = String(today.getDate()).padStart(2, "0");
       link.download = `zinemat-${yyyy}${mm}${dd}.pdf`;
       link.click();
-    } catch (err: any) {
-      console.error("Export failed:", err?.message || err);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error("Export failed:", err.message);
+      } else {
+        console.error("Export failed:", err);
+      }
     }
   };
 
@@ -179,13 +183,12 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
           onClick={handleExport}
           disabled={images.every((img) => !img)}
           className="px-6 py-2 rounded-lg text-white disabled:opacity-50"
-          style={{ backgroundColor: "#3b82f6" }} // same visual as bg-blue-500
+          style={{ backgroundColor: "#3b82f6" }}
         >
           Export PDF
         </button>
       </div>
 
-      {/* Controls */}
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <label className="inline-flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
           <span>+ Select all 8</span>
@@ -218,7 +221,6 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
         </button>
       </div>
 
-      {/* Paper background with proportional grid */}
       <div
         ref={canvasRef}
         className="relative mx-auto border border-gray-400 rounded-lg bg-white aspect-[11/8.5] max-w-2xl"
@@ -227,10 +229,9 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
           {[6, 5, 4, 3, 7, 0, 1, 2].map((idx, i) => (
             <div
               key={idx}
-              data-slot-idx={idx}  // <-- non-visual data hook for exact placement export
+              data-slot-idx={idx}
               className={`relative w-full h-full ${includeGrid ? "border border-gray-300" : ""}`}
             >
-              {/* Pass rotated flag ONLY for the top row (UI) */}
               <UploadImage
                 index={idx}
                 file={images[idx]}
