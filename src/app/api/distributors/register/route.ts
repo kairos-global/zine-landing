@@ -25,7 +25,16 @@ export async function POST(req: Request) {
       contact_title,
       contact_email,
       contact_phone,
-    } = body;
+    } = body as {
+      business_name: string;
+      business_address: string;
+      business_phone: string;
+      business_email: string;
+      contact_name: string;
+      contact_title: string;
+      contact_email: string;
+      contact_phone: string;
+    };
 
     const { data, error } = await supabase
       .from("distributors")
@@ -51,8 +60,15 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, distributor: data });
-  } catch (err: any) {
-    console.error("Distributor register route error:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      console.error("Distributor register route error:", err.message);
+    } else {
+      console.error("Distributor register route unknown error:", err);
+    }
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
