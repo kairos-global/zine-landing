@@ -9,7 +9,6 @@ import toast from "react-hot-toast";
 import BasicsSection, { Basics } from "./BasicsSection";
 import UploadsSection from "./UploadsSection";
 import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
-import CodeGenSection from "./CodeGenSection";
 import FinalChecklist from "./FinalChecklist";
 
 const supabase = createClient(
@@ -17,7 +16,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY" | "CODEGEN";
+type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY";
 
 const SECTION_META: Record<
   SectionKey,
@@ -26,7 +25,6 @@ const SECTION_META: Record<
   BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
   UPLOAD: { label: "B) Uploads", accent: "#F2DC6F" },
   INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
-  CODEGEN: { label: "D) Code Gen (QR)", accent: "#D16FF2" },
 };
 
 export default function InteractivityView() {
@@ -42,7 +40,7 @@ export default function InteractivityView() {
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
 
-  // ✅ Load data if editing
+  // ✅ Load existing draft
   useEffect(() => {
     if (!editId) return;
     (async () => {
@@ -85,7 +83,7 @@ export default function InteractivityView() {
     })();
   }, [editId]);
 
-  // ✅ Checklist logic
+  // ✅ Checklist validation
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
     const coverOk = !!coverFile;
@@ -157,10 +155,11 @@ export default function InteractivityView() {
       </div>
     );
 
-  // ✅ UI matches your old design
+  const slug = basics.title?.toLowerCase().replace(/\s+/g, "-") ?? "";
+
   return (
     <div className="space-y-6">
-      {/* Top action bar */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-semibold">Interactivity</h1>
         <div className="flex items-center gap-2">
@@ -190,7 +189,7 @@ export default function InteractivityView() {
         </div>
       </div>
 
-      {/* Section cards */}
+      {/* Section Cards */}
       <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
         <div className="p-4 sm:p-5 space-y-4">
           <Card
@@ -218,21 +217,24 @@ export default function InteractivityView() {
                   />
                 )}
                 {k === "INTERACTIVITY" && (
-                  <InteractivitySection links={links} onChange={setLinks} />
-                )}
-                {k === "CODEGEN" && (
-                  <CodeGenSection links={links} onChangeLinks={setLinks} />
+                  <InteractivitySection
+                    links={links}
+                    onChange={setLinks}
+                    issueId={editId}
+                    slug={slug}
+                    siteUrl={process.env.NEXT_PUBLIC_SITE_URL}
+                  />
                 )}
               </Card>
             ))}
         </div>
       </div>
 
-      {/* Toolkit */}
+      {/* Add New Sections */}
       <div className="rounded-2xl border bg-white/90">
         <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
         <div className="p-4 grid gap-3 sm:grid-cols-2">
-          {(["UPLOAD", "INTERACTIVITY", "CODEGEN"] as SectionKey[])
+          {(["UPLOAD", "INTERACTIVITY"] as SectionKey[])
             .filter((k) => !active.includes(k))
             .map((k) => (
               <div
@@ -254,7 +256,7 @@ export default function InteractivityView() {
         </div>
       </div>
 
-      {/* Final checklist */}
+      {/* Final Checklist */}
       <div className="rounded-2xl border bg-white p-4">
         <FinalChecklist checklist={checklist} />
       </div>
@@ -262,7 +264,7 @@ export default function InteractivityView() {
   );
 }
 
-// ✅ Reusable card component
+// ✅ Reusable Card
 function Card({
   title,
   accent,

@@ -4,10 +4,12 @@ import Link from "next/link";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAdmin } from "@/lib/useAdmin";
 
 export default function DashboardPage() {
   const { isSignedIn, isLoaded } = useUser();
   const router = useRouter();
+  const { isAdmin: userIsAdmin } = useAdmin();
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -92,6 +94,21 @@ export default function DashboardPage() {
             Register as a distributor, manage stock, and place orders
           </div>
         </Link>
+
+        {/* Admin Dashboard - only visible to admins */}
+        {userIsAdmin && (
+          <Link
+            href="/dashboard/admin"
+            className="rounded-xl p-4 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 transition group"
+          >
+            <div className="text-lg font-semibold text-white">
+              Admin Dashboard
+            </div>
+            <div className="text-sm text-purple-100">
+              Manage distributors, users, and platform settings
+            </div>
+          </Link>
+        )}
       </div>
     </div>
   );

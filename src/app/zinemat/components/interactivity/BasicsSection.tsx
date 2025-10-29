@@ -1,7 +1,7 @@
 "use client";
 
 export type Basics = { title: string; date?: string | null };
-
+``
 export default function BasicsSection({
   value,
   onChange,
