@@ -41,6 +41,7 @@ export default function AdminDistributorsPage() {
 
   useEffect(() => {
     fetchDistributors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, userIsAdmin]);
 
   async function fetchDistributors() {

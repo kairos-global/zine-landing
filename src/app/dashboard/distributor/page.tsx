@@ -113,7 +113,7 @@ function PendingView({ distributor }: { distributor: Distributor }) {
           <h1 className="text-xl font-semibold mb-2">⏳ Registration Pending</h1>
           <p className="text-gray-700">
             Thanks for registering, {distributor.contact_name}. Our team is reviewing your
-            application. You'll get access once approved.
+            application. You&apos;ll get access once approved.
           </p>
         </div>
       </div>
@@ -154,6 +154,7 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   useEffect(() => {
     fetchIssues();
     fetchStock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchIssues() {
@@ -417,7 +418,7 @@ function StockView({ stock }: { stock: StockItem[] }) {
     return (
       <div className="text-center py-12">
         <div className="text-4xl mb-4">📦</div>
-        <p className="text-gray-600">You don't have any stock yet</p>
+        <p className="text-gray-600">You don&apos;t have any stock yet</p>
         <p className="text-sm text-gray-500 mt-2">Place an order to get started!</p>
       </div>
     );
@@ -496,7 +497,7 @@ function DistributorRegistrationForm() {
             </h1>
             <p className="text-gray-700">
               Thanks for registering! Our team will review your application and
-              approve you as a distributor. Once approved, you'll unlock access
+              approve you as a distributor. Once approved, you&apos;ll unlock access
               to the Distributor Portal.
             </p>
           </div>

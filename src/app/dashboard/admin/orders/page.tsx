@@ -48,6 +48,7 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userIsAdmin]);
 
   async function fetchOrders() {
