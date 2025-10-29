@@ -137,6 +137,23 @@ export default function AdminDashboardPage() {
               </div>
             </Link>
 
+            <Link
+              href="/dashboard/admin/orders"
+              className="block p-6 rounded-xl bg-white border border-gray-200 hover:border-purple-500 hover:shadow-lg transition group"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold mb-1 group-hover:text-purple-600">
+                    Manage Orders
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    View and fulfill distributor orders
+                  </p>
+                </div>
+                <span className="text-2xl">📦</span>
+              </div>
+            </Link>
+
             <div className="block p-6 rounded-xl bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed">
               <div className="flex items-start justify-between">
                 <div>

@@ -42,7 +42,7 @@ A complete admin dashboard system for Zineground that allows you to:
 
 ### Step 2: Test the Admin Portal
 
-1. Sign in to your Zineground account with `kairosglobalapp@gmail.com`
+1. Sign in to your Zineground account with `hello@zineground.com`
 2. Go to `/dashboard`
 3. You should see a purple **Admin Dashboard** tile (5th tile)
 4. Click it to access the admin portal
