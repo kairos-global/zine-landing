@@ -7,11 +7,15 @@ export default function UploadsSection({
   pdfFile,
   onCoverChange,
   onPdfChange,
+  existingCoverUrl,
+  existingPdfUrl,
 }: {
   coverFile: File | null;
   pdfFile: File | null;
   onCoverChange: (f: File | null) => void;
   onPdfChange: (f: File | null) => void;
+  existingCoverUrl?: string | null;
+  existingPdfUrl?: string | null;
 }) {
   const coverRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
@@ -30,6 +34,16 @@ export default function UploadsSection({
         >
           {coverFile ? (
             <p className="text-sm text-yellow-900">📸 Selected: {coverFile.name}</p>
+          ) : existingCoverUrl ? (
+            <div className="space-y-2">
+              <p className="text-xs text-yellow-700">✓ Existing cover uploaded</p>
+              <img 
+                src={existingCoverUrl} 
+                alt="Cover preview" 
+                className="max-h-32 mx-auto rounded"
+              />
+              <p className="text-xs text-yellow-600">Click to replace</p>
+            </div>
           ) : (
             <p className="text-sm text-yellow-500">Click to upload an image file</p>
           )}
@@ -66,6 +80,20 @@ export default function UploadsSection({
         >
           {pdfFile ? (
             <p className="text-sm text-gray-800">📄 Selected: {pdfFile.name}</p>
+          ) : existingPdfUrl ? (
+            <div className="space-y-1">
+              <p className="text-xs text-gray-700">✓ Existing PDF uploaded</p>
+              <a 
+                href={existingPdfUrl} 
+                target="_blank" 
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-blue-600 underline hover:text-blue-800"
+              >
+                View current PDF
+              </a>
+              <p className="text-xs text-gray-500">Click to replace</p>
+            </div>
           ) : (
             <p className="text-sm text-gray-500">Click to upload your zine PDF</p>
           )}

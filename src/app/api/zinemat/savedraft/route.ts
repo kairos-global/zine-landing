@@ -11,7 +11,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-type InteractiveLink = { label: string; url: string };
+type InteractiveLink = { 
+  id?: string;
+  label: string; 
+  url: string;
+  generateQR?: boolean;
+};
 type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
 // 🔒 fetch-only: no auto-insert
@@ -97,27 +102,32 @@ export async function POST(req: Request) {
 
     const processedLinks: ProcessedLink[] = [];
     for (const link of interactiveLinks) {
-      const linkId = randomUUID();
+      // Use existing ID or generate new one
+      const linkId = link.id || randomUUID();
       const redirect_path = `/qr/${issueId}/${linkId}`;
-      const qrPngBuffer = await QRCode.toBuffer(
-        `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
-        { type: "png", width: 400 }
-      );
-      const { data: qrData, error: qrErr } = await supabase.storage
-        .from("zineground")
-        .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
-          contentType: "image/png",
-          upsert: true,
-        });
+      
+      // Only generate QR if requested
+      let qr_path: string | null = null;
+      if (link.generateQR !== false) {
+        const qrPngBuffer = await QRCode.toBuffer(
+          `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
+          { type: "png", width: 400 }
+        );
+        const { data: qrData, error: qrErr } = await supabase.storage
+          .from("zineground")
+          .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
+            contentType: "image/png",
+            upsert: true,
+          });
 
-      if (qrErr || !qrData) {
-        console.error("QR Upload Error:", qrErr);
-        continue;
+        if (qrErr || !qrData) {
+          console.error("QR Upload Error:", qrErr);
+        } else {
+          qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
+        }
       }
 
-      const qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
-
-      await supabase.from("issue_links").insert({
+      await supabase.from("issue_links").upsert({
         id: linkId,
         issue_id: issueId,
         label: link.label,
@@ -126,7 +136,7 @@ export async function POST(req: Request) {
         redirect_path,
       });
 
-      processedLinks.push({ ...link, id: linkId, qr_path, redirect_path });
+      processedLinks.push({ ...link, id: linkId, qr_path: qr_path || "", redirect_path });
     }
 
     return NextResponse.json({

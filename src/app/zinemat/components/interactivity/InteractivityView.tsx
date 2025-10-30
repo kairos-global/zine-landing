@@ -33,9 +33,11 @@ export default function InteractivityView() {
   const editId = searchParams?.get("id") ?? null;
   const { isSignedIn, user } = useUser();
 
-  const [basics, setBasics] = useState<Basics>({ title: "", date: null });
+  const [basics, setBasics] = useState<Basics>({ title: "" });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null);
+  const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
@@ -46,7 +48,7 @@ export default function InteractivityView() {
     (async () => {
       const { data, error } = await supabase
         .from("issues")
-        .select("title, published_at")
+        .select("title, cover_img_url, pdf_url")
         .eq("id", editId)
         .single();
 
@@ -58,11 +60,13 @@ export default function InteractivityView() {
       }
 
       if (data) {
-        setBasics({ title: data.title ?? "", date: data.published_at });
+        setBasics({ title: data.title ?? "" });
+        setExistingCoverUrl(data.cover_img_url);
+        setExistingPdfUrl(data.pdf_url);
 
         const { data: linkData } = await supabase
           .from("issue_links")
-          .select("id, label, url, generate_qr, redirect_path, qr_path")
+          .select("id, label, url, redirect_path, qr_path")
           .eq("issue_id", editId);
 
         if (linkData) {
@@ -71,7 +75,7 @@ export default function InteractivityView() {
               id: l.id,
               label: l.label,
               url: l.url,
-              generateQR: l.generate_qr,
+              generateQR: !!l.qr_path, // If qr_path exists, QR was generated
               redirect_path: l.redirect_path,
               qr_path: l.qr_path,
             }))
@@ -86,9 +90,9 @@ export default function InteractivityView() {
   // ✅ Checklist validation
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
-    const coverOk = !!coverFile;
+    const coverOk = !!coverFile || !!existingCoverUrl;
     return { basics: basicsOk, cover: coverOk };
-  }, [basics.title, coverFile]);
+  }, [basics.title, coverFile, existingCoverUrl]);
 
   const canSaveDraft = checklist.basics;
   const canPublish = checklist.basics && checklist.cover;
@@ -104,7 +108,6 @@ export default function InteractivityView() {
 
     const formData = new FormData();
     formData.append("title", basics.title);
-    formData.append("date", basics.date || "");
     formData.append("userId", user.id);
     if (editId) formData.append("issueId", editId);
     else formData.append("issueId", crypto.randomUUID());
@@ -214,6 +217,8 @@ export default function InteractivityView() {
                     pdfFile={pdfFile}
                     onCoverChange={setCoverFile}
                     onPdfChange={setPdfFile}
+                    existingCoverUrl={existingCoverUrl}
+                    existingPdfUrl={existingPdfUrl}
                   />
                 )}
                 {k === "INTERACTIVITY" && (

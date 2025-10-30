@@ -39,8 +39,9 @@ export default function InteractivitySection({
     if (!url) return;
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
 
+    const linkId = crypto.randomUUID();
     const next: InteractiveLink = {
-      id: crypto.randomUUID(),
+      id: linkId,
       label,
       url,
       generateQR,
@@ -68,9 +69,14 @@ export default function InteractivitySection({
     }
   };
 
-  const baseUrl = siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "";
-  const issueUrl = issueId ? `${baseUrl}/issue/${slug || issueId}` : "";
-  const linktreeUrl = issueId ? `${issueUrl}/linktree` : "";
+  const downloadQR = (dataURL: string, label: string) => {
+    const link = document.createElement("a");
+    link.href = dataURL;
+    link.download = `qr-${label.toLowerCase().replace(/\s+/g, "-") || "code"}.png`;
+    link.click();
+  };
+
+  const baseUrl = siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "https://zineground.com";
   const qrLinks = links.filter((l) => l.generateQR);
 
   return (
@@ -94,7 +100,7 @@ export default function InteractivitySection({
           <input
             name="label"
             className="rounded-xl border px-3 py-2"
-            placeholder="Label"
+            placeholder="Label (e.g. Link 1)"
             disabled={!issueId}
           />
           <input
@@ -111,34 +117,50 @@ export default function InteractivitySection({
             <button
               className="ml-auto rounded-xl bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
               type="submit"
-              disabled={!issueId}
+              disabled={!issueId || links.length >= maxLinks}
             >
               Add
             </button>
           </div>
         </form>
 
+        {links.length >= maxLinks && (
+          <div className="text-xs text-orange-600 mb-2">
+            Maximum {maxLinks} links reached
+          </div>
+        )}
+
         {/* 🔗 Link List */}
         <div className="space-y-2 mb-6">
           {links.length === 0 ? (
-            <div className="text-xs text-gray-500">No links yet</div>
+            <div className="text-xs text-gray-500">No links yet (max {maxLinks})</div>
           ) : (
-            links.map((l) => (
+            links.map((l, index) => (
               <div
                 key={l.id}
-                className="rounded-lg border p-2 text-sm flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
+                className="rounded-lg border p-3 text-sm flex flex-col gap-2"
               >
-                <div className="font-medium break-words">
-                  {l.label || "Unnamed Link"}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="font-medium mb-1">
+                      {l.label || `Link ${index + 1}`}
+                    </div>
+                    <a
+                      className="text-xs text-blue-600 underline break-all"
+                      href={l.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {l.url}
+                    </a>
+                  </div>
+                  <button
+                    onClick={() => remove(l.id)}
+                    className="text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded border border-red-200 hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
                 </div>
-                <a
-                  className="text-xs underline break-all"
-                  href={l.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {l.url}
-                </a>
                 <div className="flex items-center gap-2">
                   <label className="text-xs flex items-center gap-1">
                     <input
@@ -146,123 +168,57 @@ export default function InteractivitySection({
                       checked={l.generateQR}
                       onChange={() => toggleQR(l.id)}
                     />
-                    QR
+                    Generate QR Code
                   </label>
-                  <button
-                    onClick={() => remove(l.id)}
-                    className="rounded-md border px-2 py-1 text-xs hover:bg-white"
-                  >
-                    Remove
-                  </button>
                 </div>
               </div>
             ))
           )}
         </div>
 
-        {/* 🧾 QR Section */}
-        <div className="space-y-3">
-          {issueId && (
-            <div className="grid sm:grid-cols-2 gap-4 mb-2">
-              <QRPreview
-                title="Issue QR"
-                url={issueUrl}
-                color="border-blue-300 bg-blue-50"
-              />
-              <QRPreview
-                title="Linktree QR"
-                url={linktreeUrl}
-                color="border-green-300 bg-green-50"
-              />
-            </div>
-          )}
-
-          {qrLinks.length === 0 ? (
-            <div className="text-sm text-gray-600">
-              No QR links yet. Toggle them on in Interactivity.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {qrLinks.map((link) => {
-                const redirectUrl = link.redirect_path
-                  ? `${baseUrl}${link.redirect_path}`
-                  : link.url;
-                const qrImage = link.qr_path
-                  ? link.qr_path
-                  : generateQRDataURL(redirectUrl);
+        {/* 📊 QR Code Preview & Download */}
+        {issueId && qrLinks.length > 0 && (
+          <div className="rounded-lg border bg-gray-50 p-4">
+            <h4 className="text-sm font-semibold mb-3">QR Codes</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {qrLinks.map((l, index) => {
+                // Generate QR URL: /qr/[issueId]/[linkId]
+                const qrRedirectUrl = `${baseUrl}/qr/${issueId}/${l.id}`;
+                const dataURL = generateQRDataURL(qrRedirectUrl);
 
                 return (
-                  <div
-                    key={link.id}
-                    className="rounded-lg border px-4 py-3 text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                  >
-                    <div className="flex-1">
-                      <div className="font-semibold text-base text-black">
-                        {link.label || "Unnamed Link"}
-                      </div>
-                      <div className="text-sm text-gray-600 break-words">
-                        {link.url}
-                      </div>
+                  <div key={l.id} className="bg-white rounded-lg border p-3 flex flex-col items-center">
+                    <div className="text-xs font-medium mb-2 text-center">
+                      {l.label || `Link ${index + 1}`}
                     </div>
-
-                    <div className="flex flex-col items-center gap-2">
-                      {qrImage ? (
+                    {dataURL && (
+                      <>
                         <img
-                          src={qrImage}
-                          alt="QR Code"
-                          className="w-20 h-20 border border-gray-300 rounded object-contain"
+                          src={dataURL}
+                          alt={`QR for ${l.label}`}
+                          className="w-full aspect-square mb-2"
                         />
-                      ) : (
-                        <div className="w-20 h-20 border border-gray-300 rounded flex items-center justify-center text-xs text-gray-400">
-                          QR
-                        </div>
-                      )}
-                    </div>
+                        <button
+                          onClick={() => downloadQR(dataURL, l.label || `link-${index + 1}`)}
+                          className="w-full text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition"
+                        >
+                          Download QR
+                        </button>
+                      </>
+                    )}
                   </div>
                 );
               })}
             </div>
-          )}
-
-          <div className="text-xs text-gray-500 pt-1">
-            QR Codes Selected: <b>{qrLinks.length}</b> / {links.length}
+            <div className="mt-3 text-xs text-gray-600 bg-blue-50 p-2 rounded">
+              <strong>How it works:</strong> QR codes redirect to{" "}
+              <code className="bg-blue-100 px-1 py-0.5 rounded">
+                zineground.com/qr/[issueId]/[linkId]
+              </code>
+              , which tracks the scan and redirects to your actual URL. You can edit links anytime and the QR code will point to the updated URL!
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ✅ Reusable QR Preview
-function QRPreview({
-  title,
-  url,
-  color,
-}: {
-  title: string;
-  url: string;
-  color?: string;
-}) {
-  const qr = QRCode(0, "L");
-  qr.addData(url);
-  qr.make();
-  const qrData = qr.createDataURL(4);
-
-  return (
-    <div
-      className={`rounded-lg border px-4 py-3 shadow-sm ${color || ""}`}
-      style={{ borderColor: "#ccc" }}
-    >
-      <div className="text-sm font-semibold mb-1">{title}</div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex-1">
-          <div className="text-xs text-gray-600 break-all">{url}</div>
-        </div>
-        <img
-          src={qrData}
-          alt="QR Code"
-          className="w-16 h-16 border border-gray-300 rounded object-contain"
-        />
+        )}
       </div>
     </div>
   );
