@@ -79,6 +79,9 @@ export async function POST(req: Request) {
     }
 
     const profileId = await getProfileId(userId);
+    
+    console.log("📝 [SaveDraft] Clerk userId:", userId);
+    console.log("📝 [SaveDraft] Profile ID found:", profileId);
 
     const issueData = {
       id: issueId,
@@ -91,7 +94,16 @@ export async function POST(req: Request) {
       pdf_url,
     };
 
-    await supabase.from("issues").upsert(issueData);
+    console.log("📝 [SaveDraft] Upserting issue with data:", issueData);
+    
+    const { error: upsertError } = await supabase.from("issues").upsert(issueData);
+    
+    if (upsertError) {
+      console.error("❌ [SaveDraft] Upsert error:", upsertError);
+      return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    }
+    
+    console.log("✅ [SaveDraft] Issue upserted successfully");
 
     // interactive links + QR
     const interactiveLinksRaw = formData.get("interactiveLinks");
