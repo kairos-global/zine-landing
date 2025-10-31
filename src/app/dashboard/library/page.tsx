@@ -1,16 +1,13 @@
-// src/app/dashboard/library/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { useUser } from "@clerk/nextjs";
-import toast from "react-hot-toast";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true } }
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 type Issue = {
@@ -22,16 +19,14 @@ type Issue = {
   pdf_url: string | null;
   published_at: string | null;
   created_at: string | null;
-  profile_id: string | null;
 };
 
 export default function LibraryPage() {
   const { user, isLoaded } = useUser();
+  const router = useRouter();
   const [drafts, setDrafts] = useState<Issue[]>([]);
   const [published, setPublished] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profileError, setProfileError] = useState(false);
-  const router = useRouter();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -40,90 +35,53 @@ export default function LibraryPage() {
       return;
     }
 
-    (async () => {
+    async function fetchIssues() {
+      if (!user) return;
+      
       try {
-        console.log("👉 [Library] Clerk user.id:", user.id);
-
-        // Look up profile row for this Clerk user
-        const { data: profile, error: profileError } = await supabase
+        // Get profile
+        const { data: profile } = await supabase
           .from("profiles")
           .select("id")
           .eq("clerk_id", user.id)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error("❌ [Library] Database error:", profileError);
-          toast.error("Error connecting to database");
-          setLoading(false);
-          return;
-        }
+          .single();
 
         if (!profile) {
-          console.error("❌ [Library] No profile found for clerk_id:", user.id);
-          setProfileError(true);
+          console.error("No profile found for user:", user.id);
           setLoading(false);
           return;
         }
 
-        console.log("✅ [Library] Found profile with ID:", profile.id);
+        // Get issues
+        const { data: issues } = await supabase
+        .from("issues")
+        .select("*")
+        .eq("profile_id", profile.id)
+        .order("created_at", { ascending: false });
 
-        // Fetch issues tied to that profile_id
-        const { data: issues, error } = await supabase
-          .from("issues")
-          .select("*")
-          .eq("profile_id", profile.id)
-          .order("created_at", { ascending: false });
+        const draftIssues = (issues || []).filter((i) => i.status === "draft");
+        const publishedIssues = (issues || []).filter((i) => i.status === "published");
 
-        if (error) {
-          console.error("❌ [Library] Error fetching issues:", error);
-          toast.error("Error loading your zines");
-          setLoading(false);
-          return;
-        }
-
-        console.log("✅ [Library] Issues returned:", issues?.length || 0);
-
-        const drafts = (issues || []).filter((i) => i.status?.toLowerCase() === "draft");
-        const published = (issues || []).filter((i) => i.status?.toLowerCase() === "published");
-
-        console.log("✅ [Library] Drafts:", drafts.length, "Published:", published.length);
-
-        setDrafts(drafts);
-        setPublished(published);
+        setDrafts(draftIssues);
+        setPublished(publishedIssues);
         setLoading(false);
       } catch (err) {
-        console.error("❌ [Library] Unexpected error:", err);
-        toast.error("An unexpected error occurred");
+        console.error("Error fetching issues:", err);
         setLoading(false);
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, user]);
+    }
+
+    fetchIssues();
+  }, [isLoaded, user, router]);
 
   if (!isLoaded || loading) {
     return (
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading your library...</p>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (profileError) {
-    return (
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-red-800 mb-2">Profile Not Found</h2>
-          <p className="text-red-600 mb-4">
-            Your account doesn&apos;t have a profile in our system.
-          </p>
-          <p className="text-sm text-red-500 mb-4">
-            Please contact support or try logging out and back in.
-          </p>
         </div>
       </div>
     );
@@ -137,7 +95,7 @@ export default function LibraryPage() {
         <p className="text-gray-600">Manage your zine drafts and published issues</p>
       </div>
 
-      {/* Drafts Section */}
+          {/* Drafts Section */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold flex items-center gap-2">
@@ -146,13 +104,13 @@ export default function LibraryPage() {
               <span className="text-sm font-normal text-gray-500">({drafts.length})</span>
             )}
           </h2>
-          <button
+                      <button
             onClick={() => router.push("/zinemat")}
             className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm font-medium"
-          >
+                      >
             + Create New Zine
-          </button>
-        </div>
+                      </button>
+                    </div>
 
         {drafts.length === 0 ? (
           <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-xl p-12 text-center">
@@ -165,18 +123,18 @@ export default function LibraryPage() {
             >
               Go to ZineMat
             </button>
-          </div>
+                  </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {drafts.map((issue) => (
               <IssueCard key={issue.id} issue={issue} router={router} isDraft />
-            ))}
-          </div>
-        )}
-      </section>
+                ))}
+              </div>
+            )}
+          </section>
 
-      {/* Published Section */}
-      <section>
+          {/* Published Section */}
+          <section>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold flex items-center gap-2">
             <span className="text-green-600">✅</span> Published
@@ -186,27 +144,24 @@ export default function LibraryPage() {
           </h2>
         </div>
 
-        {published.length === 0 ? (
+            {published.length === 0 ? (
           <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-xl p-12 text-center">
             <div className="text-6xl mb-4">🚀</div>
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No published issues yet</h3>
-            <p className="text-gray-600">
-              Publish your first zine to share it with the world!
-            </p>
+            <p className="text-gray-600">Publish your first zine to share it with the world!</p>
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {published.map((issue) => (
               <IssueCard key={issue.id} issue={issue} router={router} />
             ))}
-          </div>
+                      </div>
         )}
       </section>
-    </div>
+                    </div>
   );
 }
 
-// Issue Card Component
 function IssueCard({
   issue,
   router,
@@ -238,9 +193,7 @@ function IssueCard({
         <div className="absolute top-3 left-3">
           <span
             className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
-              isDraft
-                ? "bg-yellow-500 text-white"
-                : "bg-green-500 text-white"
+              isDraft ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
             }`}
           >
             {isDraft ? "Draft" : "Published"}
@@ -264,22 +217,22 @@ function IssueCard({
 
         {/* Actions */}
         <div className="flex gap-2">
-          <button
+                        <button
             onClick={() => router.push(`/zinemat?id=${issue.id}`)}
             className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition"
-          >
+                        >
             ✏️ Edit
-          </button>
+                        </button>
           {!isDraft && issue.slug && (
-            <button
+                      <button
               onClick={() => router.push(`/issues/${issue.slug}`)}
               className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition"
-            >
+                      >
               👁️ View
-            </button>
+                      </button>
           )}
-        </div>
-      </div>
+                    </div>
+                  </div>
     </div>
   );
 }

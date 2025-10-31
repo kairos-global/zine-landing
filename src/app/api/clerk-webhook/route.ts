@@ -71,30 +71,35 @@ export async function POST(req: Request) {
   const { type: eventType, data } = evt;
   const clerkId = data?.id;
 
+  console.log("🔔 [Webhook] Received event:", eventType, "for user:", clerkId);
+
   try {
     if (eventType === "user.created" || eventType === "user.updated") {
       const email = getPrimaryEmail(data);
+      
+      console.log("👤 [Webhook] Processing user:", { clerkId, email, eventType });
 
       // Upsert profile (idempotent on clerk_id)
-      const { error: upsertErr } = await supabase
+      const { error: upsertErr, data: profileData } = await supabase
         .from("profiles")
         .upsert(
           {
             clerk_id: clerkId,
             email: email ?? null,
-            // role defaults to 'creator' in DB; you can also set it explicitly:
-            // role: "creator",
+            role: "creator", // Explicitly set role
           },
           { onConflict: "clerk_id" } // ensure you have a unique index on profiles.clerk_id
-        );
+        )
+        .select();
 
       if (upsertErr) {
-        console.error("❌ Supabase upsert profile error:", upsertErr);
+        console.error("❌ [Webhook] Supabase upsert error:", upsertErr);
         // Return 500 so Clerk retries (recommended for transient failures)
         return new NextResponse("Upsert failed", { status: 500 });
       }
 
-      return NextResponse.json({ ok: true });
+      console.log("✅ [Webhook] Profile created/updated:", profileData);
+      return NextResponse.json({ ok: true, profile: profileData });
     }
 
     if (eventType === "user.deleted") {
