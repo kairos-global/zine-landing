@@ -39,34 +39,50 @@ export default function LibraryPage() {
       if (!user) return;
       
       try {
-        // Get profile
-        const { data: profile } = await supabase
+        console.log("📚 [Library] Fetching for user:", user.id);
+        
+        // Get profile (case-insensitive search)
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("id")
-          .eq("clerk_id", user.id)
+          .select("id, clerk_id")
+          .ilike("clerk_id", user.id)
           .single();
 
-        if (!profile) {
-          console.error("No profile found for user:", user.id);
+        if (profileError || !profile) {
+          console.error("❌ [Library] Profile error:", profileError);
+          console.error("❌ [Library] No profile for clerk_id:", user.id);
           setLoading(false);
           return;
         }
 
+        console.log("✅ [Library] Found profile:", profile.id);
+
         // Get issues
-        const { data: issues } = await supabase
-        .from("issues")
-        .select("*")
-        .eq("profile_id", profile.id)
-        .order("created_at", { ascending: false });
+        const { data: issues, error: issuesError } = await supabase
+          .from("issues")
+          .select("*")
+          .eq("profile_id", profile.id)
+          .order("created_at", { ascending: false });
+
+        if (issuesError) {
+          console.error("❌ [Library] Issues error:", issuesError);
+          setLoading(false);
+          return;
+        }
+
+        console.log("✅ [Library] Found issues:", issues?.length || 0);
+        console.log("📋 [Library] Issues:", issues);
 
         const draftIssues = (issues || []).filter((i) => i.status === "draft");
         const publishedIssues = (issues || []).filter((i) => i.status === "published");
+
+        console.log("✅ [Library] Drafts:", draftIssues.length, "Published:", publishedIssues.length);
 
         setDrafts(draftIssues);
         setPublished(publishedIssues);
         setLoading(false);
       } catch (err) {
-        console.error("Error fetching issues:", err);
+        console.error("❌ [Library] Unexpected error:", err);
         setLoading(false);
       }
     }
