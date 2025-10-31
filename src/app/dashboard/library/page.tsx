@@ -213,7 +213,7 @@ function IssueCard({
   isDraft = false,
 }: {
   issue: Issue;
-  router: any;
+  router: ReturnType<typeof useRouter>;
   isDraft?: boolean;
 }) {
   return (
