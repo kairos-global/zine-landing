@@ -57,17 +57,22 @@ export async function POST(req: Request) {
     await getProfileId(userId);
 
     // fetch existing issue
-    const { data: existing } = await supabase
+    const { data: existing, error: fetchError } = await supabase
       .from("issues")
       .select("id, status, published_at, cover_img_url, pdf_url, title")
       .eq("id", issueId)
       .maybeSingle();
+
+    console.log("💾 [SaveChanges] Existing issue:", existing);
+    console.log("💾 [SaveChanges] Fetch error:", fetchError);
 
     const title = (formData.get("title") as string) || existing?.title || "Untitled";
     const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
 
     let cover_img_url = existing?.cover_img_url ?? null;
     let pdf_url = existing?.pdf_url ?? null;
+
+    console.log("💾 [SaveChanges] Preserving existing URLs - Cover:", cover_img_url, "PDF:", pdf_url);
 
     const coverFile = formData.get("cover") as File | null;
     const pdfFile = formData.get("pdf") as File | null;
@@ -99,12 +104,16 @@ export async function POST(req: Request) {
       pdf_url,
     };
 
+    console.log("💾 [SaveChanges] Updates to save:", updates);
+
     if (existing) {
-      await supabase.from("issues").update(updates).eq("id", issueId);
+      const { error: updateError } = await supabase.from("issues").update(updates).eq("id", issueId);
+      console.log("💾 [SaveChanges] Update error:", updateError);
     } else {
       updates.id = issueId;
       updates.status = "draft"; // default if created through savechanges
-      await supabase.from("issues").insert(updates);
+      const { error: insertError } = await supabase.from("issues").insert(updates);
+      console.log("💾 [SaveChanges] Insert error:", insertError);
     }
 
     // 🔗 Interactive links + QR

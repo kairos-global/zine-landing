@@ -50,9 +50,18 @@ export async function POST(req: Request) {
 
     const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
 
-    // uploads
-    let cover_img_url: string | null = null;
-    let pdf_url: string | null = null;
+    // Fetch existing issue to preserve URLs if not uploading new files
+    const { data: existing } = await supabase
+      .from("issues")
+      .select("cover_img_url, pdf_url")
+      .eq("id", issueId)
+      .maybeSingle();
+
+    // uploads - preserve existing URLs if not uploading new files
+    let cover_img_url: string | null = existing?.cover_img_url ?? null;
+    let pdf_url: string | null = existing?.pdf_url ?? null;
+
+    console.log("📝 [SaveDraft] Existing URLs - Cover:", cover_img_url, "PDF:", pdf_url);
 
     const coverFile = formData.get("cover") as File | null;
     const pdfFile = formData.get("pdf") as File | null;
