@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 
+// Use service role key for server-side rendering to bypass RLS
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { persistSession: false } }
 );
 
@@ -23,10 +24,15 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
   }
 
   // 2) Fetch interactive links
-  const { data: links } = await supabase
+  const { data: links, error: linksError } = await supabase
     .from("issue_links")
-    .select("label,url,qr_path,redirect_path")
+    .select("id, label, url, qr_path, redirect_path")
     .eq("issue_id", issue.id);
+
+  console.log("📋 [Issue Page] Issue ID:", issue.id);
+  console.log("📋 [Issue Page] Links found:", links?.length || 0);
+  console.log("📋 [Issue Page] Links error:", linksError);
+  console.log("📋 [Issue Page] Links data:", links);
 
   return (
     <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 md:grid-cols-[220px_1fr]">
@@ -75,18 +81,52 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
         {/* Links */}
         <div id="links" className="rounded-xl border p-4">
           <h2 className="mb-3 text-lg font-semibold">Links</h2>
-          {links?.length ? (
-            <div className="flex flex-wrap gap-2">
-              {links.map((l) => (
-                <a
-                  key={l.url}
-                  href={l.url}
-                  target="_blank"
-                  className="rounded-full border px-3 py-1 text-sm"
-                >
-                  {l.label}
-                </a>
-              ))}
+          {links && links.length > 0 ? (
+            <div className="space-y-4">
+              {/* Link buttons */}
+              <div className="flex flex-wrap gap-3">
+                {links.map((l, index) => (
+                  <a
+                    key={l.id || l.url}
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    <span>🔗</span>
+                    <span>{l.label || `Link ${index + 1}`}</span>
+                    <span className="text-xs opacity-70">↗</span>
+                  </a>
+                ))}
+              </div>
+
+              {/* QR Codes */}
+              {links.some((l) => l.qr_path) && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold mb-3">QR Codes</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {links
+                      .filter((l) => l.qr_path)
+                      .map((l, index) => (
+                        <div
+                          key={l.id || l.url}
+                          className="bg-white rounded-lg border p-3 flex flex-col items-center"
+                        >
+                          <div className="text-xs font-medium mb-2 text-center">
+                            {l.label || `Link ${index + 1}`}
+                          </div>
+                          {l.qr_path && (
+                            <img
+                              src={l.qr_path}
+                              alt={`QR code for ${l.label || "link"}`}
+                              className="w-full aspect-square"
+                            />
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm opacity-70">No links yet.</p>

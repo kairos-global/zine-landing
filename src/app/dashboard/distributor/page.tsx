@@ -495,11 +495,17 @@ function DistributorRegistrationForm() {
             <h1 className="text-xl sm:text-2xl font-semibold mb-4">
               ✅ Registration Submitted
             </h1>
-            <p className="text-gray-700">
+            <p className="text-gray-700 mb-6">
               Thanks for registering! Our team will review your application and
               approve you as a distributor. Once approved, you&apos;ll unlock access
               to the Distributor Portal.
             </p>
+            <Link
+              href="/dashboard"
+              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-xl transition"
+            >
+              Back to Dashboard
+            </Link>
           </div>
         </div>
       </div>
