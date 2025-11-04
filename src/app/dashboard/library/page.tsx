@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
 import { useUser } from "@clerk/nextjs";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 type Issue = {
   id: string;
@@ -39,42 +33,23 @@ export default function LibraryPage() {
       if (!user) return;
       
       try {
-        console.log("📚 [Library] Fetching for user:", user.id);
+        console.log("📚 [Library] Fetching library data...");
         
-        // Get profile (case-insensitive search)
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("id, clerk_id")
-          .ilike("clerk_id", user.id)
-          .single();
-
-        if (profileError || !profile) {
-          console.error("❌ [Library] Profile error:", profileError);
-          console.error("❌ [Library] No profile for clerk_id:", user.id);
+        const response = await fetch("/api/library");
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("❌ [Library] API error:", errorData);
           setLoading(false);
           return;
         }
 
-        console.log("✅ [Library] Found profile:", profile.id);
+        const data = await response.json();
+        console.log("✅ [Library] Received data:", data);
 
-        // Get issues
-        const { data: issues, error: issuesError } = await supabase
-          .from("issues")
-          .select("*")
-          .eq("profile_id", profile.id)
-          .order("created_at", { ascending: false });
-
-        if (issuesError) {
-          console.error("❌ [Library] Issues error:", issuesError);
-          setLoading(false);
-          return;
-        }
-
-        console.log("✅ [Library] Found issues:", issues?.length || 0);
-        console.log("📋 [Library] Issues:", issues);
-
-        const draftIssues = (issues || []).filter((i) => i.status === "draft");
-        const publishedIssues = (issues || []).filter((i) => i.status === "published");
+        const issues = data.issues || [];
+        const draftIssues = issues.filter((i: Issue) => i.status === "draft");
+        const publishedIssues = issues.filter((i: Issue) => i.status === "published");
 
         console.log("✅ [Library] Drafts:", draftIssues.length, "Published:", publishedIssues.length);
 
@@ -153,7 +128,7 @@ export default function LibraryPage() {
           <section>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold flex items-center gap-2">
-            <span className="text-green-600">✅</span> Published
+            <span className="text-green-600"></span> Published
             {published.length > 0 && (
               <span className="text-sm font-normal text-gray-500">({published.length})</span>
             )}
@@ -237,14 +212,14 @@ function IssueCard({
             onClick={() => router.push(`/zinemat?id=${issue.id}`)}
             className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition"
                         >
-            ✏️ Edit
+             Edit
                         </button>
           {!isDraft && issue.slug && (
                       <button
               onClick={() => router.push(`/issues/${issue.slug}`)}
               className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition"
                       >
-              👁️ View
+               View
                       </button>
           )}
                     </div>

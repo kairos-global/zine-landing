@@ -144,15 +144,15 @@ export default function InteractivitySection({
                   <div className="flex-1">
                     <div className="font-medium mb-1">
                       {l.label || `Link ${index + 1}`}
-                    </div>
-                    <a
+                </div>
+                <a
                       className="text-xs text-blue-600 underline break-all"
-                      href={l.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {l.url}
-                    </a>
+                  href={l.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {l.url}
+                </a>
                   </div>
                   <button
                     onClick={() => remove(l.id)}

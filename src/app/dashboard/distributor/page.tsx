@@ -102,24 +102,24 @@ export default function DistributorPortalPage() {
 
 // ========== PENDING VIEW ==========
 function PendingView({ distributor }: { distributor: Distributor }) {
-  return (
-    <div className="relative min-h-screen text-black">
-      <div
-        className="fixed inset-0 -z-10 pointer-events-none"
-        style={{ backgroundColor: "#E2E2E2" }}
-      />
-      <div className="max-w-[720px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="rounded-2xl border shadow-inner bg-white/80 backdrop-blur p-6">
-          <h1 className="text-xl font-semibold mb-2">⏳ Registration Pending</h1>
-          <p className="text-gray-700">
-            Thanks for registering, {distributor.contact_name}. Our team is reviewing your
+    return (
+      <div className="relative min-h-screen text-black">
+        <div
+          className="fixed inset-0 -z-10 pointer-events-none"
+          style={{ backgroundColor: "#E2E2E2" }}
+        />
+        <div className="max-w-[720px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <div className="rounded-2xl border shadow-inner bg-white/80 backdrop-blur p-6">
+            <h1 className="text-xl font-semibold mb-2">⏳ Registration Pending</h1>
+            <p className="text-gray-700">
+              Thanks for registering, {distributor.contact_name}. Our team is reviewing your
             application. You&apos;ll get access once approved.
-          </p>
+            </p>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 // ========== REJECTED VIEW ==========
 function RejectedView() {
