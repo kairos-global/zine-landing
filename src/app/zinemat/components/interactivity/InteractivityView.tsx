@@ -3,18 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
 import toast from "react-hot-toast";
 
 import BasicsSection, { Basics } from "./BasicsSection";
 import UploadsSection from "./UploadsSection";
 import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
 import FinalChecklist from "./FinalChecklist";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY";
 
@@ -42,48 +36,51 @@ export default function InteractivityView() {
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
 
-  // ✅ Load existing draft
+  // ✅ Load existing issue via API
   useEffect(() => {
     if (!editId) return;
     (async () => {
-      const { data, error } = await supabase
-        .from("issues")
-        .select("title, cover_img_url, pdf_url")
-        .eq("id", editId)
-        .single();
+      try {
+        console.log("📖 [ZineMat] Loading issue:", editId);
+        
+        const response = await fetch(`/api/zinemat/load?id=${editId}`);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("❌ [ZineMat] Load error:", errorData);
+          toast.error(errorData.error || "Could not load issue.");
+          setLoading(false);
+          return;
+        }
 
-      if (error) {
-        toast.error("Could not load issue.");
-        console.error(error);
-        setLoading(false);
-        return;
-      }
+        const data = await response.json();
+        console.log("✅ [ZineMat] Loaded issue:", data);
 
-      if (data) {
-        setBasics({ title: data.title ?? "" });
-        setExistingCoverUrl(data.cover_img_url);
-        setExistingPdfUrl(data.pdf_url);
+        if (data.issue) {
+          setBasics({ title: data.issue.title ?? "" });
+          setExistingCoverUrl(data.issue.cover_img_url);
+          setExistingPdfUrl(data.issue.pdf_url);
+        }
 
-        const { data: linkData } = await supabase
-          .from("issue_links")
-          .select("id, label, url, redirect_path, qr_path")
-          .eq("issue_id", editId);
-
-        if (linkData) {
+        if (data.links) {
           setLinks(
-            linkData.map((l) => ({
+            data.links.map((l: { id: string; label: string; url: string; redirect_path: string; qr_path: string | null }) => ({
               id: l.id,
               label: l.label,
               url: l.url,
-              generateQR: !!l.qr_path, // If qr_path exists, QR was generated
+              generateQR: !!l.qr_path,
               redirect_path: l.redirect_path,
               qr_path: l.qr_path,
             }))
           );
         }
-      }
 
-      setLoading(false);
+        setLoading(false);
+      } catch (err) {
+        console.error("❌ [ZineMat] Unexpected error:", err);
+        toast.error("Could not load issue.");
+        setLoading(false);
+      }
     })();
   }, [editId]);
 
