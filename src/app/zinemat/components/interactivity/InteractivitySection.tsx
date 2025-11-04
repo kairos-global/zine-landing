@@ -52,7 +52,36 @@ export default function InteractivitySection({
     e.currentTarget.reset();
   }
 
-  const remove = (id: string) => onChange(links.filter((l) => l.id !== id));
+  const remove = async (id: string) => {
+    // If this is an existing link (has been saved to DB), delete it from the database
+    const linkToRemove = links.find((l) => l.id === id);
+    if (linkToRemove && issueId) {
+      try {
+        console.log("🗑️ [InteractivitySection] Deleting link:", id);
+        const response = await fetch(
+          `/api/zinemat/deletelink?linkId=${id}&issueId=${issueId}`,
+          { method: "DELETE" }
+        );
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("❌ [InteractivitySection] Delete error:", errorData);
+          alert("Failed to delete link. Please try again.");
+          return;
+        }
+        
+        console.log("✅ [InteractivitySection] Link deleted from DB");
+      } catch (err) {
+        console.error("❌ [InteractivitySection] Unexpected error:", err);
+        alert("Failed to delete link. Please try again.");
+        return;
+      }
+    }
+    
+    // Remove from local state
+    onChange(links.filter((l) => l.id !== id));
+  };
+  
   const toggleQR = (id: string) =>
     onChange(
       links.map((l) => (l.id === id ? { ...l, generateQR: !l.generateQR } : l))
