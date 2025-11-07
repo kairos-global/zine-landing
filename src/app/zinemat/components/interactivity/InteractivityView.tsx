@@ -8,9 +8,10 @@ import toast from "react-hot-toast";
 import BasicsSection, { Basics } from "./BasicsSection";
 import UploadsSection from "./UploadsSection";
 import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
+import DistributionSection, { Distribution } from "./DistributionSection";
 import FinalChecklist from "./FinalChecklist";
 
-type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY";
+type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY" | "DISTRIBUTION";
 
 const SECTION_META: Record<
   SectionKey,
@@ -19,6 +20,7 @@ const SECTION_META: Record<
   BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
   UPLOAD: { label: "B) Uploads", accent: "#F2DC6F" },
   INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
+  DISTRIBUTION: { label: "D) Distribution", accent: "#F4A261" },
 };
 
 export default function InteractivityView() {
@@ -33,6 +35,10 @@ export default function InteractivityView() {
   const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null);
   const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
+  const [distribution, setDistribution] = useState<Distribution>({
+    self_distribute: false,
+    print_for_me: false,
+  });
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
 
@@ -60,6 +66,12 @@ export default function InteractivityView() {
           setBasics({ title: data.issue.title ?? "" });
           setExistingCoverUrl(data.issue.cover_img_url);
           setExistingPdfUrl(data.issue.pdf_url);
+          
+          // Load distribution settings
+          setDistribution({
+            self_distribute: data.issue.self_distribute ?? false,
+            print_for_me: data.issue.print_for_me ?? false,
+          });
         }
 
         if (data.links) {
@@ -113,6 +125,7 @@ export default function InteractivityView() {
     if (pdfFile) formData.append("pdf", pdfFile);
 
     formData.append("interactiveLinks", JSON.stringify(links));
+    formData.append("distribution", JSON.stringify(distribution));
 
     let endpoint = "/api/zinemat/savedraft";
     if (mode === "edit") endpoint = "/api/zinemat/savechanges";
@@ -227,6 +240,12 @@ export default function InteractivityView() {
                     siteUrl={process.env.NEXT_PUBLIC_SITE_URL}
                   />
                 )}
+                {k === "DISTRIBUTION" && (
+                  <DistributionSection
+                    value={distribution}
+                    onChange={setDistribution}
+                  />
+                )}
               </Card>
             ))}
         </div>
@@ -236,7 +255,7 @@ export default function InteractivityView() {
       <div className="rounded-2xl border bg-white/90">
         <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
         <div className="p-4 grid gap-3 sm:grid-cols-2">
-          {(["UPLOAD", "INTERACTIVITY"] as SectionKey[])
+          {(["UPLOAD", "INTERACTIVITY", "DISTRIBUTION"] as SectionKey[])
             .filter((k) => !active.includes(k))
             .map((k) => (
               <div

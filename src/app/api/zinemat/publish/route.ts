@@ -28,6 +28,8 @@ interface IssueUpdate {
   status: "draft" | "published";
   profile_id: string;
   published_at?: string;
+  self_distribute?: boolean;
+  print_for_me?: boolean;
 }
 
 // 🔒 fetch-only: don’t auto-insert profiles
@@ -105,6 +107,13 @@ export async function POST(req: Request) {
       .eq("id", issueId)
       .maybeSingle();
 
+    // Parse distribution settings
+    const distributionRaw = formData.get("distribution");
+    let distribution = { self_distribute: false, print_for_me: false };
+    if (distributionRaw) {
+      distribution = JSON.parse(distributionRaw.toString());
+    }
+
     const updates: IssueUpdate = {
       title,
       slug,
@@ -112,6 +121,8 @@ export async function POST(req: Request) {
       pdf_url,
       status: "published",
       profile_id: profileId,
+      self_distribute: distribution.self_distribute,
+      print_for_me: distribution.print_for_me,
     };
 
     // Only set published_at if this is the first time publishing

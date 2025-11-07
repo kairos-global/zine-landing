@@ -92,6 +92,13 @@ export async function POST(req: Request) {
     console.log("📝 [SaveDraft] Clerk userId:", userId);
     console.log("📝 [SaveDraft] Profile ID found:", profileId);
 
+    // Parse distribution settings
+    const distributionRaw = formData.get("distribution");
+    let distribution = { self_distribute: false, print_for_me: false };
+    if (distributionRaw) {
+      distribution = JSON.parse(distributionRaw.toString());
+    }
+
     const issueData = {
       id: issueId,
       title,
@@ -101,6 +108,8 @@ export async function POST(req: Request) {
       status: "draft",
       cover_img_url,
       pdf_url,
+      self_distribute: distribution.self_distribute,
+      print_for_me: distribution.print_for_me,
     };
 
     console.log("📝 [SaveDraft] Upserting issue with data:", issueData);

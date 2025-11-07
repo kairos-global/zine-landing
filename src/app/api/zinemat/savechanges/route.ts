@@ -26,6 +26,8 @@ interface IssueUpdate {
   cover_img_url: string | null;
   pdf_url: string | null;
   status?: "draft" | "published";
+  self_distribute?: boolean;
+  print_for_me?: boolean;
 }
 
 // 🔒 fetch-only: don’t auto-insert profiles
@@ -96,12 +98,21 @@ export async function POST(req: Request) {
       }
     }
 
+    // Parse distribution settings
+    const distributionRaw = formData.get("distribution");
+    let distribution = { self_distribute: false, print_for_me: false };
+    if (distributionRaw) {
+      distribution = JSON.parse(distributionRaw.toString());
+    }
+
     // ✅ Insert if it doesn't exist, update if it does
     const updates: IssueUpdate = {
       title,
       slug,
       cover_img_url,
       pdf_url,
+      self_distribute: distribution.self_distribute,
+      print_for_me: distribution.print_for_me,
     };
 
     console.log("💾 [SaveChanges] Updates to save:", updates);
