@@ -95,6 +95,18 @@ export default function DashboardPage() {
           </div>
         </Link>
 
+        <Link
+          href="/dashboard/ad-bounties"
+          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+        >
+          <div className="text-lg font-semibold text-black group-hover:text-white">
+            Ad Bounties
+          </div>
+          <div className="text-sm text-gray-600 group-hover:text-gray-200">
+            Browse live creative briefs or launch a new advertising bounty
+          </div>
+        </Link>
+
         {/* Admin Dashboard - only visible to admins */}
         {userIsAdmin && (
           <Link
