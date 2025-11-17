@@ -88,8 +88,8 @@ export async function POST(req: Request) {
         profileId: profile.id,
         type: "creator_print_for_me",
       },
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/library?payment=success&issueId=${issue.id}`,
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/zinemat?issueId=${issue.id}&payment=cancelled`
+      `${process.env.NEXT_PUBLIC_APP_URL || "https://zineground.com"}/zinemat?id=${issueId}&payment=success`,
+      `${process.env.NEXT_PUBLIC_APP_URL || "https://zineground.com"}/zinemat?id=${issueId}&payment=cancelled`
     );
 
     // Create payment record
@@ -116,4 +116,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

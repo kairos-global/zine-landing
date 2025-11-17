@@ -50,6 +50,17 @@ export default function InteractivityView() {
       try {
         console.log("📖 [ZineMat] Loading issue:", editId);
         
+        // Check URL params for payment success
+        const paymentStatus = searchParams?.get("payment");
+        if (paymentStatus === "success") {
+          toast.success("Payment successful! You can now publish with print-for-me distribution.");
+          // Clean URL
+          router.replace(`/zinemat?id=${editId}`, { scroll: false });
+        } else if (paymentStatus === "cancelled") {
+          toast.error("Payment was cancelled.");
+          router.replace(`/zinemat?id=${editId}`, { scroll: false });
+        }
+        
         const response = await fetch(`/api/zinemat/load?id=${editId}`);
         
         if (!response.ok) {
@@ -74,12 +85,15 @@ export default function InteractivityView() {
             print_for_me: data.issue.print_for_me ?? false,
           });
 
-          // Check payment status if print_for_me is enabled
-          if (data.issue.print_for_me && editId) {
-            const paymentRes = await fetch(`/api/payments/check?issueId=${editId}`);
-            if (paymentRes.ok) {
-              const paymentData = await paymentRes.json();
-              setHasPayment(paymentData.hasPayment || false);
+          // Always check payment status when issue exists (not just if print_for_me is true)
+          // This handles cases where user paid but hasn't published yet
+          const paymentRes = await fetch(`/api/payments/check?issueId=${editId}`);
+          if (paymentRes.ok) {
+            const paymentData = await paymentRes.json();
+            setHasPayment(paymentData.hasPayment || false);
+            // If payment exists but print_for_me isn't set, enable it
+            if (paymentData.hasPayment && !data.issue.print_for_me) {
+              setDistribution(prev => ({ ...prev, print_for_me: true }));
             }
           }
         }
