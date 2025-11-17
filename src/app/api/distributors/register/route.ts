@@ -40,15 +40,15 @@ export async function POST(req: Request) {
 
     // Set status to pending by default
     const insertData = {
-      user_id: userId,
-      business_name,
-      business_address,
-      business_phone,
-      business_email,
-      contact_name,
-      contact_title,
-      contact_email,
-      contact_phone,
+          user_id: userId,
+          business_name,
+          business_address,
+          business_phone,
+          business_email,
+          contact_name,
+          contact_title,
+          contact_email,
+          contact_phone,
       status: "pending",
     };
 

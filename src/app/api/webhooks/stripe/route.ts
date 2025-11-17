@@ -15,6 +15,9 @@ if (!webhookSecret) {
   throw new Error("STRIPE_WEBHOOK_SECRET environment variable is not set");
 }
 
+// TypeScript assertion - we've already checked it exists above
+const webhookSecretString: string = webhookSecret;
+
 export async function POST(req: Request) {
   try {
     const body = await req.text();
@@ -29,7 +32,7 @@ export async function POST(req: Request) {
 
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecretString);
     } catch (err) {
       console.error("[StripeWebhook] Signature verification failed:", err);
       return NextResponse.json(

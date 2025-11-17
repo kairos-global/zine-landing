@@ -139,19 +139,19 @@ export async function POST(req: Request) {
       // Only generate QR if requested
       let qr_path: string | null = null;
       if (link.generateQR !== false) {
-        const qrPngBuffer = await QRCode.toBuffer(
-          `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
-          { type: "png", width: 400 }
-        );
-        const { data: qrData, error: qrErr } = await supabase.storage
-          .from("zineground")
-          .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
-            contentType: "image/png",
-            upsert: true,
-          });
+      const qrPngBuffer = await QRCode.toBuffer(
+        `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
+        { type: "png", width: 400 }
+      );
+      const { data: qrData, error: qrErr } = await supabase.storage
+        .from("zineground")
+        .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
+          contentType: "image/png",
+          upsert: true,
+        });
 
-        if (qrErr || !qrData) {
-          console.error("QR Upload Error:", qrErr);
+      if (qrErr || !qrData) {
+        console.error("QR Upload Error:", qrErr);
         } else {
           qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
         }
