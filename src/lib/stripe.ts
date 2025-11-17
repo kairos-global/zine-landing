@@ -29,6 +29,7 @@ export async function createCheckoutSession(
       {
         price_data: {
           currency,
+          unit_amount: Math.round(amount * 100), // Convert to cents
           product_data: {
             name:
               metadata.type === "distributor_shipping"
@@ -40,7 +41,6 @@ export async function createCheckoutSession(
                 : "Zineground will print and distribute your zine to distributors worldwide",
           },
         },
-        amount: Math.round(amount * 100), // Convert to cents
         quantity: 1,
       },
     ],
