@@ -80,3 +80,4 @@ export interface ArtistStripeAccount {
   createdAt: string;
   updatedAt: string;
 }
+

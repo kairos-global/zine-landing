@@ -39,6 +39,7 @@ export default function InteractivityView() {
     self_distribute: false,
     print_for_me: false,
   });
+  const [hasPayment, setHasPayment] = useState<boolean>(false);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
 
@@ -72,6 +73,15 @@ export default function InteractivityView() {
             self_distribute: data.issue.self_distribute ?? false,
             print_for_me: data.issue.print_for_me ?? false,
           });
+
+          // Check payment status if print_for_me is enabled
+          if (data.issue.print_for_me && editId) {
+            const paymentRes = await fetch(`/api/payments/check?issueId=${editId}`);
+            if (paymentRes.ok) {
+              const paymentData = await paymentRes.json();
+              setHasPayment(paymentData.hasPayment || false);
+            }
+          }
         }
 
         if (data.links) {
@@ -244,6 +254,8 @@ export default function InteractivityView() {
                   <DistributionSection
                     value={distribution}
                     onChange={setDistribution}
+                    issueId={editId || undefined}
+                    hasPayment={hasPayment}
                   />
                 )}
               </Card>

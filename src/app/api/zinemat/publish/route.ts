@@ -114,6 +114,28 @@ export async function POST(req: Request) {
       distribution = JSON.parse(distributionRaw.toString());
     }
 
+    // If print_for_me is enabled, verify payment has been made
+    if (distribution.print_for_me) {
+      const { data: payment } = await supabase
+        .from("creator_print_payments")
+        .select("payment_status")
+        .eq("issue_id", issueId)
+        .eq("payment_status", "paid")
+        .maybeSingle();
+
+      if (!payment) {
+        return NextResponse.json(
+          {
+            error: "Payment required",
+            requiresPayment: true,
+            issueId,
+            message: "Please complete payment for print-for-me distribution before publishing.",
+          },
+          { status: 402 }
+        );
+      }
+    }
+
     const updates: IssueUpdate = {
       title,
       slug,

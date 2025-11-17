@@ -154,6 +154,22 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   useEffect(() => {
     fetchIssues();
     fetchStock();
+    
+    // Handle payment success/cancel from URL params
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get("payment");
+    const orderId = params.get("orderId");
+    
+    if (paymentStatus === "success" && orderId) {
+      toast.success("Payment successful! Your order is being processed.");
+      setCart([]);
+      fetchStock();
+      // Clean URL
+      window.history.replaceState({}, "", "/dashboard/distributor");
+    } else if (paymentStatus === "cancelled") {
+      toast.error("Payment was cancelled. Your order was not placed.");
+      window.history.replaceState({}, "", "/dashboard/distributor");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -215,19 +231,42 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
 
     setPlacing(true);
     try {
-      const res = await fetch("/api/distributors/orders", {
+      // Step 1: Create the order
+      const orderRes = await fetch("/api/distributors/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: cart }),
       });
 
-      if (res.ok) {
-        toast.success("Order placed successfully!");
-        setCart([]);
-        fetchStock(); // Refresh stock after order
+      if (!orderRes.ok) {
+        const err = await orderRes.json();
+        toast.error(err.error || "Failed to create order");
+        return;
+      }
+
+      const orderData = await orderRes.json();
+      const orderId = orderData.order.id;
+
+      // Step 2: Create checkout session for shipping payment
+      const checkoutRes = await fetch("/api/payments/distributor-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+
+      if (!checkoutRes.ok) {
+        const err = await checkoutRes.json();
+        toast.error(err.error || "Failed to create payment session");
+        return;
+      }
+
+      const checkoutData = await checkoutRes.json();
+      
+      // Redirect to Stripe Checkout
+      if (checkoutData.checkoutUrl) {
+        window.location.href = checkoutData.checkoutUrl;
       } else {
-        const err = await res.json();
-        toast.error(err.error || "Failed to place order");
+        toast.error("Failed to get checkout URL");
       }
     } catch (err) {
       console.error("Error placing order:", err);
@@ -402,8 +441,11 @@ function BrowseZines({
                 disabled={placing}
                 className="w-full px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium"
               >
-                {placing ? "Placing Order..." : "Place Order (Free)"}
+                {placing ? "Processing..." : "Proceed to Payment"}
               </button>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                You&apos;ll pay for shipping during checkout
+              </p>
             </>
           )}
         </div>
