@@ -16,7 +16,7 @@
     "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
     "nanoid": "^5.1.5",
-    "next": "^15.4.1",
+    "next": "15.4.10",
     "pdf-lib": "^1.17.1",
     "posthog-js": "^1.268.4",
     "posthog-node": "^5.9.1",
