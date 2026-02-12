@@ -46,10 +46,10 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
         </nav>
         <hr className="my-2" />
         <Link
-          href="/past-issues"
+          href="/browse-zines"
           className="inline-block rounded-md border px-3 py-1 text-sm hover:bg-neutral-800 transition-colors"
         >
-          ← Back to all issues
+          ← Back to all zines
         </Link>
       </aside>
 

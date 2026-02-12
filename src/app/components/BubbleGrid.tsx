@@ -3,12 +3,12 @@ import Bubble from "./Bubble";
 const BubbleGrid = () => {
   const bubbles = [
     { label: "Map", color: "F26565", href: "/map" },
-    { label: "Feature Me", color: "65CBF1", href: "/feature-me" },
+    { label: "Upload Zine", color: "65CBF1", href: "/zinemat" },
     { label: "About", color: "FFFFFF", href: "/about" },
-    { label: "Advertise", color: "82E385", href: "/advertise" },
-    { label: "Share Feedback", color: "F2DC6F", href: "/share-feedback" },
-    { label: "Distribute", color: "D16FF2", href: "/distribute" },
-    { label: "Past Issues", color: "A4A4A4", href: "/past-issues" },
+    { label: "Ad Bounties", color: "82E385", href: "/dashboard/ad-bounties" },
+    { label: "My Library", color: "F2DC6F", href: "/dashboard/library" },
+    { label: "Distribute", color: "D16FF2", href: "/dashboard/distribute" },
+    { label: "Browse Zines", color: "A4A4A4", href: "/browse-zines" },
   ];
 
   return (
@@ -25,18 +25,18 @@ const BubbleGrid = () => {
           </div>
         </div>
 
-        {/* Row 2: Past Issues (center) */}
+        {/* Row 2: Browse Zines (center) */}
         <div className="flex justify-center">
-          <Bubble {...bubbles[6]} /> {/* Past Issues */}
+          <Bubble {...bubbles[6]} /> {/* Browse Zines */}
         </div>
 
-        {/* Row 3: Feature Me (left) | Advertise (right) */}
+        {/* Row 3: Upload Zine (left) | Ad Bounties (right) */}
         <div className="grid grid-cols-2 gap-4 place-items-center">
           <div className="justify-self-start">
-            <Bubble {...bubbles[1]} /> {/* Feature Me */}
+            <Bubble {...bubbles[1]} /> {/* Upload Zine */}
           </div>
           <div className="justify-self-end">
-            <Bubble {...bubbles[3]} /> {/* Advertise */}
+            <Bubble {...bubbles[3]} /> {/* Ad Bounties */}
           </div>
         </div>
 
@@ -45,9 +45,9 @@ const BubbleGrid = () => {
           <Bubble {...bubbles[5]} /> {/* Distribute */}
         </div>
 
-        {/* Row 5: Share Feedback (center) */}
+        {/* Row 5: My Library (center) */}
         <div className="flex justify-center">
-          <Bubble {...bubbles[4]} /> {/* Share Feedback */}
+          <Bubble {...bubbles[4]} /> {/* My Library */}
         </div>
       </div>
 
@@ -58,7 +58,7 @@ const BubbleGrid = () => {
           <Bubble {...bubbles[0]} />
         </div>
 
-        {/* Blue - Feature Me */}
+        {/* Blue - Upload Zine */}
         <div className="absolute top-[200px] left-[175px]">
           <Bubble {...bubbles[1]} />
         </div>
@@ -68,12 +68,12 @@ const BubbleGrid = () => {
           <Bubble {...bubbles[2]} />
         </div>
 
-        {/* Green - Advertise */}
+        {/* Green - Ad Bounties */}
         <div className="absolute top-[200px] left-[675px]">
           <Bubble {...bubbles[3]} />
         </div>
 
-        {/* Yellow - Share Feedback */}
+        {/* Yellow - My Library */}
         <div className="absolute top-[400px] left-[300px]">
           <Bubble {...bubbles[4]} />
         </div>
@@ -83,7 +83,7 @@ const BubbleGrid = () => {
           <Bubble {...bubbles[5]} />
         </div>
 
-        {/* Gray - Past Issues */}
+        {/* Gray - Browse Zines */}
         <div className="absolute top-[200px] left-[425px]">
           <Bubble {...bubbles[6]} />
         </div>

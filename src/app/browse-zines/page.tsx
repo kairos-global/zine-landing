@@ -12,7 +12,7 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-export default async function PastIssues() {
+export default async function BrowseZines() {
   const { data: issues, error } = await supabase
     .from("issues")
     .select("id, slug, title, published_at, cover_img_url, created_at")
@@ -26,7 +26,7 @@ export default async function PastIssues() {
     console.error("❌ Error fetching issues:", error);
     return (
       <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold">Past Issues</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold">Browse zines</h1>
         <p className="mt-4 text-red-600">Error loading issues.</p>
       </main>
     );
@@ -36,7 +36,7 @@ export default async function PastIssues() {
     <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6">
       {/* Heading + Button */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl sm:text-3xl font-semibold">Past Issues</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold">Browse zines</h1>
         <MakeZineButton />
       </div>
 

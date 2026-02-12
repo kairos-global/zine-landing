@@ -1,4 +1,4 @@
-// src/app/past-issues/MakeZineButton.tsx  (or wherever it lives)
+// src/app/browse-zines/MakeZineButton.tsx
 import Link from "next/link";
 
 export default function MakeZineButton() {

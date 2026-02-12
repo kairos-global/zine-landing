@@ -8,11 +8,10 @@ const Navbar = () => {
   const [open, setOpen] = useState(false);
 
   const links = [
-    { label: 'What is it?', href: '/about' },
-    { label: 'Where can I find it?', href: '/map' },
-    { label: 'Past Issues', href: '/past-issues' },
-    { label: 'Feature Me!', href: '/feature-me' },
-    { label: 'Advertise', href: '/advertise' },
+    { label: 'About', href: '/about' },
+    { label: 'Products', href: '/products' },
+    { label: 'Contact', href: '/contact' },
+    { label: 'Browse zines', href: '/browse-zines' },
   ];
 
   const buttonCls =
