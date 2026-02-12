@@ -7,7 +7,7 @@ const BubbleGrid = () => {
     { label: "About", color: "FFFFFF", href: "/about" },
     { label: "Ad Bounties", color: "82E385", href: "/dashboard/ad-bounties" },
     { label: "My Library", color: "F2DC6F", href: "/dashboard/library" },
-    { label: "Distribute", color: "D16FF2", href: "/dashboard/distribute" },
+    { label: "Distribute", color: "D16FF2", href: "/dashboard/distributor" },
     { label: "Browse Zines", color: "A4A4A4", href: "/browse-zines" },
   ];
 
