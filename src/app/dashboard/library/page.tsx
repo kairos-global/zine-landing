@@ -51,7 +51,7 @@ export default function LibraryPage() {
         const draftIssues = issues.filter((i: Issue) => i.status === "draft");
         const publishedIssues = issues.filter((i: Issue) => i.status === "published");
 
-        console.log("✅ [Library] Drafts:", draftIssues.length, "Published:", publishedIssues.length);
+        console.log("✅ [Library] Saved:", draftIssues.length, "Published:", publishedIssues.length);
 
         setDrafts(draftIssues);
         setPublished(publishedIssues);
@@ -83,14 +83,14 @@ export default function LibraryPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">My Library</h1>
-        <p className="text-gray-600">Manage your zine drafts and published issues</p>
+        <p className="text-gray-600">Manage your saved zines and published issues</p>
       </div>
 
-          {/* Drafts Section */}
+          {/* Saved Section */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold flex items-center gap-2">
-            <span className="text-yellow-600">📝</span> Drafts
+            <span className="text-yellow-600">📝</span> Saved
             {drafts.length > 0 && (
               <span className="text-sm font-normal text-gray-500">({drafts.length})</span>
             )}
@@ -106,8 +106,8 @@ export default function LibraryPage() {
         {drafts.length === 0 ? (
           <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-xl p-12 text-center">
             <div className="text-6xl mb-4">✍️</div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No drafts yet</h3>
-            <p className="text-gray-600 mb-6">Start creating your first zine!</p>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">Nothing saved yet</h3>
+            <p className="text-gray-600 mb-6">Create a zine in ZineMat and click Save to see it here.</p>
             <button
               onClick={() => router.push("/zinemat")}
               className="bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition font-medium"
@@ -118,7 +118,7 @@ export default function LibraryPage() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {drafts.map((issue) => (
-              <IssueCard key={issue.id} issue={issue} router={router} isDraft />
+              <IssueCard key={issue.id} issue={issue} router={router} isSaved />
                 ))}
               </div>
             )}
@@ -184,10 +184,10 @@ function IssueCard({
         <div className="absolute top-3 left-3">
           <span
             className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
-              isDraft ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
+              isSaved ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
             }`}
           >
-            {isDraft ? "Draft" : "Published"}
+            {isSaved ? "Saved" : "Published"}
           </span>
         </div>
       </div>
@@ -214,7 +214,7 @@ function IssueCard({
                         >
              Edit
                         </button>
-          {!isDraft && issue.slug && (
+          {!isSaved && issue.slug && (
                       <button
               onClick={() => router.push(`/issues/${issue.slug}`)}
               className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition"

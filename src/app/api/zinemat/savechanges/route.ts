@@ -120,13 +120,20 @@ export async function POST(req: Request) {
 
     if (existing) {
       const { error: updateError } = await supabase.from("issues").update(updates).eq("id", issueId);
-      console.log("💾 [SaveChanges] Update error:", updateError);
+      if (updateError) {
+        console.error("💾 [SaveChanges] Update error:", updateError);
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
     } else {
       updates.id = issueId;
-      updates.status = "draft"; // default if created through savechanges
+      updates.status = "draft"; // saved but not published
       updates.profile_id = profileId;
+      updates.published_at = null;
       const { error: insertError } = await supabase.from("issues").insert(updates);
-      console.log("💾 [SaveChanges] Insert error:", insertError);
+      if (insertError) {
+        console.error("💾 [SaveChanges] Insert error:", insertError);
+        return NextResponse.json({ error: insertError.message }, { status: 500 });
+      }
     }
 
     // 🔗 Interactive links + QR

@@ -154,13 +154,19 @@ export default function InteractivityView() {
     return formData;
   }, [basics.title, issueId, coverFile, pdfFile, links, distribution]);
 
-  // Perform save (draft) — returns success
+  // Perform save (saved state) — returns success
   const performSave = useCallback(async (): Promise<boolean> => {
     const formData = buildSaveFormData();
     const res = await fetch("/api/zinemat/savechanges", { method: "POST", body: formData });
-    const result = await res.json();
+    let result: { error?: string; message?: string };
+    try {
+      result = await res.json();
+    } catch {
+      result = {};
+    }
     if (!res.ok) {
-      toast.error(result.error?.message || "Something went wrong.");
+      const msg = result.error || result.message || "Something went wrong.";
+      toast.error(msg);
       return false;
     }
     return true;
@@ -207,9 +213,15 @@ export default function InteractivityView() {
     try {
       const formData = buildSaveFormData();
       const res = await fetch("/api/zinemat/publish", { method: "POST", body: formData });
-      const result = await res.json();
+      let result: { error?: string; message?: string } = {};
+      try {
+        result = await res.json();
+      } catch {
+        /* non-JSON response */
+      }
       if (!res.ok) {
-        toast.error(result.error?.message || result.message || "Something went wrong.");
+        const msg = result.error || result.message || "Something went wrong.";
+        toast.error(msg);
         return;
       }
       toast.success("Published successfully!");
