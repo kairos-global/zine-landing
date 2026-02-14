@@ -3,11 +3,11 @@ import Bubble from "./Bubble";
 const BubbleGrid = () => {
   const bubbles = [
     { label: "Map", color: "F26565", href: "/map" },
-    { label: "Upload Zine", color: "65CBF1", href: "/zinemat" },
+    { label: "Upload Zine", color: "65CBF1", href: "/zinemat", forceRedirectUrl: "/zinemat" },
     { label: "About", color: "FFFFFF", href: "/about" },
-    { label: "Ad Bounties", color: "82E385", href: "/dashboard/ad-bounties" },
-    { label: "My Library", color: "F2DC6F", href: "/dashboard/library" },
-    { label: "Distribute", color: "D16FF2", href: "/dashboard/distributor" },
+    { label: "Ad Bounties", color: "82E385", href: "/dashboard/ad-bounties", forceRedirectUrl: "/dashboard/ad-bounties" },
+    { label: "My Library", color: "F2DC6F", href: "/dashboard/library", forceRedirectUrl: "/dashboard/library" },
+    { label: "Distribute", color: "D16FF2", href: "/dashboard/distributor", forceRedirectUrl: "/dashboard/distributor" },
     { label: "Browse Zines", color: "A4A4A4", href: "/browse-zines" },
   ];
 

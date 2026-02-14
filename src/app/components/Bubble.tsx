@@ -1,12 +1,17 @@
+"use client";
+
 import Link from "next/link";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 
 interface BubbleProps {
   label: string;
   color: string;
-  href?: string; // Optional route path
+  href?: string;
+  /** When set, signed-out users see the sign-in modal (like Login) instead of redirecting. */
+  forceRedirectUrl?: string;
 }
 
-const Bubble = ({ label, color, href }: BubbleProps) => {
+const Bubble = ({ label, color, href, forceRedirectUrl }: BubbleProps) => {
   const bubbleContent = (
     <div
       className="
@@ -23,6 +28,23 @@ const Bubble = ({ label, color, href }: BubbleProps) => {
       {label}
     </div>
   );
+
+  if (forceRedirectUrl != null && href) {
+    return (
+      <>
+        <SignedIn>
+          <Link href={href}>{bubbleContent}</Link>
+        </SignedIn>
+        <SignedOut>
+          <SignInButton mode="modal" forceRedirectUrl={forceRedirectUrl}>
+            <button type="button" className="cursor-pointer border-0 bg-transparent p-0 block">
+              {bubbleContent}
+            </button>
+          </SignInButton>
+        </SignedOut>
+      </>
+    );
+  }
 
   return href ? <Link href={href}>{bubbleContent}</Link> : bubbleContent;
 };
