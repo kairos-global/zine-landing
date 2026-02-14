@@ -26,6 +26,7 @@ interface IssueUpdate {
   cover_img_url: string | null;
   pdf_url: string | null;
   status?: "draft" | "published";
+  profile_id?: string;
   self_distribute?: boolean;
   print_for_me?: boolean;
 }
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     if (!issueId) return NextResponse.json({ error: "Missing issueId" }, { status: 400 });
 
     // 🔑 ensure the user actually has a profile
-    await getProfileId(userId);
+    const profileId = await getProfileId(userId);
 
     // fetch existing issue
     const { data: existing, error: fetchError } = await supabase
@@ -123,6 +124,7 @@ export async function POST(req: Request) {
     } else {
       updates.id = issueId;
       updates.status = "draft"; // default if created through savechanges
+      updates.profile_id = profileId;
       const { error: insertError } = await supabase.from("issues").insert(updates);
       console.log("💾 [SaveChanges] Insert error:", insertError);
     }

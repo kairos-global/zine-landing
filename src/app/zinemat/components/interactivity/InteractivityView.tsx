@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import toast from "react-hot-toast";
@@ -10,6 +10,8 @@ import UploadsSection from "./UploadsSection";
 import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
 import DistributionSection, { Distribution } from "./DistributionSection";
 import FinalChecklist from "./FinalChecklist";
+
+const AUTOSAVE_DEBOUNCE_MS = 1800;
 
 type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY" | "DISTRIBUTION";
 
@@ -42,6 +44,12 @@ export default function InteractivityView() {
   const [hasPayment, setHasPayment] = useState<boolean>(false);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  // Stable issueId for new zines (so autosave always targets the same draft)
+  const newIssueIdRef = useRef<string | null>(null);
+  const issueId = editId ?? newIssueIdRef.current ?? (newIssueIdRef.current = crypto.randomUUID());
 
   // ✅ Load existing issue via API
   useEffect(() => {
@@ -120,14 +128,13 @@ export default function InteractivityView() {
     })();
   }, [editId]);
 
-  // ✅ Checklist validation
+  // ✅ Checklist validation (Publish requires all basics + upload fields)
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
     const coverOk = !!coverFile || !!existingCoverUrl;
     return { basics: basicsOk, cover: coverOk };
   }, [basics.title, coverFile, existingCoverUrl]);
 
-  const canSaveDraft = checklist.basics;
   const canPublish = checklist.basics && checklist.cover;
 
   const addSection = (key: SectionKey) =>
@@ -135,47 +142,83 @@ export default function InteractivityView() {
   const removeSection = (key: SectionKey) =>
     setActive((cur) => cur.filter((k) => k !== key));
 
-  // ✅ Save handler
-  const handleSubmit = async (mode: "draft" | "edit" | "publish") => {
-    if (!user) return;
-
+  // Build FormData for save (used by autosave and both buttons)
+  const buildSaveFormData = useCallback(() => {
     const formData = new FormData();
-    formData.append("title", basics.title);
-    formData.append("userId", user.id);
-    if (editId) formData.append("issueId", editId);
-    else formData.append("issueId", crypto.randomUUID());
-
+    formData.append("title", basics.title.trim() || "Untitled");
+    formData.append("issueId", issueId);
     if (coverFile) formData.append("cover", coverFile);
     if (pdfFile) formData.append("pdf", pdfFile);
-
     formData.append("interactiveLinks", JSON.stringify(links));
     formData.append("distribution", JSON.stringify(distribution));
+    return formData;
+  }, [basics.title, issueId, coverFile, pdfFile, links, distribution]);
 
-    let endpoint = "/api/zinemat/savedraft";
-    if (mode === "edit") endpoint = "/api/zinemat/savechanges";
-    else if (mode === "publish") endpoint = "/api/zinemat/publish";
+  // Perform save (draft) — returns success
+  const performSave = useCallback(async (): Promise<boolean> => {
+    const formData = buildSaveFormData();
+    const res = await fetch("/api/zinemat/savechanges", { method: "POST", body: formData });
+    const result = await res.json();
+    if (!res.ok) {
+      toast.error(result.error?.message || "Something went wrong.");
+      return false;
+    }
+    return true;
+  }, [buildSaveFormData]);
 
+  // ✅ Autosave: debounced save when any field changes
+  const autosaveTriggerRef = useRef(false);
+  useEffect(() => {
+    if (!user || loading) return;
+    // Skip the first mount so we don't save an empty form on load
+    if (!autosaveTriggerRef.current) {
+      autosaveTriggerRef.current = true;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const ok = await performSave();
+      // After first successful save of a new zine, add id to URL so refresh loads from DB
+      if (ok && !editId) {
+        router.replace(`/zinemat?id=${issueId}`, { scroll: false });
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [user, loading, editId, issueId, basics.title, coverFile, pdfFile, links, distribution, performSave, router]);
+
+  // Save button: save then go to My Library
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
     try {
-      const res = await fetch(endpoint, { method: "POST", body: formData });
-      const result = await res.json();
+      const ok = await performSave();
+      if (ok) {
+        toast.success("Changes saved!");
+        setTimeout(() => router.push("/dashboard/library"), 800);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
+  // Publish button: save then publish then go to Browse zines
+  const handlePublish = async () => {
+    if (!user || !canPublish) return;
+    setPublishing(true);
+    try {
+      const formData = buildSaveFormData();
+      const res = await fetch("/api/zinemat/publish", { method: "POST", body: formData });
+      const result = await res.json();
       if (!res.ok) {
-        toast.error(result.error?.message || "Something went wrong.");
+        toast.error(result.error?.message || result.message || "Something went wrong.");
         return;
       }
-
-      toast.success(
-        mode === "publish"
-          ? "Published successfully!"
-          : mode === "edit"
-          ? "Changes saved!"
-          : "Draft saved!"
-      );
-
-      setTimeout(() => router.push("/dashboard"), 1200);
+      toast.success("Published successfully!");
+      setTimeout(() => router.push("/browse-zines"), 800);
     } catch (err: unknown) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -201,27 +244,20 @@ export default function InteractivityView() {
         <h1 className="text-xl sm:text-2xl font-semibold">Interactivity</h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleSubmit("draft")}
-            disabled={!canSaveDraft}
+            onClick={handleSave}
+            disabled={saving}
             className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
           >
-            Save Draft
+            {saving ? "Saving…" : "Save"}
           </button>
           <button
-            onClick={() => handleSubmit("edit")}
-            disabled={!editId}
-            className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
-          >
-            Save Changes
-          </button>
-          <button
-            onClick={() => handleSubmit("publish")}
-            disabled={!canPublish}
+            onClick={handlePublish}
+            disabled={!canPublish || publishing}
             className={`rounded-xl px-3 py-1 text-sm font-medium ${
-              canPublish ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"
+              canPublish && !publishing ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"
             }`}
           >
-            Publish
+            {publishing ? "Publishing…" : "Publish"}
           </button>
         </div>
       </div>
