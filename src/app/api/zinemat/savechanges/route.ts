@@ -27,6 +27,7 @@ interface IssueUpdate {
   pdf_url: string | null;
   status?: "draft" | "published";
   profile_id?: string;
+  published_at?: string | null;
   self_distribute?: boolean;
   print_for_me?: boolean;
 }
