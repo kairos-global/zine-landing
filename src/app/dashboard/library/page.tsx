@@ -156,11 +156,11 @@ export default function LibraryPage() {
 function IssueCard({
   issue,
   router,
-  isDraft = false,
+  isSaved = false,
 }: {
   issue: Issue;
   router: ReturnType<typeof useRouter>;
-  isDraft?: boolean;
+  isSaved?: boolean;
 }) {
   return (
     <div className="group rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
@@ -201,8 +201,8 @@ function IssueCard({
 
         {/* Date */}
         <p className="text-xs text-gray-500 mb-4">
-          {isDraft
-            ? `Created ${new Date(issue.created_at!).toLocaleDateString()}`
+          {isSaved
+            ? `Saved ${new Date(issue.created_at!).toLocaleDateString()}`
             : `Published ${new Date(issue.published_at!).toLocaleDateString()}`}
         </p>
 
