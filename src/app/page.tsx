@@ -1,7 +1,6 @@
 import Image from 'next/image';
 import BubbleGrid from './components/BubbleGrid';
 import RollingQuotes from './components/RollingQuotes';
-import AnnouncementsBox from './components/AnnouncementsBox';
 
 export default function Home() {
   return (
@@ -13,11 +12,6 @@ export default function Home() {
       </section>
 
       <RollingQuotes />
-
-      {/* Fixed Announcements Box – hide on small screens */}
-      <div className="hidden md:block fixed top-[80px] right-[70px] z-10">
-        <AnnouncementsBox />
-      </div>
 
       {/* Fixed Landing Page Graphic – hide on small screens */}
       <div className="hidden md:block fixed bottom-[-30px] right-[-30px] z-0 w-[725px] h-auto rounded-4xl border-[5px] border-black overflow-hidden">
