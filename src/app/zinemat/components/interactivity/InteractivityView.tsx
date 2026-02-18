@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import { createClient } from "@supabase/supabase-js";
 import toast from "react-hot-toast";
 
 import BasicsSection, { Basics } from "./BasicsSection";
@@ -46,6 +47,21 @@ export default function InteractivityView() {
   const [loading, setLoading] = useState<boolean>(!!editId);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [uploadedCoverUrl, setUploadedCoverUrl] = useState<string | null>(null);
+  const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string | null>(null);
+  const [coverCleared, setCoverCleared] = useState(false);
+  const [pdfCleared, setPdfCleared] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+
+  const supabase = useMemo(
+    () =>
+      createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      ),
+    []
+  );
 
   // Stable issueId for new zines (so autosave always targets the same draft)
   const newIssueIdRef = useRef<string | null>(null);
@@ -86,6 +102,8 @@ export default function InteractivityView() {
           setBasics({ title: data.issue.title ?? "" });
           setExistingCoverUrl(data.issue.cover_img_url);
           setExistingPdfUrl(data.issue.pdf_url);
+          setCoverCleared(false);
+          setPdfCleared(false);
           
           // Load distribution settings
           setDistribution({
@@ -128,12 +146,79 @@ export default function InteractivityView() {
     })();
   }, [editId]);
 
+  // Direct upload to Supabase when user selects a file (avoids sending large body through our API)
+  useEffect(() => {
+    if (!coverFile || !user) return;
+    let cancelled = false;
+    setUploadingCover(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/zinemat/upload-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            issueId,
+            type: "cover",
+            contentType: coverFile.type,
+          }),
+        });
+        if (!res.ok || cancelled) return;
+        const { token, path, publicUrl } = await res.json();
+        if (cancelled) return;
+        const { error } = await supabase.storage
+          .from("zineground")
+          .uploadToSignedUrl(path, token, coverFile, { upsert: true });
+        if (error) throw error;
+        if (!cancelled) setUploadedCoverUrl(publicUrl);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Cover upload error:", err);
+          toast.error(err instanceof Error ? err.message : "Cover upload failed.");
+        }
+      } finally {
+        if (!cancelled) setUploadingCover(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [coverFile, issueId, user, supabase]);
+
+  useEffect(() => {
+    if (!pdfFile || !user) return;
+    let cancelled = false;
+    setUploadingPdf(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/zinemat/upload-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ issueId, type: "pdf" }),
+        });
+        if (!res.ok || cancelled) return;
+        const { token, path, publicUrl } = await res.json();
+        if (cancelled) return;
+        const { error } = await supabase.storage
+          .from("zineground")
+          .uploadToSignedUrl(path, token, pdfFile, { upsert: true });
+        if (error) throw error;
+        if (!cancelled) setUploadedPdfUrl(publicUrl);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("PDF upload error:", err);
+          toast.error(err instanceof Error ? err.message : "PDF upload failed.");
+        }
+      } finally {
+        if (!cancelled) setUploadingPdf(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [pdfFile, issueId, user, supabase]);
+
   // ✅ Checklist validation (Publish requires all basics + upload fields)
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
-    const coverOk = !!coverFile || !!existingCoverUrl;
+    const coverOk = !!(existingCoverUrl || uploadedCoverUrl || coverFile);
     return { basics: basicsOk, cover: coverOk };
-  }, [basics.title, coverFile, existingCoverUrl]);
+  }, [basics.title, existingCoverUrl, uploadedCoverUrl, coverFile]);
 
   const canPublish = checklist.basics && checklist.cover;
 
@@ -142,17 +227,40 @@ export default function InteractivityView() {
   const removeSection = (key: SectionKey) =>
     setActive((cur) => cur.filter((k) => k !== key));
 
-  // Build FormData for save (used by autosave and both buttons)
+  const handleCoverChange = useCallback((file: File | null) => {
+    setCoverFile(file);
+    if (file) {
+      setCoverCleared(false);
+      setUploadedCoverUrl(null);
+    } else {
+      setUploadedCoverUrl(null);
+      setCoverCleared(true);
+    }
+  }, []);
+  const handlePdfChange = useCallback((file: File | null) => {
+    setPdfFile(file);
+    if (file) {
+      setPdfCleared(false);
+      setUploadedPdfUrl(null);
+    } else {
+      setUploadedPdfUrl(null);
+      setPdfCleared(true);
+    }
+  }, []);
+
+  // Build FormData for save — send URLs from direct upload only (no file bodies to avoid timeouts)
   const buildSaveFormData = useCallback(() => {
     const formData = new FormData();
     formData.append("title", basics.title.trim() || "Untitled");
     formData.append("issueId", issueId);
-    if (coverFile) formData.append("cover", coverFile);
-    if (pdfFile) formData.append("pdf", pdfFile);
+    if (coverCleared) formData.append("cover_url", "");
+    else if (uploadedCoverUrl) formData.append("cover_url", uploadedCoverUrl);
+    if (pdfCleared) formData.append("pdf_url", "");
+    else if (uploadedPdfUrl) formData.append("pdf_url", uploadedPdfUrl);
     formData.append("interactiveLinks", JSON.stringify(links));
     formData.append("distribution", JSON.stringify(distribution));
     return formData;
-  }, [basics.title, issueId, coverFile, pdfFile, links, distribution]);
+  }, [basics.title, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);
 
   const SAVE_TIMEOUT_MS = 90_000; // 90s for large PDFs
 
@@ -208,7 +316,7 @@ export default function InteractivityView() {
       }
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [user, loading, editId, issueId, basics.title, coverFile, pdfFile, links, distribution, performSave, router]);
+  }, [user, loading, editId, issueId, basics.title, uploadedCoverUrl, uploadedPdfUrl, links, distribution, performSave, router]);
 
   // Save button: save then go to My Library
   const handleSave = async () => {
@@ -267,6 +375,9 @@ export default function InteractivityView() {
     );
 
   const slug = basics.title?.toLowerCase().replace(/\s+/g, "-") ?? "";
+  const uploadInProgress = Boolean(
+    (coverFile && !uploadedCoverUrl) || (pdfFile && !uploadedPdfUrl)
+  );
 
   return (
     <div className="space-y-6">
@@ -276,19 +387,19 @@ export default function InteractivityView() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || uploadInProgress}
             className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : uploadInProgress ? "Uploading…" : "Save"}
           </button>
           <button
             onClick={handlePublish}
-            disabled={!canPublish || publishing}
+            disabled={!canPublish || publishing || uploadInProgress}
             className={`rounded-xl px-3 py-1 text-sm font-medium ${
-              canPublish && !publishing ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"
+              canPublish && !publishing && !uploadInProgress ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"
             }`}
           >
-            {publishing ? "Publishing…" : "Publish"}
+            {publishing ? "Publishing…" : uploadInProgress ? "Uploading…" : "Publish"}
           </button>
         </div>
       </div>
@@ -316,8 +427,8 @@ export default function InteractivityView() {
                   <UploadsSection
                     coverFile={coverFile}
                     pdfFile={pdfFile}
-                    onCoverChange={setCoverFile}
-                    onPdfChange={setPdfFile}
+                    onCoverChange={handleCoverChange}
+                    onPdfChange={handlePdfChange}
                     existingCoverUrl={existingCoverUrl}
                     existingPdfUrl={existingPdfUrl}
                   />
