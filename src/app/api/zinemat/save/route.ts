@@ -13,9 +13,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-type InteractiveLink = { 
+type InteractiveLink = {
   id?: string;
-  label: string; 
+  label: string;
   url: string;
   generateQR?: boolean;
 };
@@ -43,18 +43,16 @@ export async function POST(req: Request) {
     const issueId = formData.get("issueId") as string;
     if (!issueId) return NextResponse.json({ error: "Missing issueId" }, { status: 400 });
 
-    // 🔑 get or create profile (creates on first use if Clerk webhook didn’t run)
     const profileId = await getOrCreateProfileId(userId);
 
-    // fetch existing issue (include slug so we keep it on update and avoid unique constraint)
     const { data: existing, error: fetchError } = await supabase
       .from("issues")
       .select("id, status, published_at, cover_img_url, pdf_url, title, slug")
       .eq("id", issueId)
       .maybeSingle();
 
-    console.log("💾 [SaveChanges] Existing issue:", existing);
-    console.log("💾 [SaveChanges] Fetch error:", fetchError);
+    console.log("💾 [Save] Existing issue:", existing);
+    if (fetchError) console.error("💾 [Save] Fetch error:", fetchError);
 
     const title = (formData.get("title") as string) || existing?.title || "Untitled";
     const baseSlug = slugFromTitle(title);
@@ -62,8 +60,6 @@ export async function POST(req: Request) {
 
     let cover_img_url = existing?.cover_img_url ?? null;
     let pdf_url = existing?.pdf_url ?? null;
-
-    console.log("💾 [SaveChanges] Preserving existing URLs - Cover:", cover_img_url, "PDF:", pdf_url);
 
     const coverFile = formData.get("cover") as File | null;
     const pdfFile = formData.get("pdf") as File | null;
@@ -73,7 +69,14 @@ export async function POST(req: Request) {
       const { data, error } = await supabase.storage
         .from("zineground")
         .upload(`covers/${issueId}.${extension}`, coverFile, { upsert: true });
-      if (!error && data) {
+      if (error) {
+        console.error("💾 [Save] Cover upload error:", error);
+        return NextResponse.json(
+          { error: `Cover image upload failed: ${error.message}` },
+          { status: 500 }
+        );
+      }
+      if (data) {
         cover_img_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${data.path}`;
       }
     }
@@ -82,19 +85,24 @@ export async function POST(req: Request) {
       const { data, error } = await supabase.storage
         .from("zineground")
         .upload(`issues/${issueId}.pdf`, pdfFile, { upsert: true });
-      if (!error && data) {
+      if (error) {
+        console.error("💾 [Save] PDF upload error:", error);
+        return NextResponse.json(
+          { error: `PDF upload failed: ${error.message}` },
+          { status: 500 }
+        );
+      }
+      if (data) {
         pdf_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${data.path}`;
       }
     }
 
-    // Parse distribution settings
     const distributionRaw = formData.get("distribution");
     let distribution = { self_distribute: false, print_for_me: false };
     if (distributionRaw) {
       distribution = JSON.parse(distributionRaw.toString());
     }
 
-    // ✅ Insert if it doesn't exist, update if it does
     const updates: IssueUpdate = {
       title,
       slug,
@@ -104,27 +112,24 @@ export async function POST(req: Request) {
       print_for_me: distribution.print_for_me,
     };
 
-    console.log("💾 [SaveChanges] Updates to save:", updates);
-
     if (existing) {
       const { error: updateError } = await supabase.from("issues").update(updates).eq("id", issueId);
       if (updateError) {
-        console.error("💾 [SaveChanges] Update error:", updateError);
+        console.error("💾 [Save] Update error:", updateError);
         return NextResponse.json({ error: updateError.message }, { status: 500 });
       }
     } else {
       updates.id = issueId;
-      updates.status = "draft"; // saved but not published
+      updates.status = "draft";
       updates.profile_id = profileId;
       updates.published_at = null;
       const { error: insertError } = await supabase.from("issues").insert(updates);
       if (insertError) {
-        console.error("💾 [SaveChanges] Insert error:", insertError);
+        console.error("💾 [Save] Insert error:", insertError);
         return NextResponse.json({ error: insertError.message }, { status: 500 });
       }
     }
 
-    // 🔗 Interactive links + QR
     const interactiveLinksRaw = formData.get("interactiveLinks");
     const processedLinks: ProcessedLink[] = [];
 
@@ -132,32 +137,26 @@ export async function POST(req: Request) {
       const interactiveLinks: InteractiveLink[] = JSON.parse(interactiveLinksRaw.toString() || "[]");
 
       for (const link of interactiveLinks) {
-        // Use existing ID or generate new one
         const linkId = link.id || randomUUID();
         const redirect_path = `/qr/${issueId}/${linkId}`;
-        
-        // Only generate QR if requested
         let qr_path: string | null = null;
         if (link.generateQR !== false) {
           const qrPngBuffer = await QRCode.toBuffer(
             `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
             { type: "png", width: 400 }
           );
-
           const { data: qrData, error: qrErr } = await supabase.storage
             .from("zineground")
             .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
               contentType: "image/png",
               upsert: true,
             });
-
           if (qrErr || !qrData) {
-            console.error("QR Upload Error:", qrErr);
+            console.error("💾 [Save] QR upload error:", qrErr);
           } else {
             qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
           }
         }
-
         await supabase.from("issue_links").upsert({
           id: linkId,
           issue_id: issueId,
@@ -166,13 +165,12 @@ export async function POST(req: Request) {
           qr_path,
           redirect_path,
         });
-
         processedLinks.push({ ...link, id: linkId, qr_path: qr_path || "", redirect_path });
       }
     }
 
     return NextResponse.json({
-      status: "changes saved",
+      status: "saved",
       issueId,
       slug,
       cover_img_url,
@@ -180,7 +178,7 @@ export async function POST(req: Request) {
       interactiveLinks: processedLinks,
     });
   } catch (err) {
-    console.error("🔥 SaveChanges error:", err);
+    console.error("🔥 [Save] error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }

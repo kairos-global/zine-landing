@@ -154,22 +154,41 @@ export default function InteractivityView() {
     return formData;
   }, [basics.title, issueId, coverFile, pdfFile, links, distribution]);
 
+  const SAVE_TIMEOUT_MS = 90_000; // 90s for large PDFs
+
   // Perform save (saved state) — returns success
   const performSave = useCallback(async (): Promise<boolean> => {
     const formData = buildSaveFormData();
-    const res = await fetch("/api/zinemat/savechanges", { method: "POST", body: formData });
-    let result: { error?: string; message?: string };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS);
     try {
-      result = await res.json();
-    } catch {
-      result = {};
-    }
-    if (!res.ok) {
-      const msg = result.error || result.message || "Something went wrong.";
-      toast.error(msg);
+      const res = await fetch("/api/zinemat/save", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      let result: { error?: string; message?: string };
+      try {
+        result = await res.json();
+      } catch {
+        result = {};
+      }
+      if (!res.ok) {
+        const msg = result.error || result.message || "Something went wrong.";
+        toast.error(msg);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        toast.error("Save timed out. Try again or use a smaller PDF.");
+        return false;
+      }
+      toast.error(err instanceof Error ? err.message : "Save failed.");
       return false;
     }
-    return true;
   }, [buildSaveFormData]);
 
   // ✅ Autosave: debounced save when any field changes

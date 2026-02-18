@@ -67,7 +67,14 @@ export async function POST(req: Request) {
       const { data, error } = await supabase.storage
         .from("zineground")
         .upload(`covers/${issueId}.${extension}`, coverFile, { upsert: true });
-      if (!error && data) {
+      if (error) {
+        console.error("📤 [Publish] Cover upload error:", error);
+        return NextResponse.json(
+          { error: `Cover image upload failed: ${error.message}` },
+          { status: 500 }
+        );
+      }
+      if (data) {
         cover_img_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${data.path}`;
       }
     }
@@ -76,7 +83,14 @@ export async function POST(req: Request) {
       const { data, error } = await supabase.storage
         .from("zineground")
         .upload(`issues/${issueId}.pdf`, pdfFile, { upsert: true });
-      if (!error && data) {
+      if (error) {
+        console.error("📤 [Publish] PDF upload error:", error);
+        return NextResponse.json(
+          { error: `PDF upload failed: ${error.message}` },
+          { status: 500 }
+        );
+      }
+      if (data) {
         pdf_url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${data.path}`;
       }
     }
