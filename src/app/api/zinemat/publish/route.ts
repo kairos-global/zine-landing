@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { getOrCreateProfileId } from "@/lib/profile";
+import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
@@ -45,12 +46,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
-
-    // Fetch existing issue to preserve URLs if not uploading new files
+    // Fetch existing issue (for URLs and slug; keep slug on update to avoid unique constraint)
     const { data: existingForUrls } = await supabase
       .from("issues")
-      .select("cover_img_url, pdf_url")
+      .select("cover_img_url, pdf_url, slug")
       .eq("id", issueId)
       .maybeSingle();
 
@@ -84,7 +83,10 @@ export async function POST(req: Request) {
 
     const profileId = await getOrCreateProfileId(userId);
 
-    // ✅ check if issue already exists
+    const baseSlug = slugFromTitle(title);
+    const slug = existingForUrls?.slug ?? (await ensureUniqueSlug(supabase, baseSlug, issueId));
+
+    // ✅ check if issue already exists (for published_at)
     const { data: existing } = await supabase
       .from("issues")
       .select("id, published_at")

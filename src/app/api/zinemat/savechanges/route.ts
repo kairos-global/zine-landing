@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { getOrCreateProfileId } from "@/lib/profile";
+import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +46,10 @@ export async function POST(req: Request) {
     // 🔑 get or create profile (creates on first use if Clerk webhook didn’t run)
     const profileId = await getOrCreateProfileId(userId);
 
-    // fetch existing issue
+    // fetch existing issue (include slug so we keep it on update and avoid unique constraint)
     const { data: existing, error: fetchError } = await supabase
       .from("issues")
-      .select("id, status, published_at, cover_img_url, pdf_url, title")
+      .select("id, status, published_at, cover_img_url, pdf_url, title, slug")
       .eq("id", issueId)
       .maybeSingle();
 
@@ -56,7 +57,8 @@ export async function POST(req: Request) {
     console.log("💾 [SaveChanges] Fetch error:", fetchError);
 
     const title = (formData.get("title") as string) || existing?.title || "Untitled";
-    const slug = title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, "-");
+    const baseSlug = slugFromTitle(title);
+    const slug = existing ? existing.slug : await ensureUniqueSlug(supabase, baseSlug, issueId);
 
     let cover_img_url = existing?.cover_img_url ?? null;
     let pdf_url = existing?.pdf_url ?? null;
