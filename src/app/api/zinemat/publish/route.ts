@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
+import { getOrCreateProfileId } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -30,22 +31,6 @@ interface IssueUpdate {
   published_at?: string;
   self_distribute?: boolean;
   print_for_me?: boolean;
-}
-
-// 🔒 fetch-only: don’t auto-insert profiles
-async function getProfileId(clerkId: string) {
-  const { data: existing, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("clerk_id", clerkId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!existing?.id) {
-    throw new Error("Profile not found for this user. Ensure profile is created at signup.");
-  }
-
-  return existing.id;
 }
 
 export async function POST(req: Request) {
@@ -97,8 +82,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ fetch the existing profile ID
-    const profileId = await getProfileId(userId);
+    const profileId = await getOrCreateProfileId(userId);
 
     // ✅ check if issue already exists
     const { data: existing } = await supabase

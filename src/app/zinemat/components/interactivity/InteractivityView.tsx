@@ -35,7 +35,7 @@ export default function InteractivityView() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null);
-  const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
+cd  const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
   const [distribution, setDistribution] = useState<Distribution>({
     self_distribute: false,

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
+import { getOrCreateProfileId } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -32,22 +33,6 @@ interface IssueUpdate {
   print_for_me?: boolean;
 }
 
-// 🔒 fetch-only: don’t auto-insert profiles
-async function getProfileId(clerkId: string) {
-  const { data: existing, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("clerk_id", clerkId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!existing?.id) {
-    throw new Error("Profile not found for this user. Ensure profile is created at signup.");
-  }
-
-  return existing.id;
-}
-
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
@@ -57,8 +42,8 @@ export async function POST(req: Request) {
     const issueId = formData.get("issueId") as string;
     if (!issueId) return NextResponse.json({ error: "Missing issueId" }, { status: 400 });
 
-    // 🔑 ensure the user actually has a profile
-    const profileId = await getProfileId(userId);
+    // 🔑 get or create profile (creates on first use if Clerk webhook didn’t run)
+    const profileId = await getOrCreateProfileId(userId);
 
     // fetch existing issue
     const { data: existing, error: fetchError } = await supabase

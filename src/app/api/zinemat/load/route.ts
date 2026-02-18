@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
+import { getOrCreateProfileId } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -25,27 +26,14 @@ export async function GET(req: Request) {
 
     console.log("📖 [Load Issue] Loading issue:", issueId, "for user:", userId);
 
-    // Get the user's profile
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("clerk_id", userId)
-      .single();
-
-    if (profileError || !profile) {
-      console.error("❌ [Load Issue] Profile not found:", profileError);
-      return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
-      );
-    }
+    const profileId = await getOrCreateProfileId(userId);
 
     // Get the issue and verify ownership
     const { data: issue, error: issueError } = await supabase
       .from("issues")
       .select("*")
       .eq("id", issueId)
-      .eq("profile_id", profile.id)
+      .eq("profile_id", profileId)
       .single();
 
     if (issueError || !issue) {

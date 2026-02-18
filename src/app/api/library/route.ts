@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
+import { getOrCreateProfileId } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -18,28 +19,13 @@ export async function GET() {
 
     console.log("📚 [Library API] Fetching for user:", userId);
 
-    // Get profile
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, clerk_id, email")
-      .eq("clerk_id", userId)
-      .single();
-
-    if (profileError || !profile) {
-      console.error("❌ [Library API] Profile error:", profileError);
-      return NextResponse.json(
-        { error: "Profile not found", details: profileError },
-        { status: 404 }
-      );
-    }
-
-    console.log("✅ [Library API] Found profile:", profile.id);
+    const profileId = await getOrCreateProfileId(userId);
 
     // Get issues
     const { data: issues, error: issuesError } = await supabase
       .from("issues")
       .select("*")
-      .eq("profile_id", profile.id)
+      .eq("profile_id", profileId)
       .order("created_at", { ascending: false });
 
     if (issuesError) {
@@ -54,8 +40,8 @@ export async function GET() {
 
     return NextResponse.json({
       profile: {
-        id: profile.id,
-        email: profile.email,
+        id: profileId,
+        email: null,
       },
       issues: issues || [],
     });

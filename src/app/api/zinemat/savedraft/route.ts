@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
+import { getOrCreateProfileId } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -18,22 +19,6 @@ type InteractiveLink = {
   generateQR?: boolean;
 };
 type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
-
-// 🔒 fetch-only: no auto-insert
-async function getProfileId(clerkId: string) {
-  const { data: existing, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("clerk_id", clerkId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!existing?.id) {
-    throw new Error("Profile not found for this user. Ensure profile is created at signup.");
-  }
-
-  return existing.id;
-}
 
 export async function POST(req: Request) {
   try {
@@ -87,10 +72,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const profileId = await getProfileId(userId);
-    
-    console.log("📝 [SaveDraft] Clerk userId:", userId);
-    console.log("📝 [SaveDraft] Profile ID found:", profileId);
+    const profileId = await getOrCreateProfileId(userId);
 
     // Parse distribution settings
     const distributionRaw = formData.get("distribution");
