@@ -107,7 +107,7 @@ export default function AnalyticsPage() {
         <div>
           <h1 className="text-3xl font-bold mb-2">Analytics</h1>
           <p className="text-gray-600">
-            QR Scan activity for your zines. Print zines, share your digital issue, or paste your QR&apos;s anywhere in the world, and track their scans here. 
+            QR Scan activity for your zines. Print zines, share your digital issue, or paste your QR&apos;s anywhere in the world and track their scans here. 
           </p>
         </div>
         <button
@@ -219,7 +219,7 @@ export default function AnalyticsPage() {
       {/* Your QR Codes — one card per QR with its scan chart */}
       <section>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Your QR codes</h2>
-        <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">Each QR has its own scan history. Link, originating zine, and visits over time.</p>
+        <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">Each QR has its own scan history, link, originating zine, and visits over time.</p>
         {qrCodes.length === 0 ? (
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-6 text-slate-500 text-center text-sm">
             Add links with QR codes in the ZineMat to see them here.
