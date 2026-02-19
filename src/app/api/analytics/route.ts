@@ -25,6 +25,7 @@ export type RecentScan = {
   issueTitle: string | null;
   linkLabel: string | null;
   scanned_at: string | null;
+  user_agent: string | null;
 };
 
 export async function GET() {
@@ -59,17 +60,21 @@ export async function GET() {
       });
     }
 
-    // 2) All scans for these issues (use created_at for ordering in case scanned_at is missing)
+    // 2) All scans for these issues (one row per scan; scanned_at = when it happened)
     const { data: scans, error: scansError } = await supabase
       .from("qr_scans")
-      .select("id, issue_id, link_id, scanned_at, created_at")
+      .select("id, issue_id, link_id, scanned_at, user_agent")
       .in("issue_id", issueIds)
-      .order("created_at", { ascending: false });
+      .order("scanned_at", { ascending: false });
 
     if (scansError) {
       console.error("[Analytics] Scans error:", scansError);
       return NextResponse.json(
-        { error: "Failed to fetch scans", details: scansError },
+        {
+          error: "Failed to fetch scans",
+          details: scansError.message,
+          code: scansError.code,
+        },
         { status: 500 }
       );
     }
@@ -130,7 +135,8 @@ export async function GET() {
       link_id: s.link_id,
       issueTitle: issueTitleMap.get(s.issue_id) ?? null,
       linkLabel: linkMap.get(s.link_id)?.label ?? null,
-      scanned_at: s.scanned_at ?? s.created_at ?? null,
+      scanned_at: s.scanned_at ?? null,
+      user_agent: s.user_agent ?? null,
     }));
 
     const totalScans = scansList.length;

@@ -20,7 +20,16 @@ type RecentScan = {
   issueTitle: string | null;
   linkLabel: string | null;
   scanned_at: string | null;
+  user_agent: string | null;
 };
+
+function deviceLabel(ua: string | null): string {
+  if (!ua) return "—";
+  const s = ua.toLowerCase();
+  if (s.includes("mobile") || s.includes("android") || s.includes("iphone")) return "Mobile";
+  if (s.includes("tablet") || s.includes("ipad")) return "Tablet";
+  return "Desktop";
+}
 
 type AnalyticsData = {
   totalScans: number;
@@ -34,6 +43,27 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function fetchAnalytics() {
+    try {
+      setRefreshing(true);
+      const res = await fetch("/api/analytics");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error || "Failed to load analytics");
+        return;
+      }
+      setError(null);
+      const json = await res.json();
+      setData(json);
+    } catch (e) {
+      setError("Something went wrong");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -41,25 +71,6 @@ export default function AnalyticsPage() {
       router.push("/sign-in");
       return;
     }
-
-    async function fetchAnalytics() {
-      try {
-        const res = await fetch("/api/analytics");
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          setError(err.error || "Failed to load analytics");
-          setLoading(false);
-          return;
-        }
-        const json = await res.json();
-        setData(json);
-      } catch (e) {
-        setError("Something went wrong");
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchAnalytics();
   }, [isLoaded, user, router]);
 
@@ -93,11 +104,21 @@ export default function AnalyticsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Analytics</h1>
-        <p className="text-gray-600">
-          QR scan activity for your zines. Scans are recorded when someone scans a QR code on your issue page and are redirected to the link.
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Analytics</h1>
+          <p className="text-gray-600">
+            Scan activity for your zines. Each scan is recorded when someone hits a QR redirect (from your issue page, a printed QR, or anywhere).
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => fetchAnalytics()}
+          disabled={refreshing}
+          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
       </div>
 
       {/* Summary cards */}
@@ -183,6 +204,7 @@ export default function AnalyticsPage() {
                     <th className="px-4 py-3 text-sm font-semibold text-gray-700">Issue</th>
                     <th className="px-4 py-3 text-sm font-semibold text-gray-700">Link</th>
                     <th className="px-4 py-3 text-sm font-semibold text-gray-700">When</th>
+                    <th className="px-4 py-3 text-sm font-semibold text-gray-700">Device</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -195,6 +217,7 @@ export default function AnalyticsPage() {
                           ? new Date(s.scanned_at).toLocaleString()
                           : "—"}
                       </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{deviceLabel(s.user_agent)}</td>
                     </tr>
                   ))}
                 </tbody>

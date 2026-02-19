@@ -43,10 +43,11 @@ export async function GET(
   const ip =
     (req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim() || null;
 
-  // 1️⃣ Log to Supabase (scanned_at if column exists; otherwise created_at is used)
+  // 1️⃣ Log to Supabase (qr_scans: issue_id, link_id, scanned_at, user_agent, ip_address, referer)
   await supabase.from("qr_scans").insert({
     issue_id: link.issue_id,
     link_id: link.id,
+    scanned_at: new Date().toISOString(),
     user_agent: ua,
     ip_address: ip,
     referer,
