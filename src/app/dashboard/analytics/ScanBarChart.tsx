@@ -9,24 +9,20 @@ function formatDateLabel(dateStr: string): string {
   return `${month}/${day}`;
 }
 
-function toDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-/** Build last 7 days (oldest to newest) so today is on the far right */
+/** Build last 7 days (oldest to newest) so today is on the far right. Use UTC dates to match API (server uses UTC from scanned_at). */
 function getWeeklyPoints(data: Point[]): Point[] {
   const dataByDate = new Map<string, number>();
-  data.forEach((p) => dataByDate.set(p.date, p.count));
+  data.forEach((p) => {
+    const key = typeof p.date === "string" ? p.date.slice(0, 10) : "";
+    if (key.length === 10) dataByDate.set(key, p.count);
+  });
   const out: Point[] = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   for (let i = -6; i <= 0; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    const key = toDateKey(d);
+    const d = new Date(todayUTC);
+    d.setUTCDate(d.getUTCDate() + i);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
     out.push({ date: key, count: dataByDate.get(key) ?? 0 });
   }
   return out;
@@ -44,8 +40,6 @@ interface ScanBarChartProps {
 
 export function ScanBarChart({ data, title, height = 120, totalScans, weekly = true }: ScanBarChartProps) {
   const display = weekly ? getWeeklyPoints(data) : data.length ? data.slice(-7) : [];
-  const maxCount = Math.max(0, ...display.map((p) => p.count));
-  const max = maxCount >= 1 ? maxCount : 1;
 
   if (display.length === 0 && !weekly) {
     return (
@@ -56,7 +50,8 @@ export function ScanBarChart({ data, title, height = 120, totalScans, weekly = t
     );
   }
 
-  const barAreaHeight = Math.max(64, height - 36);
+  const PX_PER_VISIT = 14;
+  const MAX_BAR_HEIGHT = 84;
   return (
     <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800 p-3 shadow-sm">
       <div className="flex items-baseline justify-between gap-2 mb-2">
@@ -67,17 +62,17 @@ export function ScanBarChart({ data, title, height = 120, totalScans, weekly = t
           </span>
         )}
       </div>
-      <div className="flex items-end justify-between gap-0.5" style={{ minHeight: barAreaHeight + 20 }}>
+      <div className="flex items-end justify-between gap-1" style={{ minHeight: MAX_BAR_HEIGHT + 24 }}>
         {display.map((p) => {
-          const barHeight = p.count === 0 ? 0 : Math.max(10, Math.round((p.count / max) * barAreaHeight));
+          const barHeight = p.count === 0 ? 0 : Math.min(p.count * PX_PER_VISIT, MAX_BAR_HEIGHT);
           return (
-            <div key={p.date} className="flex-1 min-w-0 max-w-[28px] flex flex-col items-center justify-end gap-0.5">
+            <div key={p.date} className="flex-1 min-w-0 max-w-[32px] flex flex-col items-center justify-end gap-0.5">
               <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 min-h-[14px] flex items-center justify-center">
                 {p.count > 0 ? p.count : ""}
               </span>
               <div
-                className="w-full max-w-[20px] bg-blue-500 dark:bg-blue-400 rounded-t rounded-b-sm flex-shrink-0"
-                style={{ height: barHeight, minHeight: barHeight }}
+                className="w-full max-w-[22px] bg-blue-500 dark:bg-blue-400 rounded-t rounded-b-sm flex-shrink-0"
+                style={{ height: barHeight }}
                 title={`${formatDateLabel(p.date)}: ${p.count} visit${p.count !== 1 ? "s" : ""}`}
               />
               <span className="text-[9px] text-slate-500 dark:text-slate-400 truncate w-full text-center leading-tight">
@@ -87,7 +82,6 @@ export function ScanBarChart({ data, title, height = 120, totalScans, weekly = t
           );
         })}
       </div>
-      <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 text-right">0 – {max} visits</div>
     </div>
   );
 }
