@@ -37,14 +37,6 @@ function lastScannedAt(recentScans: RecentScan[], issueId: string, linkId: strin
   return scan?.scanned_at ?? null;
 }
 
-function scanTierDots(scans: number): number {
-  if (scans === 0) return 0;
-  if (scans <= 3) return 1;
-  if (scans <= 10) return 2;
-  if (scans <= 25) return 3;
-  return 4;
-}
-
 function timeAgo(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -54,6 +46,15 @@ function timeAgo(iso: string): string {
   if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
   if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
   return d.toLocaleDateString();
+}
+
+/** When column: 2/16/26, 7:18:... — date first, mobile-friendly */
+function formatWhen(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: "—", time: "" };
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("en-US", { month: "numeric", day: "2-digit", year: "2-digit" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+  return { date, time };
 }
 
 type AnalyticsData = {
@@ -186,13 +187,13 @@ export default function AnalyticsPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-400 text-5xl">📄</div>
+                    <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">No cover</div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
                     <h3 className="font-bold text-lg drop-shadow">{issue.title || "Untitled"}</h3>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-semibold text-black mt-1">
-                      📊 {issue.totalScans} scan{issue.totalScans !== 1 ? "s" : ""}
+                    <span className="inline-flex items-center rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-semibold text-black mt-1">
+                      {issue.totalScans} scan{issue.totalScans !== 1 ? "s" : ""}
                     </span>
                   </div>
                 </div>
@@ -212,29 +213,17 @@ export default function AnalyticsPage() {
                     <ul className="space-y-3">
                       {issue.links.map((l) => {
                         const lastAt = lastScannedAt(recentScans, issue.id, l.linkId);
-                        const dots = scanTierDots(l.scans);
                         const host = l.url ? (() => { try { return new URL(l.url!).hostname; } catch { return l.url; } })() : "—";
                         return (
                           <li key={l.linkId} className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                            <div className="flex items-start gap-2">
-                              <div className="flex gap-0.5 mt-0.5">
-                                {[1, 2, 3, 4].map((i) => (
-                                  <span
-                                    key={i}
-                                    className={`w-1.5 h-1.5 rounded-full ${i <= dots ? "bg-amber-500" : "bg-slate-300"}`}
-                                    aria-hidden
-                                  />
-                                ))}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="font-semibold text-black truncate">{l.label || "Link"}</div>
-                                <a href={l.url ?? "#"} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-700 hover:underline truncate block">
-                                  {host}
-                                </a>
-                                <div className="text-xs text-slate-500 mt-1">
-                                  {l.scans} scan{l.scans !== 1 ? "s" : ""}
-                                  {lastAt ? ` · Last ${timeAgo(lastAt)}` : ""}
-                                </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-black truncate">{l.label || "Link"}</div>
+                              <a href={l.url ?? "#"} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-700 hover:underline truncate block">
+                                {host}
+                              </a>
+                              <div className="text-xs text-slate-500 mt-1">
+                                {l.scans} scan{l.scans !== 1 ? "s" : ""}
+                                {lastAt ? ` · Last ${timeAgo(lastAt)}` : ""}
                               </div>
                             </div>
                           </li>
@@ -249,7 +238,7 @@ export default function AnalyticsPage() {
         )}
       </section>
 
-      {/* Recent scans */}
+      {/* Recent scans — mini zine cards */}
       <section>
         <h2 className="text-xl font-semibold text-black mb-3">Recent scans</h2>
         {recentScans.length === 0 ? (
@@ -257,31 +246,42 @@ export default function AnalyticsPage() {
             Scans will appear here when someone uses a QR code from your zines.
           </div>
         ) : (
-          <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden">
-            <div className="overflow-x-auto max-h-64 overflow-y-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-2.5 font-semibold text-black">Zine</th>
-                    <th className="px-4 py-2.5 font-semibold text-black">Link</th>
-                    <th className="px-4 py-2.5 font-semibold text-black">When</th>
-                    <th className="px-4 py-2.5 font-semibold text-black">Device</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentScans.map((s) => (
-                    <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-4 py-2 text-black">{s.issueTitle ?? "—"}</td>
-                      <td className="px-4 py-2 text-black">{s.linkLabel ?? "—"}</td>
-                      <td className="px-4 py-2 text-slate-600">
-                        {s.scanned_at ? timeAgo(s.scanned_at) : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-slate-600">{deviceLabel(s.user_agent)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {recentScans.map((s) => {
+              const issue = issues.find((i) => i.id === s.issue_id);
+              const cover = issue?.cover_img_url ?? null;
+              const { date, time } = formatWhen(s.scanned_at);
+              return (
+                <div
+                  key={s.id}
+                  className="rounded-xl border-2 border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition"
+                >
+                  <div className="aspect-[3/4] bg-slate-200 relative">
+                    {cover ? (
+                      <img
+                        src={cover}
+                        alt={s.issueTitle ?? "Zine"}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">No cover</div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-2 text-white">
+                      <div className="font-semibold text-sm truncate drop-shadow">{s.issueTitle ?? "—"}</div>
+                      <div className="text-xs opacity-90 truncate">{s.linkLabel ?? "—"}</div>
+                    </div>
+                  </div>
+                  <div className="p-2 text-center">
+                    <div className="text-xs font-medium text-black">
+                      <span className="block">{date}</span>
+                      {time && <span className="block text-slate-600 mt-0.5">{time}</span>}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">{deviceLabel(s.user_agent)}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
