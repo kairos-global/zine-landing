@@ -4,9 +4,9 @@ type Point = { date: string; count: number };
 
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00");
-  const mon = d.toLocaleDateString("en-US", { month: "short" });
+  const month = d.getMonth() + 1;
   const day = d.getDate();
-  return `${mon}-${day}`;
+  return `${month}/${day}`;
 }
 
 function toDateKey(d: Date): string {
