@@ -164,7 +164,7 @@ function IssueCard({
   return (
     <div className="group rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
       {/* Cover Image */}
-      <div className="relative aspect-[3/4] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+      <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
         {issue.cover_img_url ? (
           <img
             src={issue.cover_img_url}
@@ -194,12 +194,12 @@ function IssueCard({
       {/* Content */}
       <div className="p-4 flex flex-col flex-1">
         {/* Title */}
-        <h3 className="font-bold text-lg mb-2 line-clamp-2 flex-1">
+        <h3 className="font-bold text-lg mb-2 line-clamp-2 flex-1 text-gray-900">
           {issue.title || "(Untitled)"}
         </h3>
 
         {/* Date */}
-        <p className="text-xs text-gray-500 mb-4">
+        <p className="text-xs text-gray-700 mb-4">
           {isSaved
             ? `Saved ${new Date(issue.created_at!).toLocaleDateString()}`
             : `Published ${new Date(issue.published_at!).toLocaleDateString()}`}
