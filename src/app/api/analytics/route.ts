@@ -26,6 +26,7 @@ export type QrCodeAnalytics = {
   linkId: string;
   label: string | null;
   url: string | null;
+  qr_path: string | null;
   issueId: string;
   issueTitle: string | null;
   issueSlug: string | null;
@@ -89,15 +90,15 @@ export async function GET() {
     // 3) Links for these issues (for labels)
     const { data: links, error: linksError } = await supabase
       .from("issue_links")
-      .select("id, issue_id, label, url")
+      .select("id, issue_id, label, url, qr_path")
       .in("issue_id", issueIds);
 
     if (linksError) {
       console.error("[Analytics] Links error:", linksError);
     }
 
-    const linkMap = new Map<string, { issue_id: string; label: string | null; url: string | null }>();
-    (links ?? []).forEach((l) => linkMap.set(l.id, { issue_id: l.issue_id, label: l.label, url: l.url ?? null }));
+    const linkMap = new Map<string, { issue_id: string; label: string | null; url: string | null; qr_path: string | null }>();
+    (links ?? []).forEach((l) => linkMap.set(l.id, { issue_id: l.issue_id, label: l.label, url: l.url ?? null, qr_path: l.qr_path ?? null }));
     const issueTitleMap = new Map<string, string | null>();
     (issues ?? []).forEach((i) => issueTitleMap.set(i.id, i.title));
 
@@ -157,6 +158,7 @@ export async function GET() {
       linkId: l.id,
       label: l.label ?? null,
       url: l.url ?? null,
+      qr_path: l.qr_path ?? null,
       issueId: l.issue_id,
       issueTitle: issueTitleMap.get(l.issue_id) ?? null,
       issueSlug: (issues ?? []).find((i) => i.id === l.issue_id)?.slug ?? null,

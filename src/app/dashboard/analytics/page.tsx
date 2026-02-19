@@ -22,6 +22,7 @@ type QrCodeAnalytics = {
   linkId: string;
   label: string | null;
   url: string | null;
+  qr_path: string | null;
   issueId: string;
   issueTitle: string | null;
   issueSlug: string | null;
@@ -149,24 +150,35 @@ export default function AnalyticsPage() {
             {issues.map((issue) => (
               <div
                 key={issue.id}
-                className="flex-shrink-0 w-[min(100%,340px)] snap-center rounded-2xl border-2 border-amber-200/80 bg-white shadow-lg overflow-hidden"
+                className="flex-shrink-0 w-[min(100%,420px)] snap-center rounded-2xl border-2 border-amber-200/80 bg-white shadow-lg overflow-hidden"
               >
-                <div className="relative aspect-[3/4] max-h-48 bg-gradient-to-b from-slate-100 to-slate-200">
-                  {issue.cover_img_url ? (
-                    <img
-                      src={issue.cover_img_url}
-                      alt={issue.title || "Zine cover"}
-                      className="w-full h-full object-cover"
+                {/* Cover and chart side by side */}
+                <div className="flex gap-0 overflow-hidden">
+                  <div className="relative w-[45%] min-h-[180px] bg-gradient-to-b from-slate-100 to-slate-200 rounded-tl-2xl overflow-hidden">
+                    {issue.cover_img_url ? (
+                      <img
+                        src={issue.cover_img_url}
+                        alt={issue.title || "Zine cover"}
+                        className="w-full h-full min-h-[180px] object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full min-h-[180px] flex items-center justify-center text-slate-400 text-sm">No cover</div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-2 text-white">
+                      <h3 className="font-bold text-base drop-shadow">{issue.title || "Untitled"}</h3>
+                      <span className="inline-flex items-center rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-semibold text-black mt-1">
+                        {issue.totalScans} scan{issue.totalScans !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0 p-2 flex flex-col justify-center rounded-tr-2xl bg-slate-50/50">
+                    <ScanBarChart
+                      data={issue.scanCountByDay ?? []}
+                      title="Total QR visits"
+                      height={120}
+                      maxBars={10}
                     />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">No cover</div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
-                    <h3 className="font-bold text-lg drop-shadow">{issue.title || "Untitled"}</h3>
-                    <span className="inline-flex items-center rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-semibold text-black mt-1">
-                      {issue.totalScans} scan{issue.totalScans !== 1 ? "s" : ""}
-                    </span>
                   </div>
                 </div>
                 <div className="p-4">
@@ -178,12 +190,25 @@ export default function AnalyticsPage() {
                       View issue
                     </Link>
                   )}
-                  <ScanBarChart
-                    data={issue.scanCountByDay ?? []}
-                    title="Total QR visits"
-                    height={140}
-                    maxBars={14}
-                  />
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">QR codes & links</div>
+                  {issue.links.length === 0 ? (
+                    <p className="text-sm text-slate-500">No QR links yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {issue.links.map((l) => {
+                        const host = l.url ? (() => { try { return new URL(l.url!).hostname; } catch { return l.url; } })() : "—";
+                        return (
+                          <li key={l.linkId} className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
+                            <div className="font-semibold text-black truncate">{l.label || "Link"}</div>
+                            <a href={l.url ?? "#"} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-500 hover:text-orange-600 hover:underline truncate block">
+                              {host}
+                            </a>
+                            <div className="text-xs text-slate-500 mt-0.5">{l.scans} scan{l.scans !== 1 ? "s" : ""}</div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               </div>
             ))}
@@ -206,36 +231,52 @@ export default function AnalyticsPage() {
               return (
                 <div
                   key={qr.linkId}
-                  className="rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition"
+                  className="rounded-2xl border-2 border-slate-200 bg-white shadow-sm hover:shadow-md transition overflow-hidden"
                 >
-                  <div className="font-semibold text-black truncate">{qr.label || "Link"}</div>
-                  <a
-                    href={qr.url ?? "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-amber-700 hover:underline truncate block"
-                  >
-                    {host}
-                  </a>
-                  <div className="text-xs text-slate-500 mt-1">
-                    From zine: {qr.issueSlug ? (
-                      <Link href={`/issues/${qr.issueSlug}`} className="text-amber-700 hover:underline">
-                        {qr.issueTitle ?? qr.issueSlug}
-                      </Link>
-                    ) : (
-                      qr.issueTitle ?? "—"
-                    )}
+                  {/* QR PNG and chart side by side (same layout as Your Zines) */}
+                  <div className="flex gap-0">
+                    <div className="w-[45%] min-h-[140px] bg-slate-100 flex items-center justify-center rounded-tl-2xl overflow-hidden p-2">
+                      {qr.qr_path ? (
+                        <img
+                          src={qr.qr_path}
+                          alt={qr.label || "QR code"}
+                          className="max-w-full max-h-[130px] w-auto h-auto object-contain rounded-lg"
+                        />
+                      ) : (
+                        <div className="text-slate-400 text-xs text-center">No QR image</div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 p-2 flex flex-col justify-center rounded-tr-2xl bg-slate-50/50">
+                      <ScanBarChart
+                        data={qr.scanCountByDay ?? []}
+                        title="Visits over time"
+                        height={100}
+                        maxBars={8}
+                      />
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {qr.scans} total visit{qr.scans !== 1 ? "s" : ""}
-                  </div>
-                  <div className="mt-3">
-                    <ScanBarChart
-                      data={qr.scanCountByDay ?? []}
-                      title="Visits over time"
-                      height={100}
-                      maxBars={10}
-                    />
+                  <div className="p-4">
+                    <div className="font-semibold text-black truncate">{qr.label || "Link"}</div>
+                    <a
+                      href={qr.url ?? "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-orange-500 hover:text-orange-600 hover:underline truncate block"
+                    >
+                      {host}
+                    </a>
+                    <div className="text-xs text-slate-500 mt-1">
+                      From zine: {qr.issueSlug ? (
+                        <Link href={`/issues/${qr.issueSlug}`} className="text-orange-500 hover:text-orange-600 hover:underline">
+                          {qr.issueTitle ?? qr.issueSlug}
+                        </Link>
+                      ) : (
+                        qr.issueTitle ?? "—"
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {qr.scans} total visit{qr.scans !== 1 ? "s" : ""}
+                    </div>
                   </div>
                 </div>
               );
