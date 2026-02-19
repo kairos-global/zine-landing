@@ -14,8 +14,9 @@ export type AnalyticsIssue = {
   id: string;
   title: string | null;
   slug: string | null;
+  cover_img_url: string | null;
   totalScans: number;
-  links: { linkId: string; label: string | null; scans: number }[];
+  links: { linkId: string; label: string | null; url: string | null; scans: number }[];
 };
 
 export type RecentScan = {
@@ -40,7 +41,7 @@ export async function GET() {
     // 1) User's issues
     const { data: issues, error: issuesError } = await supabase
       .from("issues")
-      .select("id, title, slug")
+      .select("id, title, slug, cover_img_url")
       .eq("profile_id", profileId);
 
     if (issuesError) {
@@ -84,15 +85,15 @@ export async function GET() {
     // 3) Links for these issues (for labels)
     const { data: links, error: linksError } = await supabase
       .from("issue_links")
-      .select("id, issue_id, label")
+      .select("id, issue_id, label, url")
       .in("issue_id", issueIds);
 
     if (linksError) {
       console.error("[Analytics] Links error:", linksError);
     }
 
-    const linkMap = new Map<string, { issue_id: string; label: string | null }>();
-    (links ?? []).forEach((l) => linkMap.set(l.id, { issue_id: l.issue_id, label: l.label }));
+    const linkMap = new Map<string, { issue_id: string; label: string | null; url: string | null }>();
+    (links ?? []).forEach((l) => linkMap.set(l.id, { issue_id: l.issue_id, label: l.label, url: l.url ?? null }));
     const issueTitleMap = new Map<string, string | null>();
     (issues ?? []).forEach((i) => issueTitleMap.set(i.id, i.title));
 
@@ -116,6 +117,7 @@ export async function GET() {
         ? Array.from(linkIds).map((linkId) => ({
             linkId,
             label: linkMap.get(linkId)?.label ?? null,
+            url: linkMap.get(linkId)?.url ?? null,
             scans: scanCountByLink.get(linkId) ?? 0,
           }))
         : [];
@@ -124,6 +126,7 @@ export async function GET() {
         id: issue.id,
         title: issue.title,
         slug: issue.slug,
+        cover_img_url: issue.cover_img_url ?? null,
         totalScans,
         links: linkList,
       };

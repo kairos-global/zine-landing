@@ -9,8 +9,9 @@ type AnalyticsIssue = {
   id: string;
   title: string | null;
   slug: string | null;
+  cover_img_url: string | null;
   totalScans: number;
-  links: { linkId: string; label: string | null; scans: number }[];
+  links: { linkId: string; label: string | null; url: string | null; scans: number }[];
 };
 
 type RecentScan = {
@@ -29,6 +30,30 @@ function deviceLabel(ua: string | null): string {
   if (s.includes("mobile") || s.includes("android") || s.includes("iphone")) return "Mobile";
   if (s.includes("tablet") || s.includes("ipad")) return "Tablet";
   return "Desktop";
+}
+
+function lastScannedAt(recentScans: RecentScan[], issueId: string, linkId: string): string | null {
+  const scan = recentScans.find((s) => s.issue_id === issueId && s.link_id === linkId);
+  return scan?.scanned_at ?? null;
+}
+
+function scanTierDots(scans: number): number {
+  if (scans === 0) return 0;
+  if (scans <= 3) return 1;
+  if (scans <= 10) return 2;
+  if (scans <= 25) return 3;
+  return 4;
+}
+
+function timeAgo(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (sec < 60) return "just now";
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
+  return d.toLocaleDateString();
 }
 
 type AnalyticsData = {
@@ -135,53 +160,89 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* By issue */}
+      {/* Pokedex: swipable zine issue cards */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold mb-4">By issue</h2>
+        <h2 className="text-xl font-semibold text-black mb-3">Your zines</h2>
+        <p className="text-gray-600 text-sm mb-4">Swipe or scroll to see each zine and its QR codes.</p>
         {issues.length === 0 ? (
-          <div className="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center text-gray-600">
-            <p>You don’t have any issues yet. Create a zine in ZineMat and add links with QR codes to start seeing scan data here.</p>
-            <Link href="/zinemat" className="inline-block mt-4 text-blue-600 hover:underline font-medium">
+          <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 p-8 text-center text-gray-700">
+            <p>No zines yet. Create one in ZineMat and add links with QR codes to see them here.</p>
+            <Link href="/zinemat" className="inline-block mt-4 text-amber-700 hover:underline font-medium">
               Go to ZineMat
             </Link>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="overflow-x-auto snap-x snap-mandatory flex gap-4 pb-2 -mx-1">
             {issues.map((issue) => (
               <div
                 key={issue.id}
-                className="rounded-xl border-2 border-gray-200 bg-white overflow-hidden"
+                className="flex-shrink-0 w-[min(100%,340px)] snap-center rounded-2xl border-2 border-amber-200/80 bg-white shadow-lg overflow-hidden"
               >
-                <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-gray-100">
-                  <div>
-                    <h3 className="font-semibold text-lg">{issue.title || "(Untitled)"}</h3>
-                    {issue.slug && (
-                      <Link
-                        href={`/issues/${issue.slug}`}
-                        className="text-sm text-blue-600 hover:underline"
-                      >
-                        View issue →
-                      </Link>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-bold text-gray-900">{issue.totalScans}</span>
-                    <span className="text-sm text-gray-500 ml-1">scan{issue.totalScans !== 1 ? "s" : ""}</span>
+                <div className="relative aspect-[3/4] max-h-48 bg-gradient-to-b from-slate-100 to-slate-200">
+                  {issue.cover_img_url ? (
+                    <img
+                      src={issue.cover_img_url}
+                      alt={issue.title || "Zine cover"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-400 text-5xl">📄</div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
+                    <h3 className="font-bold text-lg drop-shadow">{issue.title || "Untitled"}</h3>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-semibold text-black mt-1">
+                      📊 {issue.totalScans} scan{issue.totalScans !== 1 ? "s" : ""}
+                    </span>
                   </div>
                 </div>
-                {issue.links.length > 0 && (
-                  <div className="p-4 pt-0">
-                    <div className="text-sm font-medium text-gray-500 mb-2">By link</div>
-                    <ul className="space-y-1">
-                      {issue.links.map((l) => (
-                        <li key={l.linkId} className="flex justify-between text-sm">
-                          <span>{l.label || "(no label)"}</span>
-                          <span className="font-medium">{l.scans} scan{l.scans !== 1 ? "s" : ""}</span>
-                        </li>
-                      ))}
+                <div className="p-4">
+                  {issue.slug && (
+                    <Link
+                      href={`/issues/${issue.slug}`}
+                      className="block w-full text-center rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-semibold py-2.5 text-sm mb-4 transition"
+                    >
+                      View issue
+                    </Link>
+                  )}
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">QR codes & links</div>
+                  {issue.links.length === 0 ? (
+                    <p className="text-sm text-slate-500">No QR links yet.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {issue.links.map((l) => {
+                        const lastAt = lastScannedAt(recentScans, issue.id, l.linkId);
+                        const dots = scanTierDots(l.scans);
+                        const host = l.url ? (() => { try { return new URL(l.url!).hostname; } catch { return l.url; } })() : "—";
+                        return (
+                          <li key={l.linkId} className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                            <div className="flex items-start gap-2">
+                              <div className="flex gap-0.5 mt-0.5">
+                                {[1, 2, 3, 4].map((i) => (
+                                  <span
+                                    key={i}
+                                    className={`w-1.5 h-1.5 rounded-full ${i <= dots ? "bg-amber-500" : "bg-slate-300"}`}
+                                    aria-hidden
+                                  />
+                                ))}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-black truncate">{l.label || "Link"}</div>
+                                <a href={l.url ?? "#"} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-700 hover:underline truncate block">
+                                  {host}
+                                </a>
+                                <div className="text-xs text-slate-500 mt-1">
+                                  {l.scans} scan{l.scans !== 1 ? "s" : ""}
+                                  {lastAt ? ` · Last ${timeAgo(lastAt)}` : ""}
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -190,34 +251,32 @@ export default function AnalyticsPage() {
 
       {/* Recent scans */}
       <section>
-        <h2 className="text-xl font-semibold mb-4">Recent scans</h2>
+        <h2 className="text-xl font-semibold text-black mb-3">Recent scans</h2>
         {recentScans.length === 0 ? (
-          <div className="rounded-xl border-2 border-gray-200 bg-white p-6 text-gray-500 text-center">
-            No scans yet. When someone scans a QR code on your published issue page, it will show up here.
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-6 text-slate-500 text-center text-sm">
+            Scans will appear here when someone uses a QR code from your zines.
           </div>
         ) : (
-          <div className="rounded-xl border-2 border-gray-200 bg-white overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 text-sm font-semibold text-gray-700">Issue</th>
-                    <th className="px-4 py-3 text-sm font-semibold text-gray-700">Link</th>
-                    <th className="px-4 py-3 text-sm font-semibold text-gray-700">When</th>
-                    <th className="px-4 py-3 text-sm font-semibold text-gray-700">Device</th>
+          <div className="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden">
+            <div className="overflow-x-auto max-h-64 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2.5 font-semibold text-black">Zine</th>
+                    <th className="px-4 py-2.5 font-semibold text-black">Link</th>
+                    <th className="px-4 py-2.5 font-semibold text-black">When</th>
+                    <th className="px-4 py-2.5 font-semibold text-black">Device</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentScans.map((s) => (
-                    <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm">{s.issueTitle ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm">{s.linkLabel ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {s.scanned_at
-                          ? new Date(s.scanned_at).toLocaleString()
-                          : "—"}
+                    <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-2 text-black">{s.issueTitle ?? "—"}</td>
+                      <td className="px-4 py-2 text-black">{s.linkLabel ?? "—"}</td>
+                      <td className="px-4 py-2 text-slate-600">
+                        {s.scanned_at ? timeAgo(s.scanned_at) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{deviceLabel(s.user_agent)}</td>
+                      <td className="px-4 py-2 text-slate-600">{deviceLabel(s.user_agent)}</td>
                     </tr>
                   ))}
                 </tbody>
