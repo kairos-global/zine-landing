@@ -107,7 +107,7 @@ export default function AnalyticsPage() {
         <div>
           <h1 className="text-3xl font-bold mb-2">Analytics</h1>
           <p className="text-gray-600">
-            Scan activity for your zines. Each scan is recorded when someone hits a QR redirect (from your issue page, a printed QR, or anywhere).
+            QR Scan activity for your zines. Print zines, share your digital issue, or paste your QR's anywhere in the world, and track their scans here. 
           </p>
         </div>
         <button
@@ -140,7 +140,7 @@ export default function AnalyticsPage() {
         <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">Swipe or scroll to see each zine and its total scan traffic.</p>
         {issues.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 p-8 text-center text-gray-700">
-            <p>No zines yet. Create one in ZineMat and add links with QR codes to see them here.</p>
+            <p>No zines yet. Create one in the ZineMat and add links with QR codes to see them here.</p>
             <Link href="/zinemat" className="inline-block mt-4 text-amber-700 hover:underline font-medium">
               Go to ZineMat
             </Link>
@@ -222,7 +222,7 @@ export default function AnalyticsPage() {
         <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">Each QR has its own scan history. Link, originating zine, and visits over time.</p>
         {qrCodes.length === 0 ? (
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-6 text-slate-500 text-center text-sm">
-            Add links with QR codes in ZineMat to see them here.
+            Add links with QR codes in the ZineMat to see them here.
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
