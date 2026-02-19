@@ -36,13 +36,16 @@ interface ScanBarChartProps {
   data: Point[];
   title?: string;
   height?: number;
+  /** Total scans to show at top (e.g. zine total or QR total) */
+  totalScans?: number;
   /** If true, show last 7 days with today on the right (default true) */
   weekly?: boolean;
 }
 
-export function ScanBarChart({ data, title, height = 120, weekly = true }: ScanBarChartProps) {
+export function ScanBarChart({ data, title, height = 120, totalScans, weekly = true }: ScanBarChartProps) {
   const display = weekly ? getWeeklyPoints(data) : data.length ? data.slice(-7) : [];
-  const max = Math.max(1, ...display.map((p) => p.count));
+  const maxCount = Math.max(0, ...display.map((p) => p.count));
+  const max = maxCount >= 1 ? maxCount : 1;
 
   if (display.length === 0 && !weekly) {
     return (
@@ -53,18 +56,28 @@ export function ScanBarChart({ data, title, height = 120, weekly = true }: ScanB
     );
   }
 
-  const barAreaHeight = Math.max(60, height - 28);
+  const barAreaHeight = Math.max(64, height - 36);
   return (
     <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800 p-3 shadow-sm">
-      {title && <div className="text-xs font-semibold text-black dark:text-white mb-2">{title}</div>}
-      <div className="flex items-end justify-between gap-0.5" style={{ minHeight: barAreaHeight + 16 }}>
+      <div className="flex items-baseline justify-between gap-2 mb-2">
+        {title && <div className="text-xs font-semibold text-black dark:text-white">{title}</div>}
+        {totalScans !== undefined && (
+          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+            {totalScans} visit{totalScans !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+      <div className="flex items-end justify-between gap-0.5" style={{ minHeight: barAreaHeight + 20 }}>
         {display.map((p) => {
-          const barHeight = max > 0 ? Math.max(4, Math.round((p.count / max) * barAreaHeight)) : 4;
+          const barHeight = p.count === 0 ? 0 : Math.max(10, Math.round((p.count / max) * barAreaHeight));
           return (
             <div key={p.date} className="flex-1 min-w-0 max-w-[28px] flex flex-col items-center justify-end gap-0.5">
+              <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 min-h-[14px] flex items-center justify-center">
+                {p.count > 0 ? p.count : ""}
+              </span>
               <div
                 className="w-full max-w-[20px] bg-blue-500 dark:bg-blue-400 rounded-t rounded-b-sm flex-shrink-0"
-                style={{ height: barHeight, minHeight: 4 }}
+                style={{ height: barHeight, minHeight: barHeight }}
                 title={`${formatDateLabel(p.date)}: ${p.count} visit${p.count !== 1 ? "s" : ""}`}
               />
               <span className="text-[9px] text-slate-500 dark:text-slate-400 truncate w-full text-center leading-tight">

@@ -177,6 +177,7 @@ export default function AnalyticsPage() {
                       data={issue.scanCountByDay ?? []}
                       title="Total QR visits"
                       height={120}
+                      totalScans={issue.totalScans}
                     />
                   </div>
                 </div>
@@ -250,6 +251,7 @@ export default function AnalyticsPage() {
                         data={qr.scanCountByDay ?? []}
                         title="Visits over time"
                         height={100}
+                        totalScans={qr.scans}
                       />
                     </div>
                   </div>
