@@ -100,7 +100,7 @@ export default function AnalyticsPage() {
   const issues = data?.issues ?? [];
   const recentScans = data?.recentScans ?? [];
   const totalScans = data?.totalScans ?? 0;
-  const issuesWithScans = issues.filter((i) => i.totalScans > 0);
+  const zinesWithQRCodes = issues.filter((i) => i.links.length > 0);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -123,15 +123,15 @@ export default function AnalyticsPage() {
 
       {/* Summary cards */}
       <div className="grid sm:grid-cols-2 gap-4 mb-10">
-        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-          <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total scans</div>
-          <div className="text-3xl font-bold mt-1">{totalScans}</div>
-          <p className="text-sm text-gray-500 mt-1">Across all your issues and links</p>
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6 text-gray-900">
+          <div className="text-sm font-medium text-gray-700 uppercase tracking-wide">Total QR Scans</div>
+          <div className="text-3xl font-bold mt-1 text-black">{totalScans}</div>
+          <p className="text-sm text-gray-600 mt-1">Across all your zines and links</p>
         </div>
-        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-          <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Issues with scans</div>
-          <div className="text-3xl font-bold mt-1">{issuesWithScans.length}</div>
-          <p className="text-sm text-gray-500 mt-1">Of {issues.length} issue{issues.length !== 1 ? "s" : ""} with QR links</p>
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6 text-gray-900">
+          <div className="text-sm font-medium text-gray-700 uppercase tracking-wide">Zines with QR Codes</div>
+          <div className="text-3xl font-bold mt-1 text-black">{zinesWithQRCodes.length}</div>
+          <p className="text-sm text-gray-600 mt-1">Of {issues.length} zine{issues.length !== 1 ? "s" : ""} in your library</p>
         </div>
       </div>
 
