@@ -79,7 +79,7 @@ export default function DashboardPage() {
             Analytics
           </div>
           <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Coming soon
+            QR scan tracking by issue
           </div>
         </Link>
 

@@ -1,0 +1,150 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { auth } from "@clerk/nextjs/server";
+import { getOrCreateProfileId } from "@/lib/profile";
+
+export const dynamic = "force-dynamic";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export type AnalyticsIssue = {
+  id: string;
+  title: string | null;
+  slug: string | null;
+  totalScans: number;
+  links: { linkId: string; label: string | null; scans: number }[];
+};
+
+export type RecentScan = {
+  id: string;
+  issue_id: string;
+  link_id: string;
+  issueTitle: string | null;
+  linkLabel: string | null;
+  scanned_at: string | null;
+};
+
+export async function GET() {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const profileId = await getOrCreateProfileId(userId);
+
+    // 1) User's issues
+    const { data: issues, error: issuesError } = await supabase
+      .from("issues")
+      .select("id, title, slug")
+      .eq("profile_id", profileId);
+
+    if (issuesError) {
+      console.error("[Analytics] Issues error:", issuesError);
+      return NextResponse.json(
+        { error: "Failed to fetch issues", details: issuesError },
+        { status: 500 }
+      );
+    }
+
+    const issueIds = (issues ?? []).map((i) => i.id);
+    if (issueIds.length === 0) {
+      return NextResponse.json({
+        totalScans: 0,
+        issues: [],
+        recentScans: [],
+      });
+    }
+
+    // 2) All scans for these issues (use created_at for ordering in case scanned_at is missing)
+    const { data: scans, error: scansError } = await supabase
+      .from("qr_scans")
+      .select("id, issue_id, link_id, scanned_at, created_at")
+      .in("issue_id", issueIds)
+      .order("created_at", { ascending: false });
+
+    if (scansError) {
+      console.error("[Analytics] Scans error:", scansError);
+      return NextResponse.json(
+        { error: "Failed to fetch scans", details: scansError },
+        { status: 500 }
+      );
+    }
+
+    const scansList = scans ?? [];
+
+    // 3) Links for these issues (for labels)
+    const { data: links, error: linksError } = await supabase
+      .from("issue_links")
+      .select("id, issue_id, label")
+      .in("issue_id", issueIds);
+
+    if (linksError) {
+      console.error("[Analytics] Links error:", linksError);
+    }
+
+    const linkMap = new Map<string, { issue_id: string; label: string | null }>();
+    (links ?? []).forEach((l) => linkMap.set(l.id, { issue_id: l.issue_id, label: l.label }));
+    const issueTitleMap = new Map<string, string | null>();
+    (issues ?? []).forEach((i) => issueTitleMap.set(i.id, i.title));
+
+    // Aggregate by issue and by link
+    const scanCountByIssue = new Map<string, number>();
+    const scanCountByLink = new Map<string, number>();
+    scansList.forEach((s) => {
+      scanCountByIssue.set(s.issue_id, (scanCountByIssue.get(s.issue_id) ?? 0) + 1);
+      scanCountByLink.set(s.link_id, (scanCountByLink.get(s.link_id) ?? 0) + 1);
+    });
+
+    const issueLinkIds = new Map<string, Set<string>>();
+    (links ?? []).forEach((l) => {
+      if (!issueLinkIds.has(l.issue_id)) issueLinkIds.set(l.issue_id, new Set());
+      issueLinkIds.get(l.issue_id)!.add(l.id);
+    });
+
+    const analyticsIssues: AnalyticsIssue[] = (issues ?? []).map((issue) => {
+      const linkIds = issueLinkIds.get(issue.id);
+      const linkList = linkIds
+        ? Array.from(linkIds).map((linkId) => ({
+            linkId,
+            label: linkMap.get(linkId)?.label ?? null,
+            scans: scanCountByLink.get(linkId) ?? 0,
+          }))
+        : [];
+      const totalScans = scanCountByIssue.get(issue.id) ?? 0;
+      return {
+        id: issue.id,
+        title: issue.title,
+        slug: issue.slug,
+        totalScans,
+        links: linkList,
+      };
+    });
+
+    const recentScans: RecentScan[] = scansList.slice(0, 50).map((s) => ({
+      id: s.id,
+      issue_id: s.issue_id,
+      link_id: s.link_id,
+      issueTitle: issueTitleMap.get(s.issue_id) ?? null,
+      linkLabel: linkMap.get(s.link_id)?.label ?? null,
+      scanned_at: s.scanned_at ?? s.created_at ?? null,
+    }));
+
+    const totalScans = scansList.length;
+
+    return NextResponse.json({
+      totalScans,
+      issues: analyticsIssues,
+      recentScans,
+    });
+  } catch (error) {
+    console.error("[Analytics] Unexpected error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
