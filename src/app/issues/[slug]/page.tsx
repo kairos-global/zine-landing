@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { getSiteBaseUrl } from "@/lib/site-url";
+import { IssueQRCode } from "./IssueQRCode";
 
 // Use service role key for server-side rendering to bypass RLS
 const supabase = createClient(
@@ -24,15 +26,13 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
   }
 
   // 2) Fetch interactive links
-  const { data: links, error: linksError } = await supabase
+  const { data: links } = await supabase
     .from("issue_links")
     .select("id, label, url, qr_path, redirect_path")
     .eq("issue_id", issue.id);
 
-  console.log("📋 [Issue Page] Issue ID:", issue.id);
-  console.log("📋 [Issue Page] Links found:", links?.length || 0);
-  console.log("📋 [Issue Page] Links error:", linksError);
-  console.log("📋 [Issue Page] Links data:", links);
+  const baseUrl = getSiteBaseUrl();
+  const linksWithQR = (links ?? []).filter((l) => l.redirect_path);
 
   return (
     <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 md:grid-cols-[220px_1fr]">
@@ -100,30 +100,25 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
                 ))}
               </div>
 
-              {/* QR Codes */}
-              {links.some((l) => l.qr_path) && (
+              {/* QR Codes — rendered from full redirect URL so scans always hit this origin */}
+              {linksWithQR.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-sm font-semibold mb-3">QR Codes</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {links
-                      .filter((l) => l.qr_path)
-                      .map((l, index) => (
-                        <div
-                          key={l.id || l.url}
-                          className="bg-white rounded-lg border p-3 flex flex-col items-center"
-                        >
-                          <div className="text-xs font-medium mb-2 text-center">
-                            {l.label || `Link ${index + 1}`}
-                          </div>
-                          {l.qr_path && (
-                            <img
-                              src={l.qr_path}
-                              alt={`QR code for ${l.label || "link"}`}
-                              className="w-full aspect-square"
-                            />
-                          )}
+                    {linksWithQR.map((l, index) => (
+                      <div
+                        key={l.id || l.url}
+                        className="bg-white rounded-lg border p-3 flex flex-col items-center"
+                      >
+                        <div className="text-xs font-medium mb-2 text-center">
+                          {l.label || `Link ${index + 1}`}
                         </div>
-                      ))}
+                        <IssueQRCode
+                          fullRedirectUrl={`${baseUrl}${l.redirect_path}`}
+                          label={l.label || `Link ${index + 1}`}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { getOrCreateProfileId } from "@/lib/profile";
 import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
+import { getSiteBaseUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -186,7 +187,7 @@ export async function POST(req: Request) {
         let qr_path: string | null = null;
         if (link.generateQR !== false) {
           const qrPngBuffer = await QRCode.toBuffer(
-            `${process.env.NEXT_PUBLIC_SITE_URL}${redirect_path}`,
+            `${getSiteBaseUrl()}${redirect_path}`,
             { type: "png", width: 400 }
           );
 
