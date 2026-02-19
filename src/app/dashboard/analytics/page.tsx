@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import Image from "next/image";
 import { ScanBarChart } from "./ScanBarChart";
 
 type ScanCountByDay = { date: string; count: number }[];
@@ -56,7 +57,7 @@ export default function AnalyticsPage() {
       setError(null);
       const json = await res.json();
       setData(json);
-    } catch (e) {
+    } catch (_e) {
       setError("Something went wrong");
     } finally {
       setLoading(false);
@@ -107,7 +108,7 @@ export default function AnalyticsPage() {
         <div>
           <h1 className="text-3xl font-bold mb-2">Analytics</h1>
           <p className="text-gray-600">
-            QR Scan activity for your zines. Print zines, share your digital issue, or paste your QR's anywhere in the world, and track their scans here. 
+            QR Scan activity for your zines. Print zines, share your digital issue, or paste your QR&apos;s anywhere in the world, and track their scans here. 
           </p>
         </div>
         <button
@@ -156,10 +157,13 @@ export default function AnalyticsPage() {
                 <div className="flex gap-0 overflow-hidden">
                   <div className="relative w-[45%] min-h-[180px] bg-gradient-to-b from-slate-100 to-slate-200 rounded-tl-2xl overflow-hidden">
                     {issue.cover_img_url ? (
-                      <img
+                      <Image
                         src={issue.cover_img_url}
                         alt={issue.title || "Zine cover"}
-                        className="w-full h-full min-h-[180px] object-cover"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 45vw"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-full h-full min-h-[180px] flex items-center justify-center text-slate-400 text-sm">No cover</div>
@@ -235,12 +239,15 @@ export default function AnalyticsPage() {
                 >
                   {/* QR PNG and chart side by side (same layout as Your Zines) */}
                   <div className="flex gap-0">
-                    <div className="w-[45%] min-h-[140px] bg-slate-100 flex items-center justify-center rounded-tl-2xl overflow-hidden p-2">
+                    <div className="relative w-[45%] min-h-[140px] bg-slate-100 flex items-center justify-center rounded-tl-2xl overflow-hidden p-2">
                       {qr.qr_path ? (
-                        <img
+                        <Image
                           src={qr.qr_path}
                           alt={qr.label || "QR code"}
-                          className="max-w-full max-h-[130px] w-auto h-auto object-contain rounded-lg"
+                          fill
+                          className="object-contain rounded-lg"
+                          sizes="45vw"
+                          unoptimized
                         />
                       ) : (
                         <div className="text-slate-400 text-xs text-center">No QR image</div>

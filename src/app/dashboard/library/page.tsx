@@ -79,77 +79,76 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="max-w-7xl mx-auto px-6 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">My Library</h1>
-        <p className="text-gray-600">Manage your saved zines and published issues</p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">My Library</h1>
+          <p className="text-gray-600">Manage your saved zines and published issues</p>
+        </div>
+        <button
+          onClick={() => router.push("/zinemat")}
+          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm font-medium"
+        >
+          + Create New Zine
+        </button>
       </div>
 
-          {/* Saved Section */}
-      <section className="mb-12">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold flex items-center gap-2">
+      {/* Horizontal: Saved (left) | Published (right), 3x3 grid per section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
+        {/* Saved — left */}
+        <section className="min-w-0">
+          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
             <span className="text-yellow-600">📝</span> Saved
             {drafts.length > 0 && (
               <span className="text-sm font-normal text-gray-500">({drafts.length})</span>
             )}
           </h2>
-                      <button
-            onClick={() => router.push("/zinemat")}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm font-medium"
-                      >
-            + Create New Zine
-                      </button>
-                    </div>
+          {drafts.length === 0 ? (
+            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-xl p-8 text-center">
+              <div className="text-5xl mb-3">✍️</div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Nothing saved yet</h3>
+              <p className="text-gray-600 mb-4 text-sm">Create a zine in ZineMat and click Save to see it here.</p>
+              <button
+                onClick={() => router.push("/zinemat")}
+                className="bg-yellow-500 text-white px-5 py-2.5 rounded-lg hover:bg-yellow-600 transition font-medium text-sm"
+              >
+                Go to ZineMat
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {drafts.map((issue) => (
+                <IssueCard key={issue.id} issue={issue} router={router} isSaved />
+              ))}
+            </div>
+          )}
+        </section>
 
-        {drafts.length === 0 ? (
-          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-xl p-12 text-center">
-            <div className="text-6xl mb-4">✍️</div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">Nothing saved yet</h3>
-            <p className="text-gray-600 mb-6">Create a zine in ZineMat and click Save to see it here.</p>
-            <button
-              onClick={() => router.push("/zinemat")}
-              className="bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition font-medium"
-            >
-              Go to ZineMat
-            </button>
-                  </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {drafts.map((issue) => (
-              <IssueCard key={issue.id} issue={issue} router={router} isSaved />
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Published Section */}
-          <section>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold flex items-center gap-2">
-            <span className="text-green-600"></span> Published
+        {/* Published — right */}
+        <section className="min-w-0">
+          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+            <span className="text-green-600">🚀</span> Published
             {published.length > 0 && (
               <span className="text-sm font-normal text-gray-500">({published.length})</span>
             )}
           </h2>
-        </div>
-
-            {published.length === 0 ? (
-          <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-xl p-12 text-center">
-            <div className="text-6xl mb-4">🚀</div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No published issues yet</h3>
-            <p className="text-gray-600">Publish your first zine to share it with the world!</p>
-          </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {published.map((issue) => (
-              <IssueCard key={issue.id} issue={issue} router={router} />
-            ))}
-                      </div>
-        )}
-      </section>
-                    </div>
+          {published.length === 0 ? (
+            <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-xl p-8 text-center">
+              <div className="text-5xl mb-3">🚀</div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">No published issues yet</h3>
+              <p className="text-gray-600 text-sm">Publish your first zine to share it with the world!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {published.map((issue) => (
+                <IssueCard key={issue.id} issue={issue} router={router} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }
 
