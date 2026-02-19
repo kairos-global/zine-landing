@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { ScanBarChart } from "./ScanBarChart";
+
+type ScanCountByDay = { date: string; count: number }[];
 
 type AnalyticsIssue = {
   id: string;
@@ -11,56 +14,25 @@ type AnalyticsIssue = {
   slug: string | null;
   cover_img_url: string | null;
   totalScans: number;
+  scanCountByDay: ScanCountByDay;
   links: { linkId: string; label: string | null; url: string | null; scans: number }[];
 };
 
-type RecentScan = {
-  id: string;
-  issue_id: string;
-  link_id: string;
+type QrCodeAnalytics = {
+  linkId: string;
+  label: string | null;
+  url: string | null;
+  issueId: string;
   issueTitle: string | null;
-  linkLabel: string | null;
-  scanned_at: string | null;
-  user_agent: string | null;
+  issueSlug: string | null;
+  scans: number;
+  scanCountByDay: ScanCountByDay;
 };
-
-function deviceLabel(ua: string | null): string {
-  if (!ua) return "—";
-  const s = ua.toLowerCase();
-  if (s.includes("mobile") || s.includes("android") || s.includes("iphone")) return "Mobile";
-  if (s.includes("tablet") || s.includes("ipad")) return "Tablet";
-  return "Desktop";
-}
-
-function lastScannedAt(recentScans: RecentScan[], issueId: string, linkId: string): string | null {
-  const scan = recentScans.find((s) => s.issue_id === issueId && s.link_id === linkId);
-  return scan?.scanned_at ?? null;
-}
-
-function timeAgo(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (sec < 60) return "just now";
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
-  return d.toLocaleDateString();
-}
-
-/** When column: 2/16/26, 7:18:... — date first, mobile-friendly */
-function formatWhen(iso: string | null): { date: string; time: string } {
-  if (!iso) return { date: "—", time: "" };
-  const d = new Date(iso);
-  const date = d.toLocaleDateString("en-US", { month: "numeric", day: "2-digit", year: "2-digit" });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
-  return { date, time };
-}
 
 type AnalyticsData = {
   totalScans: number;
   issues: AnalyticsIssue[];
-  recentScans: RecentScan[];
+  qrCodes: QrCodeAnalytics[];
 };
 
 export default function AnalyticsPage() {
@@ -124,7 +96,7 @@ export default function AnalyticsPage() {
   }
 
   const issues = data?.issues ?? [];
-  const recentScans = data?.recentScans ?? [];
+  const qrCodes = data?.qrCodes ?? [];
   const totalScans = data?.totalScans ?? 0;
   const zinesWithQRCodes = issues.filter((i) => i.links.length > 0);
 
@@ -164,7 +136,7 @@ export default function AnalyticsPage() {
       {/* Pokedex: swipable zine issue cards */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-black mb-3">Your zines</h2>
-        <p className="text-gray-600 text-sm mb-4">Swipe or scroll to see each zine and its QR codes.</p>
+        <p className="text-gray-600 text-sm mb-4">Swipe or scroll to see each zine and its total scan traffic.</p>
         {issues.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 p-8 text-center text-gray-700">
             <p>No zines yet. Create one in ZineMat and add links with QR codes to see them here.</p>
@@ -206,31 +178,12 @@ export default function AnalyticsPage() {
                       View issue
                     </Link>
                   )}
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">QR codes & links</div>
-                  {issue.links.length === 0 ? (
-                    <p className="text-sm text-slate-500">No QR links yet.</p>
-                  ) : (
-                    <ul className="space-y-3">
-                      {issue.links.map((l) => {
-                        const lastAt = lastScannedAt(recentScans, issue.id, l.linkId);
-                        const host = l.url ? (() => { try { return new URL(l.url!).hostname; } catch { return l.url; } })() : "—";
-                        return (
-                          <li key={l.linkId} className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                            <div className="min-w-0">
-                              <div className="font-semibold text-black truncate">{l.label || "Link"}</div>
-                              <a href={l.url ?? "#"} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-700 hover:underline truncate block">
-                                {host}
-                              </a>
-                              <div className="text-xs text-slate-500 mt-1">
-                                {l.scans} scan{l.scans !== 1 ? "s" : ""}
-                                {lastAt ? ` · Last ${timeAgo(lastAt)}` : ""}
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                  <ScanBarChart
+                    data={issue.scanCountByDay ?? []}
+                    title="Total QR visits"
+                    height={140}
+                    maxBars={14}
+                  />
                 </div>
               </div>
             ))}
@@ -238,46 +191,51 @@ export default function AnalyticsPage() {
         )}
       </section>
 
-      {/* Recent scans — mini zine cards */}
+      {/* Your QR Codes — one card per QR with its scan chart */}
       <section>
-        <h2 className="text-xl font-semibold text-black mb-3">Recent scans</h2>
-        {recentScans.length === 0 ? (
+        <h2 className="text-xl font-semibold text-black mb-3">Your QR codes</h2>
+        <p className="text-gray-600 text-sm mb-4">Each QR has its own scan history. Link, originating zine, and visits over time.</p>
+        {qrCodes.length === 0 ? (
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-6 text-slate-500 text-center text-sm">
-            Scans will appear here when someone uses a QR code from your zines.
+            Add links with QR codes in ZineMat to see them here.
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {recentScans.map((s) => {
-              const issue = issues.find((i) => i.id === s.issue_id);
-              const cover = issue?.cover_img_url ?? null;
-              const { date, time } = formatWhen(s.scanned_at);
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {qrCodes.map((qr) => {
+              const host = qr.url ? (() => { try { return new URL(qr.url).hostname; } catch { return qr.url; } })() : "—";
               return (
                 <div
-                  key={s.id}
-                  className="rounded-xl border-2 border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition"
+                  key={qr.linkId}
+                  className="rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition"
                 >
-                  <div className="aspect-[3/4] bg-slate-200 relative">
-                    {cover ? (
-                      <img
-                        src={cover}
-                        alt={s.issueTitle ?? "Zine"}
-                        className="w-full h-full object-cover"
-                      />
+                  <div className="font-semibold text-black truncate">{qr.label || "Link"}</div>
+                  <a
+                    href={qr.url ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-amber-700 hover:underline truncate block"
+                  >
+                    {host}
+                  </a>
+                  <div className="text-xs text-slate-500 mt-1">
+                    From zine: {qr.issueSlug ? (
+                      <Link href={`/issues/${qr.issueSlug}`} className="text-amber-700 hover:underline">
+                        {qr.issueTitle ?? qr.issueSlug}
+                      </Link>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">No cover</div>
+                      qr.issueTitle ?? "—"
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-2 text-white">
-                      <div className="font-semibold text-sm truncate drop-shadow">{s.issueTitle ?? "—"}</div>
-                      <div className="text-xs opacity-90 truncate">{s.linkLabel ?? "—"}</div>
-                    </div>
                   </div>
-                  <div className="p-2 text-center">
-                    <div className="text-xs font-medium text-black">
-                      <span className="block">{date}</span>
-                      {time && <span className="block text-slate-600 mt-0.5">{time}</span>}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{deviceLabel(s.user_agent)}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {qr.scans} total visit{qr.scans !== 1 ? "s" : ""}
+                  </div>
+                  <div className="mt-3">
+                    <ScanBarChart
+                      data={qr.scanCountByDay ?? []}
+                      title="Visits over time"
+                      height={100}
+                      maxBars={10}
+                    />
                   </div>
                 </div>
               );

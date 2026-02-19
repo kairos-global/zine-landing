@@ -10,23 +10,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+export type ScanCountByDay = { date: string; count: number }[];
+
 export type AnalyticsIssue = {
   id: string;
   title: string | null;
   slug: string | null;
   cover_img_url: string | null;
   totalScans: number;
+  scanCountByDay: ScanCountByDay;
   links: { linkId: string; label: string | null; url: string | null; scans: number }[];
 };
 
-export type RecentScan = {
-  id: string;
-  issue_id: string;
-  link_id: string;
+export type QrCodeAnalytics = {
+  linkId: string;
+  label: string | null;
+  url: string | null;
+  issueId: string;
   issueTitle: string | null;
-  linkLabel: string | null;
-  scanned_at: string | null;
-  user_agent: string | null;
+  issueSlug: string | null;
+  scans: number;
+  scanCountByDay: ScanCountByDay;
 };
 
 export async function GET() {
@@ -57,7 +61,7 @@ export async function GET() {
       return NextResponse.json({
         totalScans: 0,
         issues: [],
-        recentScans: [],
+        qrCodes: [],
       });
     }
 
@@ -100,10 +104,25 @@ export async function GET() {
     // Aggregate by issue and by link
     const scanCountByIssue = new Map<string, number>();
     const scanCountByLink = new Map<string, number>();
+    const byIssueByDay = new Map<string, Map<string, number>>();
+    const byLinkByDay = new Map<string, Map<string, number>>();
+
     scansList.forEach((s) => {
+      const raw = s.scanned_at;
+      const day = raw && typeof raw === "string" ? raw.slice(0, 10) : "";
+      if (!day || day.length < 10) return;
       scanCountByIssue.set(s.issue_id, (scanCountByIssue.get(s.issue_id) ?? 0) + 1);
       scanCountByLink.set(s.link_id, (scanCountByLink.get(s.link_id) ?? 0) + 1);
+      if (!byIssueByDay.has(s.issue_id)) byIssueByDay.set(s.issue_id, new Map());
+      const issueDay = byIssueByDay.get(s.issue_id)!;
+      issueDay.set(day, (issueDay.get(day) ?? 0) + 1);
+      if (!byLinkByDay.has(s.link_id)) byLinkByDay.set(s.link_id, new Map());
+      const linkDay = byLinkByDay.get(s.link_id)!;
+      linkDay.set(day, (linkDay.get(day) ?? 0) + 1);
     });
+
+    const toSortedArray = (m: Map<string, number>): { date: string; count: number }[] =>
+      Array.from(m.entries()).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
 
     const issueLinkIds = new Map<string, Set<string>>();
     (links ?? []).forEach((l) => {
@@ -122,24 +141,27 @@ export async function GET() {
           }))
         : [];
       const totalScans = scanCountByIssue.get(issue.id) ?? 0;
+      const scanCountByDay = toSortedArray(byIssueByDay.get(issue.id) ?? new Map());
       return {
         id: issue.id,
         title: issue.title,
         slug: issue.slug,
         cover_img_url: issue.cover_img_url ?? null,
         totalScans,
+        scanCountByDay,
         links: linkList,
       };
     });
 
-    const recentScans: RecentScan[] = scansList.slice(0, 50).map((s) => ({
-      id: s.id,
-      issue_id: s.issue_id,
-      link_id: s.link_id,
-      issueTitle: issueTitleMap.get(s.issue_id) ?? null,
-      linkLabel: linkMap.get(s.link_id)?.label ?? null,
-      scanned_at: s.scanned_at ?? null,
-      user_agent: s.user_agent ?? null,
+    const qrCodes: QrCodeAnalytics[] = (links ?? []).map((l) => ({
+      linkId: l.id,
+      label: l.label ?? null,
+      url: l.url ?? null,
+      issueId: l.issue_id,
+      issueTitle: issueTitleMap.get(l.issue_id) ?? null,
+      issueSlug: (issues ?? []).find((i) => i.id === l.issue_id)?.slug ?? null,
+      scans: scanCountByLink.get(l.id) ?? 0,
+      scanCountByDay: toSortedArray(byLinkByDay.get(l.id) ?? new Map()),
     }));
 
     const totalScans = scansList.length;
@@ -147,7 +169,7 @@ export async function GET() {
     return NextResponse.json({
       totalScans,
       issues: analyticsIssues,
-      recentScans,
+      qrCodes,
     });
   } catch (error) {
     console.error("[Analytics] Unexpected error:", error);
