@@ -136,8 +136,8 @@ export default function AnalyticsPage() {
 
       {/* Pokedex: swipable zine issue cards */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-black mb-3">Your zines</h2>
-        <p className="text-gray-600 text-sm mb-4">Swipe or scroll to see each zine and its total scan traffic.</p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Your zines</h2>
+        <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">Swipe or scroll to see each zine and its total scan traffic.</p>
         {issues.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 p-8 text-center text-gray-700">
             <p>No zines yet. Create one in ZineMat and add links with QR codes to see them here.</p>
@@ -177,7 +177,6 @@ export default function AnalyticsPage() {
                       data={issue.scanCountByDay ?? []}
                       title="Total QR visits"
                       height={120}
-                      maxBars={10}
                     />
                   </div>
                 </div>
@@ -218,8 +217,8 @@ export default function AnalyticsPage() {
 
       {/* Your QR Codes — one card per QR with its scan chart */}
       <section>
-        <h2 className="text-xl font-semibold text-black mb-3">Your QR codes</h2>
-        <p className="text-gray-600 text-sm mb-4">Each QR has its own scan history. Link, originating zine, and visits over time.</p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Your QR codes</h2>
+        <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">Each QR has its own scan history. Link, originating zine, and visits over time.</p>
         {qrCodes.length === 0 ? (
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-6 text-slate-500 text-center text-sm">
             Add links with QR codes in ZineMat to see them here.
@@ -251,7 +250,6 @@ export default function AnalyticsPage() {
                         data={qr.scanCountByDay ?? []}
                         title="Visits over time"
                         height={100}
-                        maxBars={8}
                       />
                     </div>
                   </div>
