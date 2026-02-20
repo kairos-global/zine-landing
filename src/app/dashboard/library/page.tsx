@@ -99,7 +99,7 @@ export default function LibraryPage() {
         {/* Saved — on mobile first column; on desktop left */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-            <span className="text-yellow-600">📝</span> Saved
+            Saved
             {drafts.length > 0 && (
               <span className="text-xs sm:text-sm font-normal text-gray-500">({drafts.length})</span>
             )}
@@ -130,7 +130,7 @@ export default function LibraryPage() {
         {/* Published — on mobile second (below Saved); on desktop right */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-            <span className="text-green-600">🚀</span> Published
+            Published
             {published.length > 0 && (
               <span className="text-xs sm:text-sm font-normal text-gray-500">({published.length})</span>
             )}
