@@ -94,9 +94,9 @@ export default function LibraryPage() {
         </button>
       </div>
 
-      {/* Horizontal: Saved (left) | Published (right), 2 per row in each section — same on mobile so it fits one page */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:gap-10 min-w-0">
-        {/* Saved — left */}
+      {/* Mobile: stacked (Saved then Published), each section scrolls horizontally. Desktop: side-by-side, 2 per row grid. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 min-w-0">
+        {/* Saved — on mobile first column; on desktop left */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             <span className="text-yellow-600">📝</span> Saved
@@ -117,15 +117,17 @@ export default function LibraryPage() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:gap-4">
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
               {drafts.map((issue) => (
-                <IssueCard key={issue.id} issue={issue} router={router} isSaved />
+                <div key={issue.id} className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-auto snap-start">
+                  <IssueCard issue={issue} router={router} isSaved />
+                </div>
               ))}
             </div>
           )}
         </section>
 
-        {/* Published — right */}
+        {/* Published — on mobile second (below Saved); on desktop right */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             <span className="text-green-600">🚀</span> Published
@@ -140,9 +142,11 @@ export default function LibraryPage() {
               <p className="text-gray-600 text-xs sm:text-sm">Publish your first zine to share it with the world!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:gap-4">
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
               {published.map((issue) => (
-                <IssueCard key={issue.id} issue={issue} router={router} />
+                <div key={issue.id} className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-auto snap-start">
+                  <IssueCard issue={issue} router={router} />
+                </div>
               ))}
             </div>
           )}
