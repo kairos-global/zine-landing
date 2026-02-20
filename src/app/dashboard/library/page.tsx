@@ -79,45 +79,45 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-4 sm:mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold mb-2">My Library</h1>
-          <p className="text-gray-600">Manage your saved zines and published issues</p>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">My Library</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Manage your saved zines and published issues</p>
         </div>
         <button
           onClick={() => router.push("/zinemat")}
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition text-sm font-medium"
+          className="bg-blue-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-600 transition text-xs sm:text-sm font-medium"
         >
           + Create New Zine
         </button>
       </div>
 
-      {/* Horizontal: Saved (left) | Published (right), 3x3 grid per section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
+      {/* Horizontal: Saved (left) | Published (right), 2 per row in each section — same on mobile so it fits one page */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:gap-10 min-w-0">
         {/* Saved — left */}
         <section className="min-w-0">
-          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+          <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             <span className="text-yellow-600">📝</span> Saved
             {drafts.length > 0 && (
-              <span className="text-sm font-normal text-gray-500">({drafts.length})</span>
+              <span className="text-xs sm:text-sm font-normal text-gray-500">({drafts.length})</span>
             )}
           </h2>
           {drafts.length === 0 ? (
-            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-xl p-8 text-center">
-              <div className="text-5xl mb-3">✍️</div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">Nothing saved yet</h3>
-              <p className="text-gray-600 mb-4 text-sm">Create a zine in ZineMat and click Save to see it here.</p>
+            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
+              <div className="text-3xl sm:text-5xl mb-2 sm:mb-3">✍️</div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">Nothing saved yet</h3>
+              <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm">Create a zine in ZineMat and click Save to see it here.</p>
               <button
                 onClick={() => router.push("/zinemat")}
-                className="bg-yellow-500 text-white px-5 py-2.5 rounded-lg hover:bg-yellow-600 transition font-medium text-sm"
+                className="bg-yellow-500 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-lg hover:bg-yellow-600 transition font-medium text-xs sm:text-sm"
               >
                 Go to ZineMat
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
               {drafts.map((issue) => (
                 <IssueCard key={issue.id} issue={issue} router={router} isSaved />
               ))}
@@ -127,20 +127,20 @@ export default function LibraryPage() {
 
         {/* Published — right */}
         <section className="min-w-0">
-          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+          <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             <span className="text-green-600">🚀</span> Published
             {published.length > 0 && (
-              <span className="text-sm font-normal text-gray-500">({published.length})</span>
+              <span className="text-xs sm:text-sm font-normal text-gray-500">({published.length})</span>
             )}
           </h2>
           {published.length === 0 ? (
-            <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-xl p-8 text-center">
-              <div className="text-5xl mb-3">🚀</div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">No published issues yet</h3>
-              <p className="text-gray-600 text-sm">Publish your first zine to share it with the world!</p>
+            <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
+              <div className="text-3xl sm:text-5xl mb-2 sm:mb-3">🚀</div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No published issues yet</h3>
+              <p className="text-gray-600 text-xs sm:text-sm">Publish your first zine to share it with the world!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
               {published.map((issue) => (
                 <IssueCard key={issue.id} issue={issue} router={router} />
               ))}
@@ -162,7 +162,7 @@ function IssueCard({
   isSaved?: boolean;
 }) {
   return (
-    <div className="group rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
+    <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
       {/* Cover Image */}
       <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
         {issue.cover_img_url ? (
@@ -174,15 +174,15 @@ function IssueCard({
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="text-center">
-              <div className="text-5xl mb-2">📄</div>
-              <p className="text-sm">No cover</p>
+              <div className="text-3xl sm:text-5xl mb-1 sm:mb-2">📄</div>
+              <p className="text-xs sm:text-sm">No cover</p>
             </div>
           </div>
         )}
         {/* Status Badge */}
-        <div className="absolute top-3 left-3">
+        <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
           <span
-            className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+            className={`text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full shadow-sm ${
               isSaved ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
             }`}
           >
@@ -191,38 +191,33 @@ function IssueCard({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-4 flex flex-col flex-1">
-        {/* Title */}
-        <h3 className="font-bold text-lg mb-2 line-clamp-2 flex-1 text-gray-900">
+      {/* Content — tighter on mobile so more fits above the fold */}
+      <div className="p-2 sm:p-4 flex flex-col flex-1 min-w-0">
+        <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 flex-1 text-gray-900">
           {issue.title || "(Untitled)"}
         </h3>
-
-        {/* Date */}
-        <p className="text-xs text-gray-700 mb-4">
+        <p className="text-[10px] sm:text-xs text-gray-700 mb-2 sm:mb-4">
           {isSaved
             ? `Saved ${new Date(issue.created_at!).toLocaleDateString()}`
             : `Published ${new Date(issue.published_at!).toLocaleDateString()}`}
         </p>
-
-        {/* Actions */}
-        <div className="flex gap-2">
-                        <button
+        <div className="flex gap-1 sm:gap-2">
+          <button
             onClick={() => router.push(`/zinemat?id=${issue.id}`)}
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm transition"
-                        >
-             Edit
-                        </button>
+            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-medium text-xs sm:text-sm transition"
+          >
+            Edit
+          </button>
           {!isSaved && issue.slug && (
-                      <button
+            <button
               onClick={() => router.push(`/issues/${issue.slug}`)}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition"
-                      >
-               View
-                      </button>
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-medium text-xs sm:text-sm transition"
+            >
+              View
+            </button>
           )}
-                    </div>
-                  </div>
+        </div>
+      </div>
     </div>
   );
 }
