@@ -142,11 +142,27 @@ function RejectedView() {
   );
 }
 
+type DistributorOrder = {
+  id: string;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+  shipping_cost?: number;
+  payment_status?: string;
+  items: Array<{
+    id: string;
+    quantity: number;
+    issue: Issue;
+  }>;
+};
+
 // ========== APPROVED PORTAL ==========
 function ApprovedPortal({ distributor }: { distributor: Distributor }) {
-  const [activeTab, setActiveTab] = useState<"browse" | "stock">("browse");
+  const [activeTab, setActiveTab] = useState<"browse" | "stock" | "orders">("browse");
   const [issues, setIssues] = useState<Issue[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
+  const [orders, setOrders] = useState<DistributorOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
@@ -154,17 +170,18 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   useEffect(() => {
     fetchIssues();
     fetchStock();
-    
+
     // Handle payment success/cancel from URL params
     const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get("payment");
     const orderId = params.get("orderId");
-    
+
     if (paymentStatus === "success" && orderId) {
       toast.success("Payment successful! Your order is being processed.");
       setCart([]);
       fetchStock();
-      // Clean URL
+      setActiveTab("orders");
+      fetchOrders();
       window.history.replaceState({}, "", "/dashboard/distributor");
     } else if (paymentStatus === "cancelled") {
       toast.error("Payment was cancelled. Your order was not placed.");
@@ -172,6 +189,21 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function fetchOrders() {
+    setOrdersLoading(true);
+    try {
+      const res = await fetch("/api/distributors/orders");
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data.orders || []);
+      }
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
 
   async function fetchIssues() {
     try {
@@ -317,6 +349,19 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
             >
               My Stock
             </button>
+            <button
+              onClick={() => {
+                setActiveTab("orders");
+                fetchOrders();
+              }}
+              className={`pb-3 px-1 font-medium transition ${
+                activeTab === "orders"
+                  ? "text-blue-600 border-b-2 border-blue-600"
+                  : "text-gray-600 hover:text-black"
+              }`}
+            >
+              Orders
+            </button>
           </div>
         </div>
 
@@ -331,8 +376,10 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
             onPlaceOrder={placeOrder}
             placing={placing}
           />
-        ) : (
+        ) : activeTab === "stock" ? (
           <StockView stock={stock} />
+        ) : (
+          <OrdersView orders={orders} loading={ordersLoading} />
         )}
       </div>
     </div>
@@ -577,6 +624,95 @@ function StockView({ stock }: { stock: StockItem[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ========== ORDERS TAB ==========
+function OrdersView({
+  orders,
+  loading,
+}: {
+  orders: DistributorOrder[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="text-center py-12 text-gray-600">
+        Loading orders...
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-4xl mb-4">📋</div>
+        <p className="text-gray-600">No orders yet</p>
+        <p className="text-sm text-gray-500 mt-2">Place an order from Browse Zines to see it here.</p>
+      </div>
+    );
+  }
+
+  const statusStyles: Record<string, string> = {
+    draft: "bg-amber-100 text-amber-700",
+    placed: "bg-orange-100 text-orange-700",
+    fulfilled: "bg-green-100 text-green-700",
+    cancelled: "bg-gray-100 text-gray-700",
+  };
+
+  return (
+    <div className="space-y-4">
+      {orders.map((order) => {
+        const totalItems = order.items?.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
+        return (
+          <div
+            key={order.id}
+            className="bg-white rounded-xl border border-gray-200 p-6"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-500">
+                  {new Date(order.created_at).toLocaleDateString()}
+                </span>
+                <span
+                  className={`px-2 py-1 text-xs font-medium rounded ${
+                    statusStyles[order.status] ?? "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {order.status}
+                </span>
+                {order.payment_status === "paid" && (
+                  <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700">
+                    Paid
+                  </span>
+                )}
+              </div>
+              {order.shipping_cost != null && (
+                <span className="text-sm text-gray-600">
+                  Shipping: ${Number(order.shipping_cost).toFixed(2)}
+                </span>
+              )}
+            </div>
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-xs font-medium text-gray-500 mb-2">
+                Order items ({totalItems} total)
+              </p>
+              <ul className="space-y-2">
+                {order.items?.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <span className="font-medium">{item.issue?.title || "Untitled"}</span>
+                    <span className="text-gray-600">×{item.quantity}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

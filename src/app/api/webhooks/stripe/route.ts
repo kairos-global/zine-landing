@@ -84,7 +84,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   if (type === "distributor_shipping") {
     const orderId = metadata.orderId;
     if (orderId) {
-      await supabase
+      const { error } = await supabase
         .from("distributor_orders")
         .update({
           status: "placed",
@@ -92,6 +92,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           stripe_payment_intent_id: session.payment_intent as string,
         })
         .eq("id", orderId);
+      if (error) {
+        console.error("[StripeWebhook] distributor_orders update failed:", error);
+        throw error;
+      }
     }
   } else if (type === "creator_print_for_me") {
     const issueId = metadata.issueId;
@@ -118,7 +122,7 @@ async function handlePaymentIntentSucceeded(
   if (type === "distributor_shipping") {
     const orderId = metadata.orderId;
     if (orderId) {
-      await supabase
+      const { error } = await supabase
         .from("distributor_orders")
         .update({
           status: "placed",
@@ -126,6 +130,10 @@ async function handlePaymentIntentSucceeded(
           stripe_payment_intent_id: paymentIntent.id,
         })
         .eq("id", orderId);
+      if (error) {
+        console.error("[StripeWebhook] distributor_orders update (payment_intent):", error);
+        throw error;
+      }
     }
   } else if (type === "creator_print_for_me") {
     const issueId = metadata.issueId;

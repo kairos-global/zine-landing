@@ -9,7 +9,7 @@ import toast from "react-hot-toast";
 type Order = {
   id: string;
   distributor_id: string;
-  status: "pending" | "fulfilled" | "cancelled";
+  status: "draft" | "placed" | "fulfilled" | "cancelled";
   created_at: string;
   updated_at?: string;
   distributor: {
@@ -109,7 +109,10 @@ export default function AdminOrdersPage() {
     return null;
   }
 
-  const pendingOrders = orders.filter((o) => o.status === "pending");
+  // DB uses draft | placed | fulfilled | cancelled; show draft + placed as "Pending"
+  const pendingOrders = orders.filter(
+    (o) => o.status === "draft" || o.status === "placed"
+  );
   const fulfilledOrders = orders.filter((o) => o.status === "fulfilled");
   const cancelledOrders = orders.filter((o) => o.status === "cancelled");
 
@@ -217,8 +220,9 @@ function OrderCard({
   onCancel?: () => void;
   processing: boolean;
 }) {
-  const statusColors = {
-    pending: "bg-orange-100 text-orange-700",
+  const statusColors: Record<Order["status"], string> = {
+    draft: "bg-amber-100 text-amber-700",
+    placed: "bg-orange-100 text-orange-700",
     fulfilled: "bg-green-100 text-green-700",
     cancelled: "bg-gray-100 text-gray-700",
   };
@@ -248,7 +252,7 @@ function OrderCard({
         </div>
         <div className="text-right text-sm text-gray-600">
           <div>Ordered: {new Date(order.created_at).toLocaleDateString()}</div>
-          {order.updated_at && order.status !== "pending" && (
+          {order.updated_at && (order.status === "fulfilled" || order.status === "cancelled") && (
             <div>{order.status === "fulfilled" ? "Fulfilled" : "Cancelled"}: {new Date(order.updated_at).toLocaleDateString()}</div>
           )}
         </div>
@@ -285,7 +289,7 @@ function OrderCard({
       </div>
 
       {/* Actions */}
-      {order.status === "pending" && onFulfill && onCancel && (
+      {(order.status === "draft" || order.status === "placed") && onFulfill && onCancel && (
         <div className="flex gap-3 border-t border-gray-200 pt-4">
           <button
             onClick={onFulfill}

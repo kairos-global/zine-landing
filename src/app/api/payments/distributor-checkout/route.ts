@@ -65,7 +65,12 @@ export async function POST(req: Request) {
     const SHIPPING_FLAT_CENTS = 1000; // $10.00
     const shippingCost = SHIPPING_FLAT_CENTS / 100;
 
-    // Create Stripe Checkout session
+    // Use origin only so redirect goes to /dashboard/distributor, not /api/.../dashboard/distributor
+    const appOrigin =
+      typeof process.env.NEXT_PUBLIC_APP_URL === "string" && process.env.NEXT_PUBLIC_APP_URL
+        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
+        : "http://localhost:3000";
+
     const session = await createCheckoutSession(
       shippingCost,
       "usd",
@@ -74,8 +79,8 @@ export async function POST(req: Request) {
         distributorId: distributor.id,
         type: "distributor_shipping",
       },
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/distributor?payment=success&orderId=${order.id}`,
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/distributor?payment=cancelled`
+      `${appOrigin}/dashboard/distributor?payment=success&orderId=${order.id}`,
+      `${appOrigin}/dashboard/distributor?payment=cancelled`
     );
 
     // Update order with checkout session ID and shipping cost
