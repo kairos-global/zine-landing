@@ -115,8 +115,9 @@ export async function POST(req: Request) {
 
     if (orderError || !order) {
       console.error("Error creating order:", orderError);
+      const message = orderError?.message || "Failed to create order";
       return NextResponse.json(
-        { error: "Failed to create order" },
+        { error: "Failed to create order", details: message },
         { status: 500 }
       );
     }
@@ -134,10 +135,10 @@ export async function POST(req: Request) {
 
     if (itemsError) {
       console.error("Error creating order items:", itemsError);
-      // Rollback: delete the order
       await supabase.from("distributor_orders").delete().eq("id", order.id);
+      const message = itemsError?.message || "Failed to create order items";
       return NextResponse.json(
-        { error: "Failed to create order items" },
+        { error: "Failed to create order items", details: message },
         { status: 500 }
       );
     }

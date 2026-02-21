@@ -239,8 +239,9 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
       });
 
       if (!orderRes.ok) {
-        const err = await orderRes.json();
-        toast.error(err.error || "Failed to create order");
+        const err = await orderRes.json().catch(() => ({}));
+        const msg = err.details ? `${err.error}: ${err.details}` : (err.error || "Failed to create order");
+        toast.error(msg);
         return;
       }
 
@@ -525,7 +526,7 @@ function BrowseZines({
                 {placing ? "Processing..." : "Proceed to Payment"}
               </button>
               <p className="text-xs text-gray-500 text-center mt-2">
-                You&apos;ll pay for shipping during checkout
+                $10 flat shipping at checkout
               </p>
             </>
           )}

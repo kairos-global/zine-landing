@@ -61,19 +61,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Calculate shipping cost
-    // TODO: Implement actual shipping calculation based on:
-    // - Total quantity of items
-    // - Distributor location
-    // - Weight/size of zines
-    // For now, using a simple flat rate: $5 base + $2 per item
-    const baseShipping = 5.0;
-    const perItemShipping = 2.0;
-    const totalItems = (order.items as Array<{ quantity: number }>).reduce(
-      (sum, item) => sum + item.quantity,
-      0
-    );
-    const shippingCost = baseShipping + perItemShipping * totalItems;
+    // Distributors only pay shipping (not printing). Flat $10 until we integrate real shipping.
+    const SHIPPING_FLAT_CENTS = 1000; // $10.00
+    const shippingCost = SHIPPING_FLAT_CENTS / 100;
 
     // Create Stripe Checkout session
     const session = await createCheckoutSession(
