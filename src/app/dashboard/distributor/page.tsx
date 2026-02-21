@@ -338,6 +338,44 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   );
 }
 
+// ========== PDF VIEWER MODAL ==========
+function PdfModal({ issue, onClose }: { issue: Issue; onClose: () => void }) {
+  if (!issue.pdf_url) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="View PDF"
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h3 className="font-semibold text-lg truncate pr-4">{issue.title || "PDF"}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-black transition"
+            aria-label="Close"
+          >
+            <span className="text-xl leading-none">×</span>
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 p-2">
+          <iframe
+            src={`${issue.pdf_url}#toolbar=0`}
+            title={issue.title || "Zine PDF"}
+            className="w-full h-[75vh] rounded-lg border-0 bg-gray-100"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ========== BROWSE ZINES TAB ==========
 function BrowseZines({
   issues,
@@ -356,12 +394,22 @@ function BrowseZines({
   onPlaceOrder: () => void;
   placing: boolean;
 }) {
+  const [pdfModalIssue, setPdfModalIssue] = useState<Issue | null>(null);
+
   if (loading) {
     return <div className="text-center py-12 text-gray-600">Loading zines...</div>;
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* PDF viewer modal */}
+      {pdfModalIssue?.pdf_url && (
+        <PdfModal
+          issue={pdfModalIssue}
+          onClose={() => setPdfModalIssue(null)}
+        />
+      )}
+
       {/* Issues Grid */}
       <div className="lg:col-span-2 space-y-4">
         {issues.length === 0 ? (
@@ -372,13 +420,24 @@ function BrowseZines({
         ) : (
           issues.map((issue) => (
             <div key={issue.id} className="bg-white rounded-xl border p-4 flex gap-4">
-              {issue.cover_img_url && (
-                <img
-                  src={issue.cover_img_url}
-                  alt={issue.title || "Zine cover"}
-                  className="w-24 h-32 object-cover rounded"
-                />
-              )}
+              <div className="flex flex-col gap-2">
+                {issue.cover_img_url && (
+                  <img
+                    src={issue.cover_img_url}
+                    alt={issue.title || "Zine cover"}
+                    className="w-24 h-32 object-cover rounded"
+                  />
+                )}
+                {issue.pdf_url && (
+                  <button
+                    type="button"
+                    onClick={() => setPdfModalIssue(issue)}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    View PDF
+                  </button>
+                )}
+              </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">{issue.title || "Untitled"}</h3>
                 <p className="text-sm text-gray-600">{issue.slug}</p>
