@@ -33,13 +33,14 @@ export async function PATCH(
     const body = await req.json();
     const { status } = body;
 
-    // Validate status
+    // Validate status (API: pending | fulfilled | cancelled; DB enum: draft | placed | fulfilled | cancelled)
     if (!status || !["pending", "fulfilled", "cancelled"].includes(status)) {
       return NextResponse.json(
         { error: "Invalid status. Must be: pending, fulfilled, or cancelled" },
         { status: 400 }
       );
     }
+    const statusForDb = status === "pending" ? "placed" : status;
 
     // If fulfilling, update distributor stock
     if (status === "fulfilled") {
@@ -92,7 +93,7 @@ export async function PATCH(
     // Update order status
     const { data, error } = await supabase
       .from("distributor_orders")
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({ status: statusForDb, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
       .single();

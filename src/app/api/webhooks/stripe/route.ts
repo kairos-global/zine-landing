@@ -87,6 +87,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       await supabase
         .from("distributor_orders")
         .update({
+          status: "placed",
           payment_status: "paid",
           stripe_payment_intent_id: session.payment_intent as string,
         })
@@ -120,6 +121,7 @@ async function handlePaymentIntentSucceeded(
       await supabase
         .from("distributor_orders")
         .update({
+          status: "placed",
           payment_status: "paid",
           stripe_payment_intent_id: paymentIntent.id,
         })
