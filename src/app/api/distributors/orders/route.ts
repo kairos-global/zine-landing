@@ -83,10 +83,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get distributor ID
+    // Get distributor (need business_address for required ship_to_address)
     const { data: distributor, error: distError } = await supabase
       .from("distributors")
-      .select("id, status")
+      .select("id, status, business_address")
       .eq("user_id", userId)
       .single();
 
@@ -101,11 +101,23 @@ export async function POST(req: Request) {
       );
     }
 
+    const shipToAddress = distributor.business_address?.trim() || "";
+    if (!shipToAddress) {
+      return NextResponse.json(
+        { error: "Business address is required for shipping. Please update your distributor profile." },
+        { status: 400 }
+      );
+    }
+
     // Create order (distributor_order_status enum: draft | placed | fulfilled | cancelled)
     const { data: order, error: orderError } = await supabase
       .from("distributor_orders")
       .insert([
-        { distributor_id: distributor.id, status: "draft" },
+        {
+          distributor_id: distributor.id,
+          status: "draft",
+          ship_to_address: shipToAddress,
+        },
       ])
       .select()
       .single();

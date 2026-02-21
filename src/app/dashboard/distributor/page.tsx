@@ -208,7 +208,7 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
           : item
       ));
     } else {
-      setCart([...cart, { issue_id: issueId, quantity: 1 }]);
+      setCart([...cart, { issue_id: issueId, quantity: 10 }]);
     }
     toast.success("Added to cart");
   }
