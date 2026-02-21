@@ -467,34 +467,56 @@ function BrowseZines({
             <p className="text-gray-500 text-sm">Your cart is empty</p>
           ) : (
             <>
-              <div className="space-y-3 mb-4">
+              <div className="space-y-0 mb-4">
                 {cart.map((item) => {
                   const issue = issues.find((i) => i.id === item.issue_id);
                   return (
-                    <div key={item.issue_id} className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{issue?.title || "Unknown"}</p>
+                    <div
+                      key={item.issue_id}
+                      className="flex items-center justify-between gap-3 py-3 border-b border-dotted border-gray-400 first:pt-0 last:border-b-0"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{issue?.title || "Unknown"}</p>
+                        {issue?.slug && (
+                          <p className="text-xs text-gray-500 truncate">{issue.slug}</p>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => onUpdateQuantity(item.issue_id, item.quantity - 1)}
-                          className="w-6 h-6 rounded border hover:bg-gray-100"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center">{item.quantity}</span>
-                        <button
-                          onClick={() => onUpdateQuantity(item.issue_id, item.quantity + 1)}
-                          className="w-6 h-6 rounded border hover:bg-gray-100"
-                        >
-                          +
-                        </button>
+                      <div className="flex items-center flex-shrink-0">
+                        <label htmlFor={`cart-qty-${item.issue_id}`} className="sr-only">
+                          Quantity for {issue?.title || "item"}
+                        </label>
+                        <input
+                          id={`cart-qty-${item.issue_id}`}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={3}
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, "");
+                            if (v === "") return;
+                            const n = parseInt(v, 10);
+                            if (!isNaN(n) && n >= 0 && n <= 99) {
+                              onUpdateQuantity(item.issue_id, n);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const v = e.target.value.replace(/\D/g, "").trim();
+                            if (v === "") {
+                              onUpdateQuantity(item.issue_id, 1);
+                              return;
+                            }
+                            const n = parseInt(v, 10);
+                            if (isNaN(n) || n < 1) onUpdateQuantity(item.issue_id, 1);
+                            else if (n > 99) onUpdateQuantity(item.issue_id, 99);
+                          }}
+                          className="w-11 h-11 rounded border border-gray-300 text-center text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
-              
+
               <button
                 onClick={onPlaceOrder}
                 disabled={placing}
