@@ -33,12 +33,12 @@ export async function GET() {
       );
     }
 
-    // Fetch all published issues that have "print_for_me" distribution enabled
+    // Fetch all published issues available for distribution (self_distribute and/or print_for_me)
     const { data: issues, error } = await supabase
       .from("issues")
       .select("*")
       .eq("status", "published")
-      .eq("print_for_me", true)
+      .or("self_distribute.eq.true,print_for_me.eq.true")
       .order("published_at", { ascending: false });
 
     if (error) {
