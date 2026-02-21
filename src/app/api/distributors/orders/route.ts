@@ -101,15 +101,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create order (DB enum distributor_order_status uses uppercase, e.g. PENDING)
+    // Create order — leave status out so DB uses column default (enum values are DB-specific)
     const { data: order, error: orderError } = await supabase
       .from("distributor_orders")
-      .insert([
-        {
-          distributor_id: distributor.id,
-          status: "PENDING",
-        },
-      ])
+      .insert([{ distributor_id: distributor.id }])
       .select()
       .single();
 

@@ -33,18 +33,16 @@ export async function PATCH(
     const body = await req.json();
     const { status } = body;
 
-    // Validate status (API accepts lowercase; DB enum uses uppercase)
-    const statusLower = status?.toLowerCase();
-    if (!statusLower || !["pending", "fulfilled", "cancelled"].includes(statusLower)) {
+    // Validate status
+    if (!status || !["pending", "fulfilled", "cancelled"].includes(status)) {
       return NextResponse.json(
         { error: "Invalid status. Must be: pending, fulfilled, or cancelled" },
         { status: 400 }
       );
     }
-    const statusForDb = statusLower.toUpperCase();
 
     // If fulfilling, update distributor stock
-    if (statusLower === "fulfilled") {
+    if (status === "fulfilled") {
       // Get order items
       const { data: orderItems, error: itemsError } = await supabase
         .from("distributor_order_items")
@@ -94,7 +92,7 @@ export async function PATCH(
     // Update order status
     const { data, error } = await supabase
       .from("distributor_orders")
-      .update({ status: statusForDb, updated_at: new Date().toISOString() })
+      .update({ status, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
       .single();
@@ -107,7 +105,7 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       order: data,
-      message: `Order ${statusLower}`,
+      message: `Order ${status}`,
     });
   } catch (err) {
     console.error("Admin order PATCH error:", err);
