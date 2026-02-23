@@ -354,7 +354,7 @@ function PurchaseSection({
               History
             </button>
           </div>
-          <div className="p-4 min-h-[200px]">
+          <div className="p-4 min-h-[420px]">
             {panelTab === "cart" ? (
               cart.length === 0 ? (
                 <p className="text-gray-500 text-sm">Your cart is empty</p>
