@@ -74,7 +74,7 @@ export default function CreatorPortalPage() {
           </Link>
           <h1 className="text-3xl font-bold">Creator Portal</h1>
           <p className="text-gray-600 mt-1">
-            Manage orders for your zines and ad bounties
+            Manage orders for your zines and market
           </p>
         </div>
 
@@ -235,7 +235,7 @@ function AdOrdersView() {
       <div className="text-4xl mb-4">🎨</div>
       <p className="text-gray-600">Ad orders</p>
       <p className="text-sm text-gray-500 mt-2">
-        Manage your ad bounty orders and submissions here. This section is coming soon.
+        Manage your market orders and submissions here. This section is coming soon.
       </p>
     </div>
   );

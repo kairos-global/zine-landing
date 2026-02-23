@@ -12,6 +12,9 @@ type Stats = {
   pendingDistributors: number;
   approvedDistributors: number;
   totalQRScans: number;
+  totalPaidCreators: number;
+  pendingPaidCreators: number;
+  approvedPaidCreators: number;
 };
 
 export default function AdminDashboardPage() {
@@ -109,6 +112,22 @@ export default function AdminDashboardPage() {
             value={stats?.totalDistributors || 0}
             icon="🏪"
           />
+          <StatCard
+            title="Pending Paid Creators"
+            value={stats?.pendingPaidCreators || 0}
+            icon="⏳"
+            highlight={true}
+          />
+          <StatCard
+            title="Approved Paid Creators"
+            value={stats?.approvedPaidCreators || 0}
+            icon="✅"
+          />
+          <StatCard
+            title="Total Paid Creators"
+            value={stats?.totalPaidCreators || 0}
+            icon="🛒"
+          />
         </div>
 
         {/* Quick Actions */}
@@ -134,6 +153,28 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
                 <span className="text-2xl">🏪</span>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/admin/paid-creators"
+              className="block p-6 rounded-xl bg-white border border-gray-200 hover:border-purple-500 hover:shadow-lg transition group"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold mb-1 group-hover:text-purple-600">
+                    Manage Paid Creators
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Approve or reject paid creator applications
+                  </p>
+                  {stats && stats.pendingPaidCreators > 0 && (
+                    <div className="mt-2 inline-block px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded">
+                      {stats.pendingPaidCreators} pending
+                    </div>
+                  )}
+                </div>
+                <span className="text-2xl">🛒</span>
               </div>
             </Link>
 

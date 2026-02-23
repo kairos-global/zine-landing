@@ -33,6 +33,9 @@ export async function GET() {
       { count: pendingDistributors },
       { count: approvedDistributors },
       { count: totalQRScans },
+      { count: totalPaidCreators },
+      { count: pendingPaidCreators },
+      { count: approvedPaidCreators },
     ] = await Promise.all([
       supabase.from("profiles").select("*", { count: "exact", head: true }),
       supabase.from("issues").select("*", { count: "exact", head: true }),
@@ -40,6 +43,9 @@ export async function GET() {
       supabase.from("distributors").select("*", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("distributors").select("*", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("qr_scans").select("*", { count: "exact", head: true }),
+      supabase.from("market_creators").select("*", { count: "exact", head: true }),
+      supabase.from("market_creators").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("market_creators").select("*", { count: "exact", head: true }).eq("status", "approved"),
     ]);
 
     return NextResponse.json({
@@ -50,6 +56,9 @@ export async function GET() {
         pendingDistributors: pendingDistributors || 0,
         approvedDistributors: approvedDistributors || 0,
         totalQRScans: totalQRScans || 0,
+        totalPaidCreators: totalPaidCreators || 0,
+        pendingPaidCreators: pendingPaidCreators || 0,
+        approvedPaidCreators: approvedPaidCreators || 0,
       },
     });
   } catch (err) {

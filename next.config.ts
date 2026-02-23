@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: "/dashboard/ad-bounties", destination: "/dashboard/market", permanent: false },
+      { source: "/dashboard/ad-bounties/:path*", destination: "/dashboard/market", permanent: false },
+    ];
+  },
   images: {
     remotePatterns: [
       {

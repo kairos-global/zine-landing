@@ -5,7 +5,7 @@ const BubbleGrid = () => {
     { label: "Map", color: "F26565", href: "/map" },
     { label: "Upload Zine", color: "65CBF1", href: "/zinemat", forceRedirectUrl: "/zinemat" },
     { label: "About", color: "FFFFFF", href: "/about" },
-    { label: "Ad Bounties", color: "82E385", href: "/dashboard/ad-bounties", forceRedirectUrl: "/dashboard/ad-bounties" },
+    { label: "Market", color: "82E385", href: "/dashboard/market", forceRedirectUrl: "/dashboard/market" },
     { label: "My Library", color: "F2DC6F", href: "/dashboard/library", forceRedirectUrl: "/dashboard/library" },
     { label: "Distribute", color: "D16FF2", href: "/dashboard/distributor", forceRedirectUrl: "/dashboard/distributor" },
     { label: "Browse Zines", color: "A4A4A4", href: "/browse-zines" },
@@ -30,13 +30,13 @@ const BubbleGrid = () => {
           <Bubble {...bubbles[6]} /> {/* Browse Zines */}
         </div>
 
-        {/* Row 3: Upload Zine (left) | Ad Bounties (right) */}
+        {/* Row 3: Upload Zine (left) | Market (right) */}
         <div className="grid grid-cols-2 gap-4 place-items-center">
           <div className="justify-self-start">
             <Bubble {...bubbles[1]} /> {/* Upload Zine */}
           </div>
           <div className="justify-self-end">
-            <Bubble {...bubbles[3]} /> {/* Ad Bounties */}
+            <Bubble {...bubbles[3]} /> {/* Market */}
           </div>
         </div>
 
@@ -68,7 +68,7 @@ const BubbleGrid = () => {
           <Bubble {...bubbles[2]} />
         </div>
 
-        {/* Green - Ad Bounties */}
+        {/* Green - Market */}
         <div className="absolute top-[200px] left-[675px]">
           <Bubble {...bubbles[3]} />
         </div>

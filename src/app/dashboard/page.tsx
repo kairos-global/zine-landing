@@ -108,14 +108,14 @@ export default function DashboardPage() {
         </Link>
 
         <Link
-          href="/dashboard/ad-bounties"
+          href="/dashboard/market"
           className="rounded-xl p-4 bg-white hover:bg-black transition group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
-            Ad Bounties
+            Market
           </div>
           <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Browse live creative briefs or launch a new advertising bounty
+            Purchase or sell design services — flyers, logos, zine design, and more
           </div>
         </Link>
 
