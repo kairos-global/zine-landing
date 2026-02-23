@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
+import { PaidCreatorProfile, type MarketMeProfile } from "@/app/components/PaidCreatorProfile";
 
 const CATEGORIES = [
   { key: "flyer_design", label: "Flyer design" },
@@ -18,6 +19,12 @@ type MarketMe = {
   approved: boolean;
   status?: "none" | "pending" | "approved" | "rejected";
   marketCreatorId?: string;
+  profile?: {
+    displayName: string | null;
+    profileImageUrl: string | null;
+    portfolioUrl: string | null;
+    portfolioImageUrls: string[];
+  } | null;
   services: Array<{
     categoryKey: string;
     label: string;
@@ -26,7 +33,15 @@ type MarketMe = {
   }>;
 };
 
-type CreatorRow = { marketCreatorId?: string; email: string | null; priceCents: number | null };
+type CreatorRow = {
+  marketCreatorId?: string;
+  email: string | null;
+  displayName?: string | null;
+  profileImageUrl?: string | null;
+  portfolioUrl?: string | null;
+  portfolioImageUrls?: string[];
+  priceCents: number | null;
+};
 type CartItem = {
   marketCreatorId: string;
   categoryKey: string;
@@ -150,20 +165,34 @@ export default function MarketPage() {
         ) : meLoading ? (
           <div className="text-center py-12 text-gray-600">Loading…</div>
         ) : marketMe?.approved ? (
-          <SellCreatorView
-            services={marketMe.services}
-            onSave={async (updates) => {
-              const res = await fetch("/api/market/services", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ services: updates }),
-              });
-              if (res.ok) {
-                const data = await fetch("/api/market/me").then((r) => r.json());
-                setMarketMe(data);
-              }
-            }}
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <SellCreatorView
+                services={marketMe.services}
+                onSave={async (updates) => {
+                  const res = await fetch("/api/market/services", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ services: updates }),
+                  });
+                  if (res.ok) {
+                    const data = await fetch("/api/market/me").then((r) => r.json());
+                    setMarketMe(data);
+                  }
+                }}
+              />
+            </div>
+            <div className="lg:col-span-1">
+              <SellRightPanel marketMe={marketMe as MarketMeProfile} onUpdate={() => {
+                setMeLoading(true);
+                fetch("/api/market/me")
+                  .then((res) => res.json())
+                  .then((data) => setMarketMe(data))
+                  .catch(() => setMarketMe(null))
+                  .finally(() => setMeLoading(false));
+              }} />
+            </div>
+          </div>
         ) : marketMe?.status === "pending" ? (
           <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-xl">
             <h2 className="text-xl font-semibold mb-2">Application pending</h2>
@@ -280,16 +309,43 @@ function PurchaseSection({
                     No creators offering this service yet.
                   </div>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {(creatorsByCategory[cat.key] || []).map((creator, i) => (
                       <li
                         key={creator.marketCreatorId ?? i}
-                        className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+                        className="flex items-center gap-4 py-3 border-b border-gray-100 last:border-0"
                       >
-                        <span className="text-sm text-gray-700">
-                          {creator.email ?? "Creator"}
-                        </span>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {creator.profileImageUrl ? (
+                            <img
+                              src={creator.profileImageUrl}
+                              alt=""
+                              className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-200"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-200 shrink-0 flex items-center justify-center text-gray-500 text-xs font-medium">
+                              {(creator.displayName || creator.email || "?")[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {creator.displayName || creator.email || "Creator"}
+                            </p>
+                            {creator.portfolioImageUrls && creator.portfolioImageUrls.length > 0 && (
+                              <div className="flex gap-1 mt-1">
+                                {creator.portfolioImageUrls.slice(0, 5).map((url, j) => (
+                                  <img
+                                    key={j}
+                                    src={url}
+                                    alt=""
+                                    className="w-6 h-6 rounded object-cover border border-gray-200"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
                           {creator.priceCents != null && (
                             <span className="text-sm font-medium">
                               ${(creator.priceCents / 100).toFixed(2)}
@@ -497,6 +553,43 @@ function SellApplyForm({ onApplied }: { onApplied: () => void }) {
           </p>
         </div>
       </form>
+    </div>
+  );
+}
+
+function SellRightPanel({ marketMe, onUpdate }: { marketMe: MarketMeProfile; onUpdate: () => void }) {
+  const [tab, setTab] = useState<"profile" | "payments">("profile");
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden sticky top-6">
+      <div className="border-b border-gray-200 flex">
+        <button
+          type="button"
+          onClick={() => setTab("profile")}
+          className={`flex-1 py-3 px-4 text-sm font-medium transition ${
+            tab === "profile" ? "bg-gray-100 text-blue-600 border-b-2 border-blue-600" : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Paid Creator Profile
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("payments")}
+          className={`flex-1 py-3 px-4 text-sm font-medium transition ${
+            tab === "payments" ? "bg-gray-100 text-blue-600 border-b-2 border-blue-600" : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Payments
+        </button>
+      </div>
+      <div className="min-h-[360px]">
+        {tab === "profile" ? (
+          <PaidCreatorProfile marketMe={marketMe} onUpdate={onUpdate} />
+        ) : (
+          <div className="p-4 text-sm text-gray-500">
+            Payment and payout settings will appear here. Connect Stripe to receive payments.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

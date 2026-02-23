@@ -24,7 +24,7 @@ export async function GET(
 
   const { data: rows, error } = await supabase
     .from("market_creator_services")
-    .select("market_creator_id, price_cents, market_creators!inner(profile_id, profiles(email))")
+    .select("market_creator_id, price_cents, market_creators!inner(profile_id, display_name, profile_image_url, portfolio_url, portfolio_image_urls, profiles(email))")
     .eq("category_key", categoryKey)
     .eq("enabled", true)
     .not("price_cents", "is", null)
@@ -37,12 +37,24 @@ export async function GET(
   }
 
   const creators = (rows || []).map((r: Record<string, unknown>) => {
-    const mc = r.market_creators as { profiles?: { email?: string } | { email?: string }[] } | null;
+    const mc = r.market_creators as {
+      profiles?: { email?: string } | { email?: string }[];
+      display_name?: string | null;
+      profile_image_url?: string | null;
+      portfolio_url?: string | null;
+      portfolio_image_urls?: string[] | null;
+    } | null;
     const prof = mc?.profiles;
     const email = Array.isArray(prof) ? prof[0]?.email : (prof as { email?: string })?.email;
+    const urls = mc?.portfolio_image_urls;
+    const portfolioImageUrls = Array.isArray(urls) ? urls.slice(0, 5) : [];
     return {
       marketCreatorId: r.market_creator_id,
       email: email ?? null,
+      displayName: mc?.display_name ?? null,
+      profileImageUrl: mc?.profile_image_url ?? null,
+      portfolioUrl: mc?.portfolio_url ?? null,
+      portfolioImageUrls,
       priceCents: r.price_cents,
     };
   });

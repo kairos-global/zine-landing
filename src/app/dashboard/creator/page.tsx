@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
+import { PaidCreatorProfile, type MarketMeProfile } from "@/app/components/PaidCreatorProfile";
 
 type CreatorOrder = {
   id: string;
@@ -32,6 +33,7 @@ export default function CreatorPortalPage() {
   const [activeTab, setActiveTab] = useState<"zine-orders" | "market-orders">("zine-orders");
   const [orders, setOrders] = useState<CreatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [marketMe, setMarketMe] = useState<MarketMeProfile | null>(null);
 
   useEffect(() => {
     if (activeTab === "zine-orders") {
@@ -43,6 +45,15 @@ export default function CreatorPortalPage() {
         })
         .catch(() => setOrders([]))
         .finally(() => setLoading(false));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "market-orders") {
+      fetch("/api/market/me")
+        .then((res) => res.json())
+        .then((data) => setMarketMe(data))
+        .catch(() => setMarketMe(null));
     }
   }, [activeTab]);
 
@@ -106,7 +117,18 @@ export default function CreatorPortalPage() {
         {activeTab === "zine-orders" ? (
           <ZineOrdersView orders={orders} loading={loading} />
         ) : (
-          <MarketOrdersView />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="min-w-0">
+              <MarketOrdersView />
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden min-h-[360px]">
+              <h3 className="px-4 py-3 border-b border-gray-200 font-semibold text-gray-900">Paid Creator Profile</h3>
+              <PaidCreatorProfile
+                marketMe={marketMe}
+                onUpdate={() => fetch("/api/market/me").then((r) => r.json()).then(setMarketMe)}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -32,20 +32,32 @@ export async function GET() {
 
     const { data: creator, error } = await supabase
       .from("market_creators")
-      .select("id, status")
+      .select("id, status, display_name, profile_image_url, portfolio_url, portfolio_image_urls")
       .eq("profile_id", profileId)
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
+      return NextResponse.json({ approved: false, status: "none", profile: null, services: defaultServices() });
     }
     if (!creator) {
-      return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
+      return NextResponse.json({ approved: false, status: "none", profile: null, services: defaultServices() });
     }
+
+    const profile = {
+      displayName: creator.display_name ?? null,
+      profileImageUrl: creator.profile_image_url ?? null,
+      portfolioUrl: creator.portfolio_url ?? null,
+      portfolioImageUrls: Array.isArray(creator.portfolio_image_urls)
+        ? creator.portfolio_image_urls
+        : (creator.portfolio_image_urls as string[] | null) ?? [],
+    };
+
     if (creator.status !== "approved") {
       return NextResponse.json({
         approved: false,
         status: creator.status as "pending" | "rejected",
+        marketCreatorId: creator.id,
+        profile,
         services: defaultServices(),
       });
     }
@@ -69,8 +81,14 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ approved: true, status: "approved", marketCreatorId: creator.id, services });
+    return NextResponse.json({
+      approved: true,
+      status: "approved",
+      marketCreatorId: creator.id,
+      profile,
+      services,
+    });
   } catch {
-    return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
+    return NextResponse.json({ approved: false, status: "none", profile: null, services: defaultServices() });
   }
 }
