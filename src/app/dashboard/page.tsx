@@ -96,6 +96,18 @@ export default function DashboardPage() {
         </Link>
 
         <Link
+          href="/dashboard/creator"
+          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+        >
+          <div className="text-lg font-semibold text-black group-hover:text-white">
+            Creator Portal
+          </div>
+          <div className="text-sm text-gray-600 group-hover:text-gray-200">
+            Zine orders and ad orders — fulfill and manage
+          </div>
+        </Link>
+
+        <Link
           href="/dashboard/ad-bounties"
           className="rounded-xl p-4 bg-white hover:bg-black transition group"
         >
