@@ -38,7 +38,7 @@ export async function PATCH(req: Request) {
     let portfolioImageUrls: string[] | undefined;
     if (Array.isArray(body.portfolioImageUrls)) {
       portfolioImageUrls = body.portfolioImageUrls
-        .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+        .filter((u: unknown): u is string => typeof u === "string" && u.trim().length > 0)
         .slice(0, 5);
     }
 
