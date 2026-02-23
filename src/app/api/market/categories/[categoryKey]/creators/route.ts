@@ -11,7 +11,7 @@ const validKeys = new Set<string>(MARKET_CATEGORIES.map((c) => c.key));
 
 /**
  * GET /api/market/categories/[categoryKey]/creators
- * List creators who sell this service (enabled + price between $25–$200).
+ * List creators who sell this service (enabled + price between $10–$200).
  */
 export async function GET(
   _req: Request,
@@ -28,7 +28,7 @@ export async function GET(
     .eq("category_key", categoryKey)
     .eq("enabled", true)
     .not("price_cents", "is", null)
-    .gte("price_cents", 2500)
+    .gte("price_cents", 1000)
     .lte("price_cents", 20000);
 
   if (error) {

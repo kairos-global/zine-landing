@@ -69,7 +69,7 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ approved: true, status: "approved", services });
+    return NextResponse.json({ approved: true, status: "approved", marketCreatorId: creator.id, services });
   } catch {
     return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
   }

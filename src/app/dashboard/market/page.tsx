@@ -17,6 +17,7 @@ type CategoryKey = (typeof CATEGORIES)[number]["key"];
 type MarketMe = {
   approved: boolean;
   status?: "none" | "pending" | "approved" | "rejected";
+  marketCreatorId?: string;
   services: Array<{
     categoryKey: string;
     label: string;
@@ -143,6 +144,8 @@ export default function MarketPage() {
             setMarketOrders={setMarketOrders}
             ordersLoading={ordersLoading}
             setOrdersLoading={setOrdersLoading}
+            myMarketCreatorId={marketMe?.approved ? marketMe.marketCreatorId : undefined}
+            onSwitchToSell={() => setSection("sell")}
           />
         ) : meLoading ? (
           <div className="text-center py-12 text-gray-600">Loading…</div>
@@ -198,6 +201,8 @@ function PurchaseSection({
   setMarketOrders,
   ordersLoading,
   setOrdersLoading,
+  myMarketCreatorId,
+  onSwitchToSell,
 }: {
   categories: readonly { key: CategoryKey; label: string }[];
   creatorsByCategory: Record<string, CreatorRow[]>;
@@ -210,6 +215,8 @@ function PurchaseSection({
   setMarketOrders: React.Dispatch<React.SetStateAction<typeof marketOrders>>;
   ordersLoading: boolean;
   setOrdersLoading: (v: boolean) => void;
+  myMarketCreatorId?: string;
+  onSwitchToSell: () => void;
 }) {
   useEffect(() => {
     if (panelTab === "history") {
@@ -288,13 +295,23 @@ function PurchaseSection({
                               ${(creator.priceCents / 100).toFixed(2)}
                             </span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => addToCart(creator, cat.key, cat.label)}
-                            className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                          >
-                            Add to cart
-                          </button>
+                          {creator.marketCreatorId !== undefined && creator.marketCreatorId === myMarketCreatorId ? (
+                            <button
+                              type="button"
+                              onClick={onSwitchToSell}
+                              className="text-xs px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => addToCart(creator, cat.key, cat.label)}
+                              className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                            >
+                              Add to cart
+                            </button>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -484,7 +501,7 @@ function SellApplyForm({ onApplied }: { onApplied: () => void }) {
   );
 }
 
-const MIN_PRICE = 25;
+const MIN_PRICE = 10;
 const MAX_PRICE = 200;
 const PRICE_STEP = 5;
 
@@ -513,7 +530,7 @@ function SellCreatorView({
   const handleToggle = (categoryKey: string, enabled: boolean) => {
     setLocal((prev) =>
       prev.map((s) =>
-        s.categoryKey === categoryKey ? { ...s, enabled, priceCents: enabled ? (s.priceCents ?? 2500) : null } : s
+        s.categoryKey === categoryKey ? { ...s, enabled, priceCents: enabled ? (s.priceCents ?? 1000) : null } : s
       )
     );
   };
@@ -567,7 +584,7 @@ function SellCreatorView({
       <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/80">
         <h2 className="text-xl font-semibold">Your services</h2>
         <p className="text-sm text-gray-600 mt-0.5">
-          Turn each category on or off and set your price ($25–$200). You’ll appear in Purchase when it’s on and priced.
+          Turn each category on or off and set your price ($10–$200). You’ll appear in Purchase when it’s on and priced.
         </p>
       </div>
       <div className="overflow-x-auto">

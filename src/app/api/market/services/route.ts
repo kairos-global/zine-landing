@@ -45,7 +45,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "services array required" }, { status: 400 });
     }
 
-    const MIN_PRICE_CENTS = 2500; // $25
+    const MIN_PRICE_CENTS = 1000; // $10
     const MAX_PRICE_CENTS = 20000; // $200
 
     for (const s of services) {
