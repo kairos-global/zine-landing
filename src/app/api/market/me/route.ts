@@ -36,8 +36,18 @@ export async function GET() {
       .eq("profile_id", profileId)
       .maybeSingle();
 
-    if (error || !creator || creator.status !== "approved") {
-      return NextResponse.json({ approved: false, services: defaultServices() });
+    if (error) {
+      return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
+    }
+    if (!creator) {
+      return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
+    }
+    if (creator.status !== "approved") {
+      return NextResponse.json({
+        approved: false,
+        status: creator.status as "pending" | "rejected",
+        services: defaultServices(),
+      });
     }
 
     const { data: rows } = await supabase
@@ -59,8 +69,8 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ approved: true, services });
+    return NextResponse.json({ approved: true, status: "approved", services });
   } catch {
-    return NextResponse.json({ approved: false, services: defaultServices() });
+    return NextResponse.json({ approved: false, status: "none", services: defaultServices() });
   }
 }

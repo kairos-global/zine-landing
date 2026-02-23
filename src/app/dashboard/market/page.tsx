@@ -16,6 +16,7 @@ type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
 type MarketMe = {
   approved: boolean;
+  status?: "none" | "pending" | "approved" | "rejected";
   services: Array<{
     categoryKey: string;
     label: string;
@@ -141,8 +142,25 @@ export default function MarketPage() {
               }
             }}
           />
+        ) : marketMe?.status === "pending" ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-xl">
+            <h2 className="text-xl font-semibold mb-2">Application pending</h2>
+            <p className="text-gray-600">
+              We’ve received your application to become a paid creator. We’ll review it and
+              get back to you. Once approved, you can list your services and set prices here.
+            </p>
+          </div>
         ) : (
-          <SellApplyForm />
+          <SellApplyForm
+            onApplied={() => {
+              setMeLoading(true);
+              fetch("/api/market/me")
+                .then((res) => res.json())
+                .then((data) => setMarketMe(data))
+                .catch(() => setMarketMe(null))
+                .finally(() => setMeLoading(false));
+            }}
+          />
         )}
       </div>
     </div>
@@ -203,15 +221,47 @@ function PurchaseSection({
   );
 }
 
-function SellApplyForm() {
+function SellApplyForm({ onApplied }: { onApplied: () => void }) {
+  const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [bio, setBio] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/market/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          portfolioUrl: portfolioUrl.trim() || undefined,
+          bio: bio.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Something went wrong");
+        return;
+      }
+      onApplied();
+    } catch {
+      setError("Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-xl">
       <h2 className="text-xl font-semibold mb-2">Become a paid creator</h2>
       <p className="text-sm text-gray-600 mb-6">
-        Fill out the form below and complete Stripe registration. Once we approve your
+        Fill out the form below and submit your application. Once we approve your
         account, you can list your services and set prices in the Sell section.
+        Stripe payout setup can be added later when you’re ready to get paid.
       </p>
-      <form className="space-y-4">
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Portfolio or website (optional)
@@ -220,6 +270,8 @@ function SellApplyForm() {
             type="url"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             placeholder="https://…"
+            value={portfolioUrl}
+            onChange={(e) => setPortfolioUrl(e.target.value)}
           />
         </div>
         <div>
@@ -229,18 +281,24 @@ function SellApplyForm() {
           <textarea
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[100px]"
             placeholder="e.g. Graphic designer, logos and flyers…"
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
           />
         </div>
+        {error && (
+          <p className="text-sm text-red-600">{error}</p>
+        )}
         <div className="pt-2">
           <button
-            type="button"
-            className="rounded-lg bg-black text-white px-4 py-2 text-sm font-medium hover:bg-gray-800 transition"
+            type="submit"
+            disabled={submitting}
+            className="rounded-lg bg-black text-white px-4 py-2 text-sm font-medium hover:bg-gray-800 transition disabled:opacity-50"
           >
-            Continue to Stripe registration
+            {submitting ? "Submitting…" : "Submit application"}
           </button>
           <p className="text-xs text-gray-500 mt-2">
-            You’ll complete identity and payout details with Stripe. We’ll review and
-            approve your account afterward.
+            We’ll review your application and approve your account. After that you can
+            add services and prices here.
           </p>
         </div>
       </form>
