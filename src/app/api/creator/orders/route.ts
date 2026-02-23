@@ -127,11 +127,17 @@ export async function GET() {
         byOrder.set(order.id, { order, myItems: [] });
       }
       const entry = byOrder.get(order.id)!;
+      const rawIssue = row.issue;
+      const issueRow = Array.isArray(rawIssue) ? rawIssue[0] : rawIssue;
+      const issue =
+        issueRow != null
+          ? { id: issueRow.id, title: issueRow.title ?? null, slug: issueRow.slug ?? null }
+          : { id: "", title: null, slug: null };
       entry.myItems.push({
         id: row.id,
         issue_id: row.issue_id,
         quantity: row.quantity,
-        issue: (row.issue as { id: string; title: string | null; slug: string | null }) || { id: "", title: null, slug: null },
+        issue,
       });
     }
 
