@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrCreateProfileId } from "@/lib/profile";
-import { MARKET_CATEGORIES } from "../categories/route";
+import { MARKET_CATEGORIES } from "@/lib/market-categories";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

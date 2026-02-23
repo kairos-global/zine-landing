@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MARKET_CATEGORIES } from "../../../categories/route";
+import { MARKET_CATEGORIES } from "@/lib/market-categories";
 
 const validKeys = new Set(MARKET_CATEGORIES.map((c) => c.key));
 
