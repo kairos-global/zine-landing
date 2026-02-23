@@ -583,7 +583,7 @@ function SellRightPanel({ marketMe, onUpdate }: { marketMe: MarketMeProfile; onU
       </div>
       <div className="min-h-[360px]">
         {tab === "profile" ? (
-          <PaidCreatorProfile marketMe={marketMe} onUpdate={onUpdate} />
+          <PaidCreatorProfile marketMe={marketMe} onUpdate={onUpdate} mode="view" />
         ) : (
           <div className="p-4 text-sm text-gray-500">
             Payment and payout settings will appear here. Connect Stripe to receive payments.

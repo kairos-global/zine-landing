@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 
 export type MarketMeProfile = {
   approved: boolean;
@@ -19,9 +20,11 @@ type Props = {
   onUpdate: () => void;
   showApplyCta?: boolean;
   onGoToApply?: () => void;
+  /** "view" = read-only card with Edit button linking to Creator Portal; "edit" = full form */
+  mode?: "view" | "edit";
 };
 
-export function PaidCreatorProfile({ marketMe, onUpdate, showApplyCta, onGoToApply }: Props) {
+export function PaidCreatorProfile({ marketMe, onUpdate, showApplyCta, onGoToApply, mode = "edit" }: Props) {
   const [displayName, setDisplayName] = useState(marketMe?.profile?.displayName ?? "");
   const [profileImageUrl, setProfileImageUrl] = useState(marketMe?.profile?.profileImageUrl ?? "");
   const [portfolioUrl, setPortfolioUrl] = useState(marketMe?.profile?.portfolioUrl ?? "");
@@ -82,6 +85,73 @@ export function PaidCreatorProfile({ marketMe, onUpdate, showApplyCta, onGoToApp
     return (
       <div className="p-4 text-sm text-gray-600">
         <p>Load your profile to edit it here.</p>
+      </div>
+    );
+  }
+
+  // Read-only view for Market Sell panel: profile card + Edit button → Creator Portal
+  if (mode === "view") {
+    const p = marketMe.profile;
+    const name = p?.displayName?.trim() || "Paid Creator";
+    const portfolioUrl = p?.portfolioUrl?.trim() || null;
+    const portfolioImageUrls = p?.portfolioImageUrls?.slice(0, 5) ?? [];
+    return (
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-4">
+          <h3 className="font-semibold text-gray-900">Your profile</h3>
+          <Link
+            href="/dashboard/creator?tab=market-orders"
+            className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline shrink-0"
+          >
+            Edit
+          </Link>
+        </div>
+        <div className="flex flex-col items-center text-center">
+          {p?.profileImageUrl ? (
+            <img
+              src={p.profileImageUrl}
+              alt=""
+              className="w-24 h-24 rounded-full object-cover border border-gray-200 mb-3"
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-lg font-medium mb-3">
+              {name[0].toUpperCase()}
+            </div>
+          )}
+          <p className="font-semibold text-gray-900">{name}</p>
+          {portfolioUrl && (
+            <a
+              href={portfolioUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-600 hover:underline mt-1 break-all"
+            >
+              Portfolio
+            </a>
+          )}
+        </div>
+        {portfolioImageUrls.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium text-gray-500 mb-2">Portfolio</p>
+            <div className="grid grid-cols-3 gap-2">
+              {portfolioImageUrls.map((url, i) => (
+                <a
+                  key={i}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
+                >
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

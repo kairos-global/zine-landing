@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { PaidCreatorProfile, type MarketMeProfile } from "@/app/components/PaidCreatorProfile";
 
@@ -29,11 +30,17 @@ type CreatorOrder = {
 };
 
 export default function CreatorPortalPage() {
+  const searchParams = useSearchParams();
   const { isSignedIn, isLoaded } = useUser();
   const [activeTab, setActiveTab] = useState<"zine-orders" | "market-orders">("zine-orders");
   const [orders, setOrders] = useState<CreatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [marketMe, setMarketMe] = useState<MarketMeProfile | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "market-orders") setActiveTab("market-orders");
+  }, [searchParams]);
 
   useEffect(() => {
     if (activeTab === "zine-orders") {
