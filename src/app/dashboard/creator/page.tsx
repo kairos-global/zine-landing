@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
@@ -29,7 +29,7 @@ type CreatorOrder = {
   }>;
 };
 
-export default function CreatorPortalPage() {
+function CreatorPortalContent() {
   const searchParams = useSearchParams();
   const { isSignedIn, isLoaded } = useUser();
   const [activeTab, setActiveTab] = useState<"zine-orders" | "market-orders">("zine-orders");
@@ -139,6 +139,14 @@ export default function CreatorPortalPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CreatorPortalPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-gray-600">Loading…</div>}>
+      <CreatorPortalContent />
+    </Suspense>
   );
 }
 
