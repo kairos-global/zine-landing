@@ -45,9 +45,16 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "services array required" }, { status: 400 });
     }
 
+    const MIN_PRICE_CENTS = 2500; // $25
+    const MAX_PRICE_CENTS = 20000; // $200
+
     for (const s of services) {
       if (!validKeys.has(s.categoryKey)) continue;
-      const priceCents = s.enabled && s.priceCents != null ? Math.round(Number(s.priceCents)) : null;
+      let priceCents: number | null = null;
+      if (s.enabled && s.priceCents != null) {
+        const raw = Math.round(Number(s.priceCents));
+        priceCents = Math.max(MIN_PRICE_CENTS, Math.min(MAX_PRICE_CENTS, raw));
+      }
       await supabase
         .from("market_creator_services")
         .upsert(

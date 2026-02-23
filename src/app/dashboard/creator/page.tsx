@@ -29,7 +29,7 @@ type CreatorOrder = {
 
 export default function CreatorPortalPage() {
   const { isSignedIn, isLoaded } = useUser();
-  const [activeTab, setActiveTab] = useState<"zine-orders" | "ad-orders">("zine-orders");
+  const [activeTab, setActiveTab] = useState<"zine-orders" | "market-orders">("zine-orders");
   const [orders, setOrders] = useState<CreatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -91,14 +91,14 @@ export default function CreatorPortalPage() {
               Zine orders
             </button>
             <button
-              onClick={() => setActiveTab("ad-orders")}
+              onClick={() => setActiveTab("market-orders")}
               className={`pb-3 px-1 font-medium transition ${
-                activeTab === "ad-orders"
+                activeTab === "market-orders"
                   ? "text-blue-600 border-b-2 border-blue-600"
                   : "text-gray-600 hover:text-black"
               }`}
             >
-              Ad orders
+              Market orders
             </button>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function CreatorPortalPage() {
         {activeTab === "zine-orders" ? (
           <ZineOrdersView orders={orders} loading={loading} />
         ) : (
-          <AdOrdersView />
+          <MarketOrdersView />
         )}
       </div>
     </div>
@@ -229,14 +229,102 @@ function ZineOrdersView({
   );
 }
 
-function AdOrdersView() {
+function MarketOrdersView() {
+  const [orders, setOrders] = useState<Array<{
+    id: string;
+    itemId: string;
+    categoryKey: string;
+    priceCents: number;
+    status: string;
+    deliverableUrl: string | null;
+    orderCreatedAt: string;
+    buyerEmail?: string | null;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/creator/market-orders")
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data) => setOrders(data.items || []))
+      .catch(() => setOrders([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleStatus = async (itemId: string, status: "accepted" | "declined") => {
+    const res = await fetch(`/api/creator/market-orders/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) {
+      setOrders((prev) => prev.map((o) => (o.itemId === itemId ? { ...o, status } : o)));
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-12 text-gray-600">Loading market orders…</div>;
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+        <div className="text-4xl mb-4">🎨</div>
+        <p className="text-gray-600">Market orders</p>
+        <p className="text-sm text-gray-500 mt-2">
+          When buyers purchase your services, orders will show here. You can accept or decline, then upload the deliverable when accepted.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-      <div className="text-4xl mb-4">🎨</div>
-      <p className="text-gray-600">Ad orders</p>
-      <p className="text-sm text-gray-500 mt-2">
-        Manage your market orders and submissions here. This section is coming soon.
-      </p>
+    <div className="space-y-4">
+      {orders.map((item) => (
+        <div key={item.itemId} className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <span className="text-sm text-gray-500">
+              {new Date(item.orderCreatedAt).toLocaleDateString()} · {item.categoryKey.replace(/_/g, " ")}
+            </span>
+            <span className={`px-2 py-1 text-xs font-medium rounded ${
+              item.status === "pending" ? "bg-amber-100 text-amber-700" :
+              item.status === "accepted" ? "bg-blue-100 text-blue-700" :
+              item.status === "declined" ? "bg-red-100 text-red-700" :
+              "bg-green-100 text-green-700"
+            }`}>
+              {item.status}
+            </span>
+          </div>
+          <p className="text-gray-700">${(item.priceCents / 100).toFixed(2)}</p>
+          {item.buyerEmail && <p className="text-sm text-gray-500">Buyer: {item.buyerEmail}</p>}
+          {item.status === "pending" && (
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => handleStatus(item.itemId, "accepted")}
+                className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStatus(item.itemId, "declined")}
+                className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600"
+              >
+                Decline
+              </button>
+            </div>
+          )}
+          {item.status === "accepted" && (
+            <p className="text-sm text-gray-500 mt-3">Upload deliverable (coming soon)</p>
+          )}
+          {item.status === "completed" && item.deliverableUrl && (
+            <a href={item.deliverableUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline mt-2 inline-block">
+              View deliverable
+            </a>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

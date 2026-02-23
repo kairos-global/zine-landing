@@ -103,7 +103,7 @@ export default function DashboardPage() {
             Creator Portal
           </div>
           <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Zine orders and ad orders — fulfill and manage
+            Zine orders and market orders — fulfill and manage
           </div>
         </Link>
 
