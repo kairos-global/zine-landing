@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { MARKET_CATEGORIES } from "@/lib/market-categories";
 
-const validKeys = new Set(MARKET_CATEGORIES.map((c) => c.key));
+const validKeys = new Set<string>(MARKET_CATEGORIES.map((c) => c.key));
 
 /**
  * GET /api/market/categories/[categoryKey]/creators

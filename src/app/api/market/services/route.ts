@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const validKeys = new Set(MARKET_CATEGORIES.map((c) => c.key));
+const validKeys = new Set<string>(MARKET_CATEGORIES.map((c) => c.key));
 
 /**
  * PATCH /api/market/services
