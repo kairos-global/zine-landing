@@ -129,7 +129,28 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
       {/* Main content: Digital copy only */}
       <section>
         <div id="read" className="rounded-xl border p-4">
-          <h2 className="mb-3 text-lg font-semibold">Digital copy</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Digital copy</h2>
+            {issue.pdf_url && (
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={issue.pdf_url}
+                  download
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
+                >
+                  <span aria-hidden>↓</span> Download
+                </a>
+                <a
+                  href={issue.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+                >
+                  <span aria-hidden>🖨</span> Print
+                </a>
+              </div>
+            )}
+          </div>
           {issue.pdf_url ? (
             <>
               <object
