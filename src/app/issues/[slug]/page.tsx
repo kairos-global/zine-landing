@@ -35,16 +35,89 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
   const linksWithQR = (links ?? []).filter((l) => l.redirect_path);
 
   return (
-    <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 md:grid-cols-[220px_1fr]">
-      {/* Sidebar */}
-      <aside className="sticky top-6 h-fit space-y-2 rounded-xl border p-3 text-sm">
-        <div className="font-medium mb-2">{issue.title}</div>
-        <nav className="grid gap-1">
-          <a href="#read" className="underline">Digital copy</a>
-          <a href="#links" className="underline">Links</a>
-          <a href="#locate" className="underline">Find on map</a>
-        </nav>
-        <hr className="my-2" />
+    <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 md:grid-cols-[280px_1fr]">
+      {/* Sidebar: zine info box + Links + Find on map */}
+      <aside className="sticky top-6 h-fit space-y-4">
+        {/* Zine info box / index */}
+        <div className="rounded-xl border p-3 text-sm">
+          <div className="font-medium mb-2">{issue.title}</div>
+          <nav className="grid gap-1">
+            <a href="#read" className="underline">Digital copy</a>
+            <a href="#links" className="underline">Links</a>
+            <a href="#locate" className="underline">Find on map</a>
+          </nav>
+        </div>
+
+        {/* Links — under info box */}
+        <div id="links" className="rounded-xl border p-3 text-sm">
+          <h2 className="mb-3 text-sm font-semibold">Links</h2>
+          {links && links.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {links.map((l, index) => (
+                  <a
+                    key={l.id || l.url}
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    <span>🔗</span>
+                    <span>{l.label || `Link ${index + 1}`}</span>
+                    <span className="opacity-70">↗</span>
+                  </a>
+                ))}
+              </div>
+              {linksWithQR.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold mb-2">QR Codes</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {linksWithQR.map((l) => (
+                      <div
+                        key={l.id || l.url}
+                        className="bg-white rounded border p-2 flex flex-col items-center"
+                      >
+                        <div className="text-xs font-medium mb-1 text-center truncate w-full">
+                          {l.label || "Link"}
+                        </div>
+                        <IssueQRCode
+                          fullRedirectUrl={`${baseUrl}${l.redirect_path}`}
+                          label={l.label || "Link"}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs opacity-70">No links yet.</p>
+          )}
+        </div>
+
+        {/* Find on map — under Links */}
+        <div id="locate" className="rounded-xl border p-3 text-sm">
+          <h2 className="mb-2 text-sm font-semibold">Find on map</h2>
+          <p className="mb-3 text-xs opacity-70">
+            Map integration coming soon.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link
+              href={`/map?issue=${issue.slug}`}
+              className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs hover:bg-neutral-800 transition-colors"
+            >
+              View this issue on map
+            </Link>
+            <Link
+              href="/map?view=distributors"
+              className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs hover:bg-neutral-800 transition-colors"
+            >
+              Where can I find a copy?
+            </Link>
+          </div>
+        </div>
+
+        <hr className="border-neutral-700" />
         <Link
           href="/browse-zines"
           className="inline-block rounded-md border px-3 py-1 text-sm hover:bg-neutral-800 transition-colors"
@@ -53,9 +126,8 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
         </Link>
       </aside>
 
-      {/* Content */}
-      <section className="space-y-10">
-        {/* Read */}
+      {/* Main content: Digital copy only */}
+      <section>
         <div id="read" className="rounded-xl border p-4">
           <h2 className="mb-3 text-lg font-semibold">Digital copy</h2>
           {issue.pdf_url ? (
@@ -76,78 +148,6 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
           ) : (
             <p className="text-sm opacity-70">PDF not available.</p>
           )}
-        </div>
-
-        {/* Links */}
-        <div id="links" className="rounded-xl border p-4">
-          <h2 className="mb-3 text-lg font-semibold">Links</h2>
-          {links && links.length > 0 ? (
-            <div className="space-y-4">
-              {/* Link buttons */}
-              <div className="flex flex-wrap gap-3">
-                {links.map((l, index) => (
-                  <a
-                    key={l.id || l.url}
-                    href={l.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
-                  >
-                    <span>🔗</span>
-                    <span>{l.label || `Link ${index + 1}`}</span>
-                    <span className="text-xs opacity-70">↗</span>
-                  </a>
-                ))}
-              </div>
-
-              {/* QR Codes — rendered from full redirect URL so scans always hit this origin */}
-              {linksWithQR.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-sm font-semibold mb-3">QR Codes</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {linksWithQR.map((l, index) => (
-                      <div
-                        key={l.id || l.url}
-                        className="bg-white rounded-lg border p-3 flex flex-col items-center"
-                      >
-                        <div className="text-xs font-medium mb-2 text-center">
-                          {l.label || `Link ${index + 1}`}
-                        </div>
-                        <IssueQRCode
-                          fullRedirectUrl={`${baseUrl}${l.redirect_path}`}
-                          label={l.label || `Link ${index + 1}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm opacity-70">No links yet.</p>
-          )}
-        </div>
-
-        {/* Locate */}
-        <div id="locate" className="rounded-xl border p-4">
-          <h2 className="mb-3 text-lg font-semibold">Find on map</h2>
-          <p className="mb-3 text-sm opacity-70">
-            Map integration coming soon.
-          </p>
-          <div className="flex gap-2">
-            <Link
-              href={{ pathname: "/map", query: { issue: issue.slug } }}
-              className="rounded-md border px-3 py-1 text-sm"
-            >
-              View this issue on map
-            </Link>
-            <Link
-              href={{ pathname: "/map", query: { view: "distributors" } }}
-              className="rounded-md border px-3 py-1 text-sm"
-            >
-              Where can I find a copy?
-            </Link>
-          </div>
         </div>
       </section>
     </main>
