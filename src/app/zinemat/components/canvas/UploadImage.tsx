@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 
@@ -9,6 +10,8 @@ interface UploadImageProps {
   onUpload: (index: number, file: File) => void;
   onRemove?: (index: number) => void;
   rotated?: boolean; // ⬅️ NEW: rotate content for the top row
+  /** Shown behind the dashed empty state and behind the user image (composition guide). */
+  templateStyle?: CSSProperties;
 }
 
 export default function UploadImage({
@@ -17,6 +20,7 @@ export default function UploadImage({
   onUpload,
   onRemove,
   rotated = false,
+  templateStyle,
 }: UploadImageProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState(false);
@@ -55,15 +59,23 @@ export default function UploadImage({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full"
+      className="relative w-full h-full overflow-hidden rounded-md"
       onMouseDown={() => preview && setSelected(true)}
     >
+      {templateStyle && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0 rounded-md"
+          style={templateStyle}
+        />
+      )}
+
       {!preview && (
-        <label className="block w-full h-full cursor-pointer">
+        <label className="relative z-10 block h-full w-full cursor-pointer">
           <div
-            className={`flex items-center justify-center w-full h-full bg-gray-200 border-2 border-dashed border-gray-400 rounded-md text-sm font-semibold text-gray-600 ${
-              rotated ? "rotate-180" : ""
-            }`}
+            className={`flex h-full w-full items-center justify-center rounded-md border-2 border-dashed border-gray-400 text-sm font-semibold text-gray-700 ${
+              templateStyle ? "bg-transparent" : "bg-gray-200"
+            } ${rotated ? "rotate-180" : ""}`}
           >
             + Page {index + 1}
           </div>
@@ -80,6 +92,7 @@ export default function UploadImage({
 
       {preview && box && (
         <Rnd
+          className="relative z-10"
           size={{ width: box.w, height: box.h }}
           position={{ x: box.x, y: box.y }}
           // Keep resize centered so it feels identical on both rows
@@ -144,7 +157,7 @@ export default function UploadImage({
             e.stopPropagation();
             onRemove(index);
           }}
-          className="absolute top-1 right-1 z-20 bg-white/80 rounded-full w-6 h-6 flex items-center justify-center text-xs text-red-600 hover:bg-white hover:text-red-800 shadow"
+          className="absolute top-1 right-1 z-30 bg-white/80 rounded-full w-6 h-6 flex items-center justify-center text-xs text-red-600 hover:bg-white hover:text-red-800 shadow"
           title="Remove image"
         >
           ×

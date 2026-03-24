@@ -2,6 +2,12 @@
 
 import { useState, useRef } from "react";
 import UploadImage from "./UploadImage";
+import {
+  DEFAULT_MINI_TEMPLATE_ID,
+  getMiniTemplateById,
+  MINI_ZINE_TEMPLATES,
+  type MiniZineTemplateId,
+} from "./miniZineTemplates";
 import { PDFDocument, degrees, rgb, PDFPage, RGB } from "pdf-lib";
 
 interface MiniZineEditorProps {
@@ -11,8 +17,10 @@ interface MiniZineEditorProps {
 export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
   const [images, setImages] = useState<(File | null)[]>(Array(8).fill(null));
   const [includeGrid, setIncludeGrid] = useState<boolean>(false);
+  const [templateId, setTemplateId] = useState<MiniZineTemplateId>(DEFAULT_MINI_TEMPLATE_ID);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const activeTemplate = getMiniTemplateById(templateId);
 
   const handleUpload = (index: number, file: File) => {
     const updated = [...images];
@@ -177,7 +185,7 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
         ← Back
       </button>
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h2 className="text-lg font-semibold">Mini Zine (8 panels)</h2>
         <button
           onClick={handleExport}
@@ -187,6 +195,29 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
         >
           Export PDF
         </button>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+        <label htmlFor="mini-template" className="mb-2 block text-sm font-medium text-gray-800">
+          Canvas template
+        </label>
+        <p className="mb-2 text-xs text-gray-600">
+          Pick a background style for each panel. Your uploads sit on top so you can line up photos with
+          lines or grids. PDF export still uses your images in the fold layout; templates are an on-screen
+          guide.
+        </p>
+        <select
+          id="mini-template"
+          value={templateId}
+          onChange={(e) => setTemplateId(e.target.value as MiniZineTemplateId)}
+          className="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          {MINI_ZINE_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} — {t.shortLabel}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -238,6 +269,7 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
                 onUpload={handleUpload}
                 onRemove={handleRemove}
                 rotated={i < 4}
+                templateStyle={activeTemplate.slotStyle(idx)}
               />
             </div>
           ))}
