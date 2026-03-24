@@ -7,7 +7,11 @@ import { PDFDocument, degrees, rgb, PDFPage, RGB } from "pdf-lib";
 
 interface MiniZineEditorProps {
   onBack: () => void;
-  templateId: MiniZineTemplateId;
+  /**
+   * From the template browser only. Omit when opening via Formats → Mini (blank gray panels).
+   * Future: code/SVG layouts will render here and export as one composite.
+   */
+  templateId?: MiniZineTemplateId;
 }
 
 export default function MiniZineEditor({ onBack, templateId }: MiniZineEditorProps) {
@@ -15,7 +19,7 @@ export default function MiniZineEditor({ onBack, templateId }: MiniZineEditorPro
   const [includeGrid, setIncludeGrid] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
-  const activeTemplate = getMiniTemplateById(templateId);
+  const activeTemplate = templateId != null ? getMiniTemplateById(templateId) : null;
 
   const handleUpload = (index: number, file: File) => {
     const updated = [...images];
@@ -73,7 +77,9 @@ export default function MiniZineEditor({ onBack, templateId }: MiniZineEditorPro
     }
   };
 
-  // Build the PDF by reading actual DOM geometry (exact WYSIWYG placement)
+  // Build the PDF from user images + optional grid guides. When templates become full SVG/code
+  // layers, extend this to draw decoration + images in one pass (or rasterize the composed canvas)
+  // so export matches the screen.
   const buildPdf = async () => {
     const root = canvasRef.current;
     if (!root) throw new Error("Canvas root not found");
@@ -183,10 +189,14 @@ export default function MiniZineEditor({ onBack, templateId }: MiniZineEditorPro
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Mini Zine (8 panels)</h2>
-          <p className="text-sm text-gray-600">
-            Template: <span className="font-medium text-gray-900">{activeTemplate.name}</span>
-            <span className="text-gray-500"> — {activeTemplate.shortLabel}</span>
-          </p>
+          {activeTemplate ? (
+            <p className="text-sm text-gray-600">
+              Template: <span className="font-medium text-gray-900">{activeTemplate.name}</span>
+              <span className="text-gray-500"> — {activeTemplate.shortLabel}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600">Blank canvas — default fold layout and gray panels.</p>
+          )}
         </div>
         <button
           onClick={handleExport}
@@ -247,7 +257,7 @@ export default function MiniZineEditor({ onBack, templateId }: MiniZineEditorPro
                 onUpload={handleUpload}
                 onRemove={handleRemove}
                 rotated={i < 4}
-                templateStyle={activeTemplate.slotStyle(idx)}
+                templateStyle={activeTemplate?.slotStyle(idx)}
               />
             </div>
           ))}
