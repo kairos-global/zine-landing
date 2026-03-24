@@ -6,6 +6,8 @@ export interface MiniZineTemplate {
   id: MiniZineTemplateId;
   name: string;
   shortLabel: string;
+  /** Optional line under the title on the picker card (like secondary meta, not a rating). */
+  tagline?: string;
   /** Per logical page index 0–7 (matches `index` on UploadImage / images[]). */
   slotStyle: (pageIndex: number) => CSSProperties;
 }
@@ -41,25 +43,29 @@ export const MINI_ZINE_TEMPLATES: MiniZineTemplate[] = [
   {
     id: "plain",
     name: "Plain",
-    shortLabel: "Gray panels (default)",
+    shortLabel: "Neutral gray panels",
+    tagline: "Clean starting point for any layout.",
     slotStyle: () => plain,
   },
   {
     id: "notebook",
     name: "Notebook",
     shortLabel: "Ruled paper",
+    tagline: "Line up type and sketches like looseleaf.",
     slotStyle: () => notebook,
   },
   {
     id: "graph",
     name: "Graph paper",
     shortLabel: "Light grid",
+    tagline: "Structure collages and diagrams.",
     slotStyle: () => graph,
   },
   {
     id: "sunset",
     name: "Sunset wash",
-    shortLabel: "Color wash",
+    shortLabel: "Warm gradient",
+    tagline: "Soft color behind your photos.",
     slotStyle: () => sunset,
   },
 ];

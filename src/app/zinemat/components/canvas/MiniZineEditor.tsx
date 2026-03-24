@@ -2,22 +2,17 @@
 
 import { useState, useRef } from "react";
 import UploadImage from "./UploadImage";
-import {
-  DEFAULT_MINI_TEMPLATE_ID,
-  getMiniTemplateById,
-  MINI_ZINE_TEMPLATES,
-  type MiniZineTemplateId,
-} from "./miniZineTemplates";
+import { getMiniTemplateById, type MiniZineTemplateId } from "./miniZineTemplates";
 import { PDFDocument, degrees, rgb, PDFPage, RGB } from "pdf-lib";
 
 interface MiniZineEditorProps {
   onBack: () => void;
+  templateId: MiniZineTemplateId;
 }
 
-export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
+export default function MiniZineEditor({ onBack, templateId }: MiniZineEditorProps) {
   const [images, setImages] = useState<(File | null)[]>(Array(8).fill(null));
   const [includeGrid, setIncludeGrid] = useState<boolean>(false);
-  const [templateId, setTemplateId] = useState<MiniZineTemplateId>(DEFAULT_MINI_TEMPLATE_ID);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const activeTemplate = getMiniTemplateById(templateId);
@@ -159,17 +154,17 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
   const handleExport = async () => {
     try {
       const pdfDoc = await buildPdf();
-    const pdfBytes = await pdfDoc.save();
+      const pdfBytes = await pdfDoc.save();
       const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
 
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, "0");
       const dd = String(today.getDate()).padStart(2, "0");
       link.download = `zinemat-${yyyy}${mm}${dd}.pdf`;
-    link.click();
+      link.click();
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error("Export failed:", err.message);
@@ -185,8 +180,14 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
         ← Back
       </button>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h2 className="text-lg font-semibold">Mini Zine (8 panels)</h2>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Mini Zine (8 panels)</h2>
+          <p className="text-sm text-gray-600">
+            Template: <span className="font-medium text-gray-900">{activeTemplate.name}</span>
+            <span className="text-gray-500"> — {activeTemplate.shortLabel}</span>
+          </p>
+        </div>
         <button
           onClick={handleExport}
           disabled={images.every((img) => !img)}
@@ -195,29 +196,6 @@ export default function MiniZineEditor({ onBack }: MiniZineEditorProps) {
         >
           Export PDF
         </button>
-      </div>
-
-      <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-        <label htmlFor="mini-template" className="mb-2 block text-sm font-medium text-gray-800">
-          Canvas template
-        </label>
-        <p className="mb-2 text-xs text-gray-600">
-          Pick a background style for each panel. Your uploads sit on top so you can line up photos with
-          lines or grids. PDF export still uses your images in the fold layout; templates are an on-screen
-          guide.
-        </p>
-        <select
-          id="mini-template"
-          value={templateId}
-          onChange={(e) => setTemplateId(e.target.value as MiniZineTemplateId)}
-          className="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          {MINI_ZINE_TEMPLATES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} — {t.shortLabel}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
