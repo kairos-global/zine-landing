@@ -71,6 +71,7 @@ export default function CanvasView() {
             className="rounded-2xl border-2 border-gray-200 bg-white px-8 py-5 text-center shadow-sm transition hover:border-gray-300 hover:bg-gray-50 sm:min-w-[220px]"
           >
             <span className="block text-lg font-semibold text-gray-900">Mini Zine</span>
+            <span className="mt-1 block text-sm text-gray-600">8 panels, letter sheet fold</span>
           </button>
           <button
             type="button"
@@ -78,6 +79,7 @@ export default function CanvasView() {
             className="rounded-2xl border-2 border-gray-200 bg-white px-8 py-5 text-center shadow-sm transition hover:border-gray-300 hover:bg-gray-50 sm:min-w-[220px]"
           >
             <span className="block text-lg font-semibold text-gray-900">Full Zine</span>
+            <span className="mt-1 block text-sm text-gray-600">Half-letter spreads</span>
           </button>
         </div>
       </section>
