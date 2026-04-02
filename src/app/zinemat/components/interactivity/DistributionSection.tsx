@@ -115,7 +115,7 @@ export default function DistributionSection({
           type="checkbox"
           checked={value.self_distribute}
           onChange={(e) =>
-            onChange({ ...value, self_distribute: e.target.checked })
+            onChange({ self_distribute: e.target.checked, print_for_me: false })
           }
           className="sr-only"
         />
@@ -175,7 +175,7 @@ export default function DistributionSection({
           type="checkbox"
           checked={value.print_for_me}
           onChange={(e) =>
-            onChange({ ...value, print_for_me: e.target.checked })
+            onChange({ self_distribute: false, print_for_me: e.target.checked })
           }
           className="sr-only"
         />
