@@ -1,6 +1,10 @@
+"use client";
+
+import { useAuth } from "@clerk/nextjs";
 import Bubble from "./Bubble";
 
 const BubbleGrid = () => {
+  const { isLoaded } = useAuth();
   const bubbles = [
     { label: "Map", color: "F26565", href: "/map" },
     { label: "Upload Zine", color: "65CBF1", href: "/zinemat", forceRedirectUrl: "/zinemat" },
@@ -12,7 +16,7 @@ const BubbleGrid = () => {
   ];
 
   return (
-    <section className="relative w-full z-10">
+    <section className={`relative w-full z-10 transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}>
       {/* Mobile: 5-row pattern from your sketch */}
       <div className="md:hidden flex flex-col gap-5 px-4 py-6">
         {/* Row 1: Map (left) | About (right) */}
