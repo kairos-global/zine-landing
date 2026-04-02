@@ -33,6 +33,7 @@ interface IssueUpdate {
   published_at?: string | null;
   self_distribute?: boolean;
   print_for_me?: boolean;
+  zine_format?: "mini" | "half_letter";
 }
 
 export async function POST(req: Request) {
@@ -113,6 +114,12 @@ export async function POST(req: Request) {
       distribution = JSON.parse(distributionRaw.toString());
     }
 
+    const zineFormatRaw = formData.get("zine_format") as string | null;
+    const zine_format =
+      zineFormatRaw === "mini" || zineFormatRaw === "half_letter"
+        ? zineFormatRaw
+        : undefined;
+
     const updates: IssueUpdate = {
       title,
       slug,
@@ -120,6 +127,7 @@ export async function POST(req: Request) {
       pdf_url,
       self_distribute: distribution.self_distribute,
       print_for_me: distribution.print_for_me,
+      ...(zine_format ? { zine_format } : {}),
     };
 
     if (existing) {

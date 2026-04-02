@@ -6,7 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import { createClient } from "@supabase/supabase-js";
 import toast from "react-hot-toast";
 
-import BasicsSection, { Basics } from "./BasicsSection";
+import BasicsSection, { Basics, ZineFormat } from "./BasicsSection";
 import UploadsSection from "./UploadsSection";
 import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
 import DistributionSection, { Distribution } from "./DistributionSection";
@@ -32,7 +32,7 @@ export default function InteractivityView() {
   const editId = searchParams?.get("id") ?? null;
   const { isSignedIn, user } = useUser();
 
-  const [basics, setBasics] = useState<Basics>({ title: "" });
+  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: "half_letter" });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null);
@@ -99,7 +99,10 @@ export default function InteractivityView() {
         console.log("✅ [ZineMat] Loaded issue:", data);
 
         if (data.issue) {
-          setBasics({ title: data.issue.title ?? "" });
+          setBasics({
+            title: data.issue.title ?? "",
+            zine_format: (data.issue.zine_format as ZineFormat) ?? "half_letter",
+          });
           setExistingCoverUrl(data.issue.cover_img_url);
           setExistingPdfUrl(data.issue.pdf_url);
           setCoverCleared(false);
@@ -252,6 +255,7 @@ export default function InteractivityView() {
   const buildSaveFormData = useCallback(() => {
     const formData = new FormData();
     formData.append("title", basics.title.trim() || "Untitled");
+    formData.append("zine_format", basics.zine_format);
     formData.append("issueId", issueId);
     if (coverCleared) formData.append("cover_url", "");
     else if (uploadedCoverUrl) formData.append("cover_url", uploadedCoverUrl);
@@ -316,7 +320,7 @@ export default function InteractivityView() {
       }
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [user, loading, editId, issueId, basics.title, uploadedCoverUrl, uploadedPdfUrl, links, distribution, performSave, router]);
+  }, [user, loading, editId, issueId, basics.title, basics.zine_format, uploadedCoverUrl, uploadedPdfUrl, links, distribution, performSave, router]);
 
   // Save button: save then go to My Library
   const handleSave = async () => {

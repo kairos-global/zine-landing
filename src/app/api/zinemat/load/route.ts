@@ -67,6 +67,7 @@ export async function GET(req: Request) {
         cover_img_url: issue.cover_img_url,
         self_distribute: issue.self_distribute ?? false,
         print_for_me: issue.print_for_me ?? false,
+        zine_format: issue.zine_format ?? "half_letter",
         pdf_url: issue.pdf_url,
         published_at: issue.published_at,
         created_at: issue.created_at,

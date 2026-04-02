@@ -4,117 +4,179 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Script from "next/script";
 import Link from "next/link";
 
-// PDF.js loaded from CDN — no npm install needed
+// ─── PDF.js via CDN (no npm install needed) ────────────────────────────────
 const PDFJS_VERSION = "3.11.174";
 const PDFJS_CDN = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
 
 declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pdfjsLib: any;
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  interface Window { pdfjsLib: any; }
 }
 
+// ─── Mini-zine panel map ────────────────────────────────────────────────────
+// Physical layout on a letter sheet (4 cols × 2 rows):
+//   Row 0 (top, UPSIDE DOWN):  [Pg6] [Pg5] [Pg4] [Pg3]
+//   Row 1 (bottom, right-up):  [Back][Front][Pg1] [Pg2]
+//
+// Reading order → virtual page index 1-8:
+const MINI_PANELS = [
+  { row: 1, col: 1, rotate: 0,   label: "Front Cover" },
+  { row: 1, col: 2, rotate: 0,   label: "Page 1"      },
+  { row: 1, col: 3, rotate: 0,   label: "Page 2"      },
+  { row: 0, col: 3, rotate: 180, label: "Page 3"      },
+  { row: 0, col: 2, rotate: 180, label: "Page 4"      },
+  { row: 0, col: 1, rotate: 180, label: "Page 5"      },
+  { row: 0, col: 0, rotate: 180, label: "Page 6"      },
+  { row: 1, col: 0, rotate: 0,   label: "Back Cover"  },
+] as const;
+
+/** Crop one panel out of a full-sheet canvas and optionally rotate 180°. */
+function extractPanel(
+  src: HTMLCanvasElement,
+  row: number,
+  col: number,
+  rotate: number
+): string {
+  const cw = Math.floor(src.width / 4);
+  const ch = Math.floor(src.height / 2);
+  const out = document.createElement("canvas");
+  out.width = cw;
+  out.height = ch;
+  const ctx = out.getContext("2d")!;
+  if (rotate === 180) {
+    ctx.translate(cw, ch);
+    ctx.rotate(Math.PI);
+  }
+  ctx.drawImage(src, col * cw, row * ch, cw, ch, 0, 0, cw, ch);
+  return out.toDataURL("image/jpeg", 0.93);
+}
+
+// ─── Props ─────────────────────────────────────────────────────────────────
 interface FlipViewerProps {
   pdfUrl: string;
   title: string;
   slug: string;
-  zineFormat?: "mini" | "full";
+  zineFormat?: "mini" | "half_letter";
 }
 
+// ─── Component ─────────────────────────────────────────────────────────────
 export default function FlipViewer({
   pdfUrl,
   title,
   slug,
-  zineFormat = "full",
+  zineFormat = "half_letter",
 }: FlipViewerProps) {
+  const isMini = zineFormat === "mini";
+
   const [scriptLoaded, setScriptLoaded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdf, setPdf] = useState<any>(null);
-  const [numPages, setNumPages] = useState(0);
+  const [numPages, setNumPages] = useState(0);           // virtual page count
   const [currentPage, setCurrentPage] = useState(1);
   const [pageCache, setPageCache] = useState<Map<number, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [flipping, setFlipping] = useState<"forward" | "backward" | null>(null);
   const [pendingPage, setPendingPage] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const flipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Once PDF.js script is loaded, open the document
+  // ── Load PDF once script is ready ────────────────────────────────────────
   useEffect(() => {
     if (!scriptLoaded || !pdfUrl) return;
     const lib = window.pdfjsLib;
     lib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
 
-    lib
-      .getDocument({ url: pdfUrl, withCredentials: false })
-      .promise.then((doc: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    lib.getDocument({ url: pdfUrl, withCredentials: false }).promise
+      .then(async (doc: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
         setPdf(doc);
-        setNumPages(doc.numPages);
+        // For mini: always 8 virtual pages; for half-letter: real page count
+        setNumPages(isMini ? 8 : doc.numPages);
         setLoading(false);
       })
       .catch((err: Error) => {
         setError(`Could not load PDF: ${err.message}`);
         setLoading(false);
       });
-  }, [scriptLoaded, pdfUrl]);
+  }, [scriptLoaded, pdfUrl, isMini]);
 
-  // Render a single PDF page to a JPEG data-URL
-  const renderPage = useCallback(
-    async (pageNum: number): Promise<string> => {
-      if (!pdf) return "";
+  // ── Render helpers ────────────────────────────────────────────────────────
+
+  /** Render PDF page N to an off-screen canvas and return it. */
+  const renderPdfPageToCanvas = useCallback(
+    async (pageNum: number): Promise<HTMLCanvasElement | null> => {
+      if (!pdf) return null;
       try {
         const page = await pdf.getPage(pageNum);
-        // Scale to ~1.5× for sharpness; clamp width to ~900px on large screens
-        const baseViewport = page.getViewport({ scale: 1 });
-        const scale = Math.min(1.5, 900 / baseViewport.width);
-        const viewport = page.getViewport({ scale });
+        const base = page.getViewport({ scale: 1 });
+        const scale = Math.min(2.0, 1200 / base.width);   // high-res for mini cropping
+        const vp = page.getViewport({ scale });
         const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = vp.width;
+        canvas.height = vp.height;
         const ctx = canvas.getContext("2d")!;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        return canvas.toDataURL("image/jpeg", 0.92);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        return canvas;
       } catch {
-        return "";
+        return null;
       }
     },
     [pdf]
   );
 
-  // Pre-render current page and neighbours eagerly
+  /**
+   * Produce a data-URL for virtual page `vp` (1-indexed).
+   *  - Mini:       render the one PDF page → extract the right panel.
+   *  - Half-letter: render PDF page vp directly.
+   */
+  const renderVirtualPage = useCallback(
+    async (vp: number): Promise<string> => {
+      if (!pdf) return "";
+      if (isMini) {
+        const panel = MINI_PANELS[vp - 1];
+        if (!panel) return "";
+        const canvas = await renderPdfPageToCanvas(1); // mini is always 1 PDF page
+        if (!canvas) return "";
+        return extractPanel(canvas, panel.row, panel.col, panel.rotate);
+      } else {
+        const canvas = await renderPdfPageToCanvas(vp);
+        if (!canvas) return "";
+        return canvas.toDataURL("image/jpeg", 0.92);
+      }
+    },
+    [pdf, isMini, renderPdfPageToCanvas]
+  );
+
+  // ── Pre-render current + neighbours ──────────────────────────────────────
   useEffect(() => {
     if (!pdf) return;
-    const needed = [currentPage - 1, currentPage, currentPage + 1, currentPage + 2].filter(
-      (p) => p >= 1 && p <= numPages
-    );
-    needed.forEach((pageNum) => {
+    const needed = [currentPage - 1, currentPage, currentPage + 1, currentPage + 2]
+      .filter((p) => p >= 1 && p <= numPages);
+
+    needed.forEach((vp) => {
       setPageCache((prev) => {
-        if (prev.has(pageNum)) return prev;
-        // Kick off async render; update cache when done
-        renderPage(pageNum).then((dataUrl) => {
-          if (dataUrl) {
-            setPageCache((c) => {
-              if (c.has(pageNum)) return c;
-              const next = new Map(c);
-              next.set(pageNum, dataUrl);
-              return next;
-            });
-          }
+        if (prev.has(vp)) return prev;
+        renderVirtualPage(vp).then((url) => {
+          if (!url) return;
+          setPageCache((c) => {
+            if (c.has(vp)) return c;
+            const next = new Map(c);
+            next.set(vp, url);
+            return next;
+          });
         });
-        return prev; // optimistic no-change while rendering
+        return prev;
       });
     });
-  }, [pdf, currentPage, numPages, renderPage]);
+  }, [pdf, currentPage, numPages, renderVirtualPage]);
 
-  // Navigate with flip animation
+  // ── Navigation ────────────────────────────────────────────────────────────
   const navigateTo = useCallback(
-    (page: number, direction: "forward" | "backward") => {
+    (page: number, dir: "forward" | "backward") => {
       if (page < 1 || page > numPages || flipping) return;
       setPendingPage(page);
-      setFlipping(direction);
-      if (flipTimeoutRef.current) clearTimeout(flipTimeoutRef.current);
-      flipTimeoutRef.current = setTimeout(() => {
+      setFlipping(dir);
+      if (flipTimeout.current) clearTimeout(flipTimeout.current);
+      flipTimeout.current = setTimeout(() => {
         setCurrentPage(page);
         setFlipping(null);
         setPendingPage(null);
@@ -123,68 +185,52 @@ export default function FlipViewer({
     [numPages, flipping]
   );
 
-  // Keyboard navigation
+  // Keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      if (e.key === "ArrowRight" || e.key === "ArrowDown")
         navigateTo(currentPage + 1, "forward");
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
         navigateTo(currentPage - 1, "backward");
-      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [currentPage, navigateTo]);
 
-  // Swipe support
+  // Touch / swipe
   const touchStartX = useRef<number | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(delta) > 50) {
-      if (delta < 0) navigateTo(currentPage + 1, "forward");
-      else navigateTo(currentPage - 1, "backward");
-    }
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 50)
+      navigateTo(currentPage + (dx < 0 ? 1 : -1), dx < 0 ? "forward" : "backward");
     touchStartX.current = null;
   };
 
-  const currentImg = pageCache.get(currentPage) ?? "";
-  const pendingImg = pendingPage ? (pageCache.get(pendingPage) ?? "") : "";
+  // ── Derived display values ────────────────────────────────────────────────
+  const currentImg  = pageCache.get(currentPage) ?? "";
+  const pendingImg  = pendingPage ? (pageCache.get(pendingPage) ?? "") : "";
+  const pageLabel   = isMini ? MINI_PANELS[currentPage - 1]?.label ?? "" : "";
 
-  // ── Loading / error states ──────────────────────────────────────────────
+  // ── Loading / error ───────────────────────────────────────────────────────
+  const scriptTag = (
+    <Script
+      src={`${PDFJS_CDN}/pdf.min.js`}
+      strategy="afterInteractive"
+      onLoad={() => setScriptLoaded(true)}
+      onError={() => setError("Failed to load PDF viewer.")}
+    />
+  );
+
   if (loading && !error) {
     return (
       <>
-        <Script
-          src={`${PDFJS_CDN}/pdf.min.js`}
-          strategy="afterInteractive"
-          onLoad={() => setScriptLoaded(true)}
-          onError={() => setError("Failed to load PDF viewer library.")}
-        />
+        {scriptTag}
         <div className="flex min-h-screen flex-col items-center justify-center bg-black text-white gap-4">
-          <svg
-            className="animate-spin h-10 w-10 text-white/60"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8H4z"
-            />
-          </svg>
+          <Spinner />
           <p className="text-sm text-white/50">Loading {title}…</p>
         </div>
       </>
@@ -202,124 +248,94 @@ export default function FlipViewer({
     );
   }
 
-  // ── Main viewer ─────────────────────────────────────────────────────────
+  // ── Main viewer ───────────────────────────────────────────────────────────
   return (
     <>
-      {/* PDF.js script — loads once, triggers document open via onLoad */}
-      <Script
-        src={`${PDFJS_CDN}/pdf.min.js`}
-        strategy="afterInteractive"
-        onLoad={() => setScriptLoaded(true)}
-        onError={() => setError("Failed to load PDF viewer library.")}
-      />
-
+      {scriptTag}
       <div
         className="flex min-h-screen flex-col bg-black select-none"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* ── Top bar ── */}
+        {/* Top bar */}
         <header className="flex items-center justify-between px-5 py-3 border-b border-white/10">
           <Link
             href={`/issues/${slug}`}
             className="flex items-center gap-1.5 text-sm text-white/50 hover:text-white transition-colors"
           >
-            <span aria-hidden>←</span> {title}
+            ← {title}
           </Link>
           <div className="flex items-center gap-3">
-            {zineFormat === "mini" && (
-              <span className="text-xs rounded-full border border-white/20 px-2 py-0.5 text-white/40">
-                mini zine
-              </span>
-            )}
+            <span className="text-xs rounded-full border border-white/20 px-2 py-0.5 text-white/40">
+              {isMini ? "mini zine" : "half letter"}
+            </span>
             <span className="text-sm text-white/40 tabular-nums">
               {currentPage} / {numPages}
             </span>
           </div>
         </header>
 
-        {/* ── Flip stage ── */}
-        <main className="flex flex-1 items-center justify-center px-4 py-8 gap-4">
-          {/* Prev button */}
-          <button
-            aria-label="Previous page"
-            onClick={() => navigateTo(currentPage - 1, "backward")}
+        {/* Page label for mini (Front Cover / Page N / Back Cover) */}
+        {isMini && pageLabel && (
+          <div className="text-center pt-4 text-xs font-medium tracking-widest uppercase text-white/30">
+            {pageLabel}
+          </div>
+        )}
+
+        {/* Flip stage */}
+        <main className="flex flex-1 items-center justify-center px-4 py-6 gap-4">
+          {/* Prev */}
+          <NavBtn
+            dir="prev"
             disabled={currentPage <= 1 || !!flipping}
-            className="flex-shrink-0 w-10 h-10 rounded-full border border-white/15 text-white/60 flex items-center justify-center hover:bg-white/10 disabled:opacity-20 transition-colors"
-          >
-            ←
-          </button>
+            onClick={() => navigateTo(currentPage - 1, "backward")}
+          />
 
           {/* Flip card */}
-          <div
-            className="relative flex-1 max-w-lg"
-            style={{ perspective: "1400px" }}
-          >
-            {/* Shadow / book-edge effect */}
-            <div className="absolute inset-0 rounded shadow-[0_20px_80px_rgba(0,0,0,0.9)] pointer-events-none" />
+          <div className="relative flex-1 max-w-sm" style={{ perspective: "1400px" }}>
+            {/* Depth shadow */}
+            <div className="absolute inset-0 rounded shadow-[0_24px_80px_rgba(0,0,0,0.85)] pointer-events-none" />
 
             <div
               style={{
                 transformStyle: "preserve-3d",
                 transform:
-                  flipping === "forward"
-                    ? "rotateY(-180deg)"
-                    : flipping === "backward"
-                    ? "rotateY(180deg)"
-                    : "rotateY(0deg)",
+                  flipping === "forward"   ? "rotateY(-180deg)"
+                  : flipping === "backward" ? "rotateY(180deg)"
+                  : "rotateY(0deg)",
                 transition: flipping
-                  ? "transform 0.48s cubic-bezier(0.645, 0.045, 0.355, 1.000)"
+                  ? "transform 0.48s cubic-bezier(0.645,0.045,0.355,1)"
                   : "none",
               }}
             >
-              {/* Front face — current page */}
+              {/* Front — current page */}
               <div style={{ backfaceVisibility: "hidden" }}>
-                {currentImg ? (
-                  <img
-                    src={currentImg}
-                    alt={`Page ${currentPage} of ${title}`}
-                    className="w-full h-auto rounded-sm block"
-                    draggable={false}
-                  />
-                ) : (
-                  <PageSkeleton />
-                )}
+                {currentImg
+                  ? <PageImg src={currentImg} alt={isMini ? pageLabel : `Page ${currentPage}`} />
+                  : <PageSkeleton isMini={isMini} />}
               </div>
 
-              {/* Back face — target page (revealed when flip completes) */}
+              {/* Back — target page (revealed mid-flip) */}
               <div
                 className="absolute inset-0"
-                style={{
-                  backfaceVisibility: "hidden",
-                  transform: "rotateY(180deg)",
-                }}
+                style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
               >
-                {pendingImg ? (
-                  <img
-                    src={pendingImg}
-                    alt={`Page ${pendingPage} of ${title}`}
-                    className="w-full h-auto rounded-sm block"
-                    draggable={false}
-                  />
-                ) : (
-                  <PageSkeleton />
-                )}
+                {pendingImg
+                  ? <PageImg src={pendingImg} alt="Next page" />
+                  : <PageSkeleton isMini={isMini} />}
               </div>
             </div>
           </div>
 
-          {/* Next button */}
-          <button
-            aria-label="Next page"
-            onClick={() => navigateTo(currentPage + 1, "forward")}
+          {/* Next */}
+          <NavBtn
+            dir="next"
             disabled={currentPage >= numPages || !!flipping}
-            className="flex-shrink-0 w-10 h-10 rounded-full border border-white/15 text-white/60 flex items-center justify-center hover:bg-white/10 disabled:opacity-20 transition-colors"
-          >
-            →
-          </button>
+            onClick={() => navigateTo(currentPage + 1, "forward")}
+          />
         </main>
 
-        {/* ── Page dots (≤ 20 pages) or progress bar ── */}
+        {/* Page dots / progress */}
         <footer className="flex justify-center items-center gap-2 pb-6 px-4">
           {numPages <= 20 ? (
             <div className="flex gap-1.5 flex-wrap justify-center">
@@ -328,10 +344,8 @@ export default function FlipViewer({
                 return (
                   <button
                     key={pg}
-                    aria-label={`Go to page ${pg}`}
-                    onClick={() =>
-                      navigateTo(pg, pg > currentPage ? "forward" : "backward")
-                    }
+                    aria-label={`Go to ${isMini ? MINI_PANELS[i]?.label : `page ${pg}`}`}
+                    onClick={() => navigateTo(pg, pg > currentPage ? "forward" : "backward")}
                     className={`rounded-full transition-all duration-200 ${
                       pg === currentPage
                         ? "w-4 h-2 bg-white"
@@ -355,18 +369,62 @@ export default function FlipViewer({
   );
 }
 
-function PageSkeleton() {
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function PageImg({ src, alt }: { src: string; alt: string }) {
   return (
-    <div className="w-full aspect-[8.5/11] bg-neutral-800 rounded-sm flex items-center justify-center">
-      <svg
-        className="animate-spin h-6 w-6 text-white/20"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-      </svg>
+    <img
+      src={src}
+      alt={alt}
+      className="w-full h-auto rounded-sm block"
+      draggable={false}
+    />
+  );
+}
+
+function PageSkeleton({ isMini }: { isMini: boolean }) {
+  // Mini panels are portrait ~2:5.5 ratio; half-letter is 8.5:5.5
+  const aspect = isMini ? "aspect-[2/5.5]" : "aspect-[8.5/5.5]";
+  return (
+    <div className={`w-full ${aspect} bg-neutral-800 rounded-sm flex items-center justify-center`}>
+      <Spinner small />
     </div>
+  );
+}
+
+function NavBtn({
+  dir,
+  disabled,
+  onClick,
+}: {
+  dir: "prev" | "next";
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={dir === "prev" ? "Previous page" : "Next page"}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-shrink-0 w-10 h-10 rounded-full border border-white/15 text-white/60
+                 flex items-center justify-center hover:bg-white/10 disabled:opacity-20 transition-colors"
+    >
+      {dir === "prev" ? "←" : "→"}
+    </button>
+  );
+}
+
+function Spinner({ small }: { small?: boolean }) {
+  const size = small ? "h-5 w-5" : "h-10 w-10";
+  return (
+    <svg
+      className={`animate-spin ${size} text-white/30`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
   );
 }

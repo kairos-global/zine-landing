@@ -78,8 +78,8 @@ export default function CanvasView() {
             onClick={goFullBlank}
             className="rounded-2xl border-2 border-gray-200 bg-white px-8 py-5 text-center shadow-sm transition hover:border-gray-300 hover:bg-gray-50 sm:min-w-[220px]"
           >
-            <span className="block text-lg font-semibold text-gray-900">Full Zine</span>
-            <span className="mt-1 block text-sm text-gray-600">Half-letter spreads</span>
+            <span className="block text-lg font-semibold text-gray-900">Half Letter Zine</span>
+            <span className="mt-1 block text-sm text-gray-600">Letter sheet folded in half</span>
           </button>
         </div>
       </section>
@@ -95,7 +95,7 @@ export default function CanvasView() {
             [
               ["all", "All"],
               ["mini", "Mini zine"],
-              ["full", "Full zine"],
+              ["full", "Half letter zine"],
             ] as const
           ).map(([id, label]) => (
             <button
