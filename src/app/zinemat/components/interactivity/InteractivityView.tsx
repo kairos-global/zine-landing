@@ -261,7 +261,8 @@ export default function InteractivityView() {
     else if (uploadedCoverUrl) formData.append("cover_url", uploadedCoverUrl);
     if (pdfCleared) formData.append("pdf_url", "");
     else if (uploadedPdfUrl) formData.append("pdf_url", uploadedPdfUrl);
-    formData.append("interactiveLinks", JSON.stringify(links));
+    // Exclude the auto-generated issue QR link — the save route manages it separately
+    formData.append("interactiveLinks", JSON.stringify(links.filter((l) => l.label !== "__issue_qr__")));
     formData.append("distribution", JSON.stringify(distribution));
     return formData;
   }, [basics.title, basics.zine_format, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);

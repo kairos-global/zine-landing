@@ -187,6 +187,49 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── Auto-upsert the Issue QR link ────────────────────────────────────────
+    // Every issue automatically gets a QR code that redirects to its browse page.
+    // We look up any existing __issue_qr__ link so we can reuse its stable ID.
+    const { data: existingIssueQr } = await supabase
+      .from("issue_links")
+      .select("id")
+      .eq("issue_id", issueId)
+      .eq("label", "__issue_qr__")
+      .maybeSingle();
+
+    const issueQrLinkId = existingIssueQr?.id ?? randomUUID();
+    const issueQrUrl = `${getSiteBaseUrl()}/issues/${slug}`;
+    const issueQrRedirectPath = `/qr/${issueId}/${issueQrLinkId}`;
+
+    let issueQrPath: string | null = null;
+    try {
+      const issueQrBuffer = await QRCode.toBuffer(
+        `${getSiteBaseUrl()}${issueQrRedirectPath}`,
+        { type: "png", width: 400 }
+      );
+      const { data: issueQrData, error: issueQrErr } = await supabase.storage
+        .from("zineground")
+        .upload(`qr-codes/${issueQrLinkId}.png`, issueQrBuffer, {
+          contentType: "image/png",
+          upsert: true,
+        });
+      if (!issueQrErr && issueQrData) {
+        issueQrPath = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${issueQrData.path}`;
+      }
+    } catch (qrErr) {
+      console.error("💾 [Save] Issue QR generation error:", qrErr);
+    }
+
+    await supabase.from("issue_links").upsert({
+      id: issueQrLinkId,
+      issue_id: issueId,
+      label: "__issue_qr__",
+      url: issueQrUrl,
+      qr_path: issueQrPath,
+      redirect_path: issueQrRedirectPath,
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json({
       status: "saved",
       issueId,

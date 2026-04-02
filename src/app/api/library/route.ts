@@ -38,12 +38,25 @@ export async function GET() {
 
     console.log("✅ [Library API] Found issues:", issues?.length || 0);
 
+    // Fetch the auto-generated Issue QR link for each issue
+    let issueQrLinks: { id: string; issue_id: string; qr_path: string | null; redirect_path: string | null }[] = [];
+    if (issues && issues.length > 0) {
+      const issueIds = issues.map((i: { id: string }) => i.id);
+      const { data: qrData } = await supabase
+        .from("issue_links")
+        .select("id, issue_id, qr_path, redirect_path")
+        .in("issue_id", issueIds)
+        .eq("label", "__issue_qr__");
+      issueQrLinks = qrData || [];
+    }
+
     return NextResponse.json({
       profile: {
         id: profileId,
         email: null,
       },
       issues: issues || [],
+      issueQrLinks,
     });
   } catch (error) {
     console.error("❌ [Library API] Unexpected error:", error);

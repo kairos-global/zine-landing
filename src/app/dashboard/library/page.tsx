@@ -15,11 +15,20 @@ type Issue = {
   created_at: string | null;
 };
 
+type IssueQrLink = {
+  id: string;
+  issue_id: string;
+  qr_path: string | null;
+  redirect_path: string | null;
+};
+
 export default function LibraryPage() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
   const [drafts, setDrafts] = useState<Issue[]>([]);
   const [published, setPublished] = useState<Issue[]>([]);
+  const [allIssues, setAllIssues] = useState<Issue[]>([]);
+  const [issueQrLinks, setIssueQrLinks] = useState<IssueQrLink[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,6 +64,8 @@ export default function LibraryPage() {
 
         setDrafts(draftIssues);
         setPublished(publishedIssues);
+        setAllIssues(issues);
+        setIssueQrLinks(data.issueQrLinks || []);
         setLoading(false);
       } catch (err) {
         console.error("❌ [Library] Unexpected error:", err);
@@ -95,7 +106,7 @@ export default function LibraryPage() {
       </div>
 
       {/* Mobile: stacked (Saved then Published), each section scrolls horizontally. Desktop: side-by-side, 2 per row grid. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 min-w-0 mb-8">
         {/* Saved — on mobile first column; on desktop left */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
@@ -151,6 +162,96 @@ export default function LibraryPage() {
             </div>
           )}
         </section>
+      </div>
+      {/* ── Zine QR Codes section ───────────────────────────────────────────── */}
+      {allIssues.length > 0 && (
+        <section className="min-w-0">
+          <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
+            Zine QR Codes
+            <span className="text-xs sm:text-sm font-normal text-gray-500">
+              ({issueQrLinks.length}/{allIssues.length})
+            </span>
+          </h2>
+          <p className="text-xs text-gray-500 mb-3">
+            Each zine gets its own QR code — scan it to go straight to the browse page. Print it in your zine or share it anywhere.
+          </p>
+          {issueQrLinks.length === 0 ? (
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-dashed border-green-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
+              <div className="text-3xl sm:text-5xl mb-2 sm:mb-3">🔲</div>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No QR codes yet</h3>
+              <p className="text-gray-600 text-xs sm:text-sm">Open a saved zine in ZineMat and add the Interactivity section to generate your Issue QR.</p>
+            </div>
+          ) : (
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:flex lg:flex-wrap lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
+              {allIssues
+                .map((issue) => {
+                  const qrLink = issueQrLinks.find((q) => q.issue_id === issue.id);
+                  if (!qrLink) return null;
+                  return (
+                    <div
+                      key={issue.id}
+                      className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-[150px] snap-start"
+                    >
+                      <ZineQRCard issue={issue} qrLink={qrLink} />
+                    </div>
+                  );
+                })
+                .filter(Boolean)}
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ZineQRCard({
+  issue,
+  qrLink,
+}: {
+  issue: Issue;
+  qrLink: IssueQrLink;
+}) {
+  function handleDownload() {
+    if (!qrLink.qr_path) return;
+    const link = document.createElement("a");
+    link.href = qrLink.qr_path;
+    link.download = `qr-${issue.slug || issue.id}.png`;
+    link.click();
+  }
+
+  return (
+    <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-green-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
+      {/* QR Image */}
+      <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden p-2">
+        {qrLink.qr_path ? (
+          <img
+            src={qrLink.qr_path}
+            alt={`QR for ${issue.title}`}
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            <div className="text-center">
+              <div className="text-3xl mb-1">🔲</div>
+              <p className="text-xs">Pending</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="p-2 sm:p-3 flex flex-col flex-1 min-w-0">
+        <h3 className="font-bold text-xs sm:text-sm mb-2 line-clamp-2 flex-1 text-gray-900">
+          {issue.title || "(Untitled)"}
+        </h3>
+        <button
+          onClick={handleDownload}
+          disabled={!qrLink.qr_path}
+          className="w-full bg-green-500 hover:bg-green-600 text-white px-2 py-1.5 rounded-md sm:rounded-lg font-medium text-xs transition disabled:opacity-40"
+        >
+          ↓ Download
+        </button>
       </div>
     </div>
   );
