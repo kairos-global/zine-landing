@@ -33,6 +33,7 @@ interface IssueUpdate {
   published_at?: string;
   self_distribute?: boolean;
   print_for_me?: boolean;
+  zine_format?: "mini" | "half_letter";
 }
 
 export async function POST(req: Request) {
@@ -145,6 +146,12 @@ export async function POST(req: Request) {
       }
     }
 
+    const zineFormatRaw = formData.get("zine_format") as string | null;
+    const zine_format: "mini" | "half_letter" | undefined =
+      zineFormatRaw === "mini" || zineFormatRaw === "half_letter"
+        ? zineFormatRaw
+        : undefined;
+
     const updates: IssueUpdate = {
       title,
       slug,
@@ -154,6 +161,7 @@ export async function POST(req: Request) {
       profile_id: profileId,
       self_distribute: distribution.self_distribute,
       print_for_me: distribution.print_for_me,
+      ...(zine_format !== undefined ? { zine_format } : {}),
     };
 
     // Only set published_at if this is the first time publishing

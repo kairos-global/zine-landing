@@ -264,7 +264,7 @@ export default function InteractivityView() {
     formData.append("interactiveLinks", JSON.stringify(links));
     formData.append("distribution", JSON.stringify(distribution));
     return formData;
-  }, [basics.title, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);
+  }, [basics.title, basics.zine_format, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);
 
   const SAVE_TIMEOUT_MS = 90_000; // 90s for large PDFs
 
