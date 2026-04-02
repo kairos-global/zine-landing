@@ -59,7 +59,7 @@ export default async function FlipPage({ params }: Props) {
     );
   }
 
-  const zineFormat = (issue.zine_format as "mini" | "full" | null) ?? "full";
+  const zineFormat = (issue.zine_format as "mini" | "half_letter" | null) ?? "half_letter";
 
   return (
     <FlipViewer
