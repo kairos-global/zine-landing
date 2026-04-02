@@ -23,7 +23,7 @@ const SECTION_META: Record<
   BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
   UPLOAD: { label: "B) Uploads", accent: "#F2DC6F" },
   INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
-  DISTRIBUTION: { label: "D) Distribution", accent: "#F4A261" },
+  DISTRIBUTION: { label: "D) Distribution", accent: "#D16FF2" },
 };
 
 export default function InteractivityView() {

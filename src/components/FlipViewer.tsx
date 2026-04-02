@@ -180,7 +180,7 @@ export default function FlipViewer({
         setCurrentPage(page);
         setFlipping(null);
         setPendingPage(null);
-      }, 480);
+      }, 420);
     },
     [numPages, flipping]
   );
@@ -291,39 +291,36 @@ export default function FlipViewer({
             onClick={() => navigateTo(currentPage - 1, "backward")}
           />
 
-          {/* Flip card */}
-          <div className="relative flex-1 max-w-sm" style={{ perspective: "1400px" }}>
+          {/* Page stage — slide reveal, no 3D */}
+          <div className="relative flex-1 max-w-sm overflow-hidden rounded-sm">
             {/* Depth shadow */}
-            <div className="absolute inset-0 rounded shadow-[0_24px_80px_rgba(0,0,0,0.85)] pointer-events-none" />
+            <div className="absolute inset-0 rounded shadow-[0_24px_80px_rgba(0,0,0,0.85)] pointer-events-none z-10" />
 
-            <div
-              style={{
-                transformStyle: "preserve-3d",
-                transform:
-                  flipping === "forward"   ? "rotateY(-180deg)"
-                  : flipping === "backward" ? "rotateY(180deg)"
-                  : "rotateY(0deg)",
-                transition: flipping
-                  ? "transform 0.48s cubic-bezier(0.645,0.045,0.355,1)"
-                  : "none",
-              }}
-            >
-              {/* Front — current page */}
-              <div style={{ backfaceVisibility: "hidden" }}>
-                {currentImg
-                  ? <PageImg src={currentImg} alt={isMini ? pageLabel : `Page ${currentPage}`} />
-                  : <PageSkeleton isMini={isMini} />}
-              </div>
-
-              {/* Back — target page (revealed mid-flip) */}
-              <div
-                className="absolute inset-0"
-                style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
-              >
+            {/* Incoming page — sits underneath, revealed as current page slides off */}
+            {flipping && (
+              <div className="absolute inset-0 z-0">
                 {pendingImg
                   ? <PageImg src={pendingImg} alt="Next page" />
                   : <PageSkeleton isMini={isMini} />}
               </div>
+            )}
+
+            {/* Current page — slides off left (forward) or right (backward) */}
+            <div
+              className="relative z-[1]"
+              style={{
+                transform:
+                  flipping === "forward"   ? "translateX(-105%)"
+                  : flipping === "backward" ? "translateX(105%)"
+                  : "translateX(0)",
+                transition: flipping
+                  ? "transform 0.42s cubic-bezier(0.4, 0, 0.2, 1)"
+                  : "none",
+              }}
+            >
+              {currentImg
+                ? <PageImg src={currentImg} alt={isMini ? pageLabel : `Page ${currentPage}`} />
+                : <PageSkeleton isMini={isMini} />}
             </div>
           </div>
 
