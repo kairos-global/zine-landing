@@ -10,8 +10,10 @@ const supabase = createClient(
 
 /**
  * PATCH /api/admin/distributors/[id]
- * Update a distributor's status (approve/reject)
- * Body: { status: "approved" | "rejected" | "pending" }
+ * Update a distributor's status OR verify/set their map address.
+ *
+ * Status update body:   { status: "approved" | "rejected" | "pending" }
+ * Address verify body:  { lat: number, lng: number, verified_address: string }
  */
 export async function PATCH(
   req: Request,
@@ -31,9 +33,54 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
+
+    // ── Address verification path ──────────────────────────────────────────────
+    if ("lat" in body || "lng" in body || "verified_address" in body) {
+      const { lat, lng, verified_address } = body as {
+        lat: number;
+        lng: number;
+        verified_address: string;
+      };
+
+      if (
+        typeof lat !== "number" ||
+        typeof lng !== "number" ||
+        !verified_address
+      ) {
+        return NextResponse.json(
+          { error: "lat (number), lng (number), and verified_address (string) are required" },
+          { status: 400 }
+        );
+      }
+
+      const { data, error } = await supabase
+        .from("distributors")
+        .update({
+          lat,
+          lng,
+          verified_address,
+          address_verified_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error verifying distributor address:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        distributor: data,
+        message: "Address verified and mapped",
+      });
+    }
+
+    // ── Status update path ─────────────────────────────────────────────────────
     const { status } = body;
 
-    // Validate status
     if (!status || !["pending", "approved", "rejected"].includes(status)) {
       return NextResponse.json(
         { error: "Invalid status. Must be: pending, approved, or rejected" },
@@ -41,7 +88,6 @@ export async function PATCH(
       );
     }
 
-    // Update distributor status
     const { data, error } = await supabase
       .from("distributors")
       .update({ status, updated_at: new Date().toISOString() })
@@ -54,10 +100,10 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       distributor: data,
-      message: `Distributor ${status}` 
+      message: `Distributor ${status}`
     });
   } catch (err) {
     console.error("Admin distributor PATCH error:", err);

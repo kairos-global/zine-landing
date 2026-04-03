@@ -1,15 +1,14 @@
 // src/app/api/geocode/suggest/route.ts
+// Geocoding via Nominatim (OpenStreetMap) — no API key required.
+// Usage policy: https://operations.osmfoundation.org/policies/nominatim/
+// We include a descriptive User-Agent as required.
 import { NextResponse } from "next/server";
 
-/** ----- Types ----- */
-type MapboxFeature = {
-  id?: string;
-  place_name?: string;
-  center?: [number, number];
-};
-
-type MapboxResponse = {
-  features?: MapboxFeature[];
+type NominatimResult = {
+  place_id: number | string;
+  display_name: string;
+  lat: string;
+  lon: string;
 };
 
 type Suggestion = {
@@ -19,24 +18,6 @@ type Suggestion = {
   lat: number | null;
 };
 
-/** Convert a Mapbox feature to our Suggestion type (null if not usable) */
-function toSuggestion(f: MapboxFeature): Suggestion | null {
-  const label = f.place_name ?? "";
-  const id = String(f.id ?? label);
-  const lng =
-    Array.isArray(f.center) && typeof f.center[0] === "number"
-      ? f.center[0]
-      : null;
-  const lat =
-    Array.isArray(f.center) && typeof f.center[1] === "number"
-      ? f.center[1]
-      : null;
-
-  if (!label) return null;
-  return { id, label, lng, lat };
-}
-
-/** ----- Route ----- */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawQuery = searchParams.get("query") ?? "";
@@ -55,22 +36,22 @@ export async function GET(req: Request) {
   }
 
   try {
-    const token =
-      process.env.MAPBOX_TOKEN ?? process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    if (!token) {
-      return NextResponse.json<{ suggestions: Suggestion[]; error: string }>(
-        { suggestions: [], error: "Missing MAPBOX token" },
-        { status: 200 }
-      );
-    }
-
     const url =
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-      `${encodeURIComponent(
-        query
-      )}.json?autocomplete=true&limit=${limit}&access_token=${token}`;
+      `https://nominatim.openstreetmap.org/search` +
+      `?q=${encodeURIComponent(query)}` +
+      `&format=json` +
+      `&limit=${limit}` +
+      `&addressdetails=0`;
 
-    const r = await fetch(url, { next: { revalidate: 60 } });
+    const r = await fetch(url, {
+      headers: {
+        // Nominatim requires a meaningful User-Agent identifying your app + contact
+        "User-Agent": "Zineground/1.0 (hello@zineground.com)",
+        "Accept-Language": "en",
+      },
+      next: { revalidate: 60 },
+    });
+
     if (!r.ok) {
       return NextResponse.json<{ suggestions: Suggestion[] }>(
         { suggestions: [] },
@@ -78,11 +59,14 @@ export async function GET(req: Request) {
       );
     }
 
-    const j = (await r.json()) as MapboxResponse;
+    const results = (await r.json()) as NominatimResult[];
 
-    const suggestions: Suggestion[] = (j.features ?? [])
-      .map(toSuggestion)
-      .filter((s): s is Suggestion => s !== null);
+    const suggestions: Suggestion[] = results.map((result, i) => ({
+      id: String(result.place_id ?? i),
+      label: result.display_name,
+      lat: parseFloat(result.lat),
+      lng: parseFloat(result.lon),
+    }));
 
     return NextResponse.json<{ suggestions: Suggestion[] }>(
       { suggestions },

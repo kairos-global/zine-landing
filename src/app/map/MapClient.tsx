@@ -8,9 +8,9 @@ import "leaflet/dist/leaflet.css";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
-type ViewMode = "both" | "features" | "distributors";
+type ViewMode = "both" | "map_features" | "distributors";
 
-type FeatureRow = {
+type MapFeatureRow = {
   id: string | number;
   title: string | null;
   lat: number;
@@ -21,7 +21,10 @@ type FeatureRow = {
 
 type DistributorRow = {
   id: string | number;
-  name: string | null;
+  business_name: string | null;
+  verified_address: string | null;
+  contact_name: string | null;
+  business_email: string | null;
   lat: number;
   lng: number;
   issue_id?: string | number | null;
@@ -31,7 +34,7 @@ type IssueOption = { slug: string; title: string | null };
 
 type IssueRowLite = { slug: string; title: string | null; published_at?: string | null };
 
-type FeatureJoinedRow = {
+type MapFeatureJoinedRow = {
   id: string | number;
   title: string | null;
   lat: number | string | null;
@@ -42,7 +45,10 @@ type FeatureJoinedRow = {
 
 type DistributorDbRow = {
   id: string | number;
-  name: string | null;
+  business_name: string | null;
+  verified_address: string | null;
+  contact_name: string | null;
+  business_email: string | null;
   lat: number | string | null;
   lng: number | string | null;
   issue_id: string | number | null;
@@ -67,9 +73,9 @@ const makeDot = (hex: string): DivIcon =>
     iconAnchor: [10, 10],
   });
 
-// Feature pins = Feature Me blue, Distributor pins = Distribute purple
-const ICON_FEATURE = makeDot("#65CBF1");
-const ICON_DISTRIB = makeDot("#D16FF2");
+// Map Feature pins = sky blue, Distributor pins = brand purple
+const ICON_MAP_FEATURE = makeDot("#65CBF1");
+const ICON_DISTRIB     = makeDot("#D16FF2");
 
 function FitBoundsOnce({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   const map = useMap();
@@ -89,17 +95,17 @@ export default function MapClient() {
   const search = useSearchParams();
 
   const initialView = (search.get("view") as ViewMode) || "both";
-  const initialIssue = search.get("issue") || ""; // slug or ""
+  const initialIssue = search.get("issue") || "";
 
-  const [view, setView] = useState<ViewMode>(initialView);
+  const [view, setView]           = useState<ViewMode>(initialView);
   const [issueSlug, setIssueSlug] = useState<string>(initialIssue);
   const [issuesList, setIssuesList] = useState<IssueOption[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]     = useState(false);
 
-  const [features, setFeatures] = useState<FeatureRow[]>([]);
+  const [mapFeatures, setMapFeatures] = useState<MapFeatureRow[]>([]);
   const [distributors, setDistributors] = useState<DistributorRow[]>([]);
 
-  /** Load dropdown options once */
+  /** Load issues dropdown once */
   useEffect(() => {
     let aborted = false;
     (async () => {
@@ -117,12 +123,10 @@ export default function MapClient() {
         setIssuesList(issues);
       }
     })();
-    return () => {
-      aborted = true;
-    };
+    return () => { aborted = true; };
   }, []);
 
-  /** keep URL synced with filters */
+  /** Keep URL in sync with active filters */
   useEffect(() => {
     const params = new URLSearchParams(search.toString());
     view === "both" ? params.delete("view") : params.set("view", view);
@@ -131,13 +135,13 @@ export default function MapClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, issueSlug]);
 
-  /** fetch data when filters change */
+  /** Fetch pins whenever filters change */
   useEffect(() => {
     let aborted = false;
     async function run() {
       setLoading(true);
 
-      // resolve issue id if filtering by slug
+      // Resolve issue id if filtering by slug
       let issueId: string | number | null = null;
       if (issueSlug) {
         const { data: issue } = await supabase
@@ -148,22 +152,22 @@ export default function MapClient() {
         issueId = (issue?.id as string | number | undefined) ?? null;
       }
 
-      // features (join to published issues)
-      let fData: FeatureRow[] = [];
-      if (view === "both" || view === "features") {
-        let fQuery = supabase
-          .from("features")
+      // Map features (join to published issues)
+      let mfData: MapFeatureRow[] = [];
+      if (view === "both" || view === "map_features") {
+        let mfQuery = supabase
+          .from("map_features")
           .select("id,title,lat,lng,issue_id,issues:issues!inner(slug,status)");
-        fQuery = fQuery.eq("issues.status", "published");
-        if (issueSlug) fQuery = fQuery.eq("issues.slug", issueSlug);
+        mfQuery = mfQuery.eq("issues.status", "published");
+        if (issueSlug) mfQuery = mfQuery.eq("issues.slug", issueSlug);
 
-        const { data } = await fQuery;
-        const rows = (data ?? []) as unknown as FeatureJoinedRow[];
-        fData = rows
+        const { data } = await mfQuery;
+        const rows = (data ?? []) as unknown as MapFeatureJoinedRow[];
+        mfData = rows
           .filter((r) => r.lat != null && r.lng != null)
           .map((r) => ({
             id: r.id,
-            title: r.title ?? "Feature",
+            title: r.title ?? "Map Feature",
             lat: Number(r.lat),
             lng: Number(r.lng),
             issue_id: r.issue_id ?? null,
@@ -171,13 +175,15 @@ export default function MapClient() {
           }));
       }
 
-      // distributors (by parent issue & published)
+      // Distributors — only approved + address-verified
       let dData: DistributorRow[] = [];
       if (view === "both" || view === "distributors") {
-        // If issue filter applied, use it; otherwise rely on RLS that hides drafts.
         let dQuery = supabase
           .from("distributors")
-          .select("id,name,lat,lng,issue_id,issues:issue_id(*)");
+          .select("id,business_name,verified_address,contact_name,business_email,lat,lng,issue_id")
+          .eq("status", "approved")
+          .not("lat", "is", null)
+          .not("lng", "is", null);
         if (issueId) dQuery = dQuery.eq("issue_id", issueId);
         const { data } = await dQuery;
 
@@ -186,7 +192,10 @@ export default function MapClient() {
           .filter((r) => r.lat != null && r.lng != null)
           .map((r) => ({
             id: r.id,
-            name: r.name ?? "Distributor",
+            business_name: r.business_name ?? "Distributor",
+            verified_address: r.verified_address ?? null,
+            contact_name: r.contact_name ?? null,
+            business_email: r.business_email ?? null,
             lat: Number(r.lat),
             lng: Number(r.lng),
             issue_id: r.issue_id ?? null,
@@ -194,27 +203,25 @@ export default function MapClient() {
       }
 
       if (!aborted) {
-        setFeatures(fData);
+        setMapFeatures(mfData);
         setDistributors(dData);
         setLoading(false);
       }
     }
     run();
-    return () => {
-      aborted = true;
-    };
+    return () => { aborted = true; };
   }, [view, issueSlug]);
 
-  /** bounds */
+  /** Auto-fit bounds to visible pins */
   const bounds = useMemo<L.LatLngBoundsExpression | null>(() => {
     const pts: [number, number][] = [];
     if (view !== "distributors") {
-      features.forEach((f) => {
+      mapFeatures.forEach((f) => {
         if (Number.isFinite(f.lat) && Number.isFinite(f.lng))
           pts.push([f.lat, f.lng]);
       });
     }
-    if (view !== "features") {
+    if (view !== "map_features") {
       distributors.forEach((d) => {
         if (Number.isFinite(d.lat) && Number.isFinite(d.lng))
           pts.push([d.lat, d.lng]);
@@ -222,10 +229,10 @@ export default function MapClient() {
     }
     if (pts.length === 0) return null;
     return L.latLngBounds(pts);
-  }, [features, distributors, view]);
+  }, [mapFeatures, distributors, view]);
 
-  const countF = features.length;
-  const countD = distributors.length;
+  const countMF = mapFeatures.length;
+  const countD  = distributors.length;
 
   return (
     <div className="relative min-h-screen">
@@ -238,15 +245,15 @@ export default function MapClient() {
             }`}
             onClick={() => setView("both")}
           >
-            All ({countF + countD})
+            All ({countMF + countD})
           </button>
           <button
             className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base text-black ${
-              view === "features" ? "bg-white" : "bg-white/70"
+              view === "map_features" ? "bg-white" : "bg-white/70"
             }`}
-            onClick={() => setView("features")}
+            onClick={() => setView("map_features")}
           >
-            Features ({countF})
+            Map Features ({countMF})
           </button>
           <button
             className={`rounded-md border-2 border-black px-3 py-1 text-sm sm:text-base text-black ${
@@ -257,7 +264,7 @@ export default function MapClient() {
             Distributors ({countD})
           </button>
 
-          {/* Issue dropdown */}
+          {/* Issue filter */}
           <select
             value={issueSlug}
             onChange={(e) => setIssueSlug(e.target.value)}
@@ -287,16 +294,24 @@ export default function MapClient() {
         />
         <FitBoundsOnce bounds={bounds} />
 
-        {/* Features */}
-        {(view === "both" || view === "features") &&
-          features.map((f) => (
-            <Marker key={`f-${f.id}`} position={[f.lat, f.lng]} icon={ICON_FEATURE}>
+        {/* Map Feature pins — sky blue */}
+        {(view === "both" || view === "map_features") &&
+          mapFeatures.map((f) => (
+            <Marker key={`mf-${f.id}`} position={[f.lat, f.lng]} icon={ICON_MAP_FEATURE}>
               <Popup>
-                <div className="min-w-[180px]">
-                  <div className="font-semibold">Feature</div>
-                  <div className="text-sm">{f.title ?? "—"}</div>
+                <div className="min-w-[180px] space-y-1">
+                  <div
+                    className="text-xs font-bold uppercase tracking-wide"
+                    style={{ color: "#65CBF1" }}
+                  >
+                    Map Feature
+                  </div>
+                  <div className="font-semibold text-sm">{f.title ?? "—"}</div>
                   {f.issues?.slug && (
-                    <a href={`/issues/${f.issues.slug}`} className="underline text-sm">
+                    <a
+                      href={`/issues/${f.issues.slug}`}
+                      className="underline text-xs text-blue-600"
+                    >
                       View issue
                     </a>
                   )}
@@ -305,14 +320,41 @@ export default function MapClient() {
             </Marker>
           ))}
 
-        {/* Distributors */}
+        {/* Distributor pins — purple */}
         {(view === "both" || view === "distributors") &&
           distributors.map((d) => (
             <Marker key={`d-${d.id}`} position={[d.lat, d.lng]} icon={ICON_DISTRIB}>
               <Popup>
-                <div className="min-w-[180px]">
-                  <div className="font-semibold">Distributor</div>
-                  <div className="text-sm">{d.name ?? "—"}</div>
+                <div className="min-w-[200px] space-y-1">
+                  <div
+                    className="text-xs font-bold uppercase tracking-wide"
+                    style={{ color: "#D16FF2" }}
+                  >
+                    Distributor
+                  </div>
+                  <div className="font-semibold text-sm leading-snug">
+                    {d.business_name ?? "—"}
+                  </div>
+                  {d.verified_address && (
+                    <div className="text-xs text-gray-600 leading-snug">
+                      {d.verified_address}
+                    </div>
+                  )}
+                  {d.contact_name && (
+                    <div className="text-xs text-gray-500">
+                      Contact: {d.contact_name}
+                    </div>
+                  )}
+                  {d.business_email && (
+                    <div className="text-xs">
+                      <a
+                        href={`mailto:${d.business_email}`}
+                        className="text-blue-600 underline"
+                      >
+                        {d.business_email}
+                      </a>
+                    </div>
+                  )}
                 </div>
               </Popup>
             </Marker>
