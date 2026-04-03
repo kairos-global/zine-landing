@@ -16,44 +16,45 @@ export type InteractiveLink = {
 const GREEN = "#82E385";
 const GREEN_DARK = "#2A6B2C";
 
-// ─── Small pill toggle ────────────────────────────────────────────────────────
-function PillToggle({
-  checked,
-  onChange,
-  label,
-  accent = GREEN,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label?: string;
-  accent?: string;
-}) {
+// ─── Checkmark icon (same pattern as DistributionSection) ────────────────────
+function CheckIcon() {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="flex items-center gap-1.5 select-none"
-      aria-pressed={checked}
-    >
-      <div
-        className="relative w-8 h-[18px] rounded-full transition-colors duration-200 flex-shrink-0"
-        style={{ backgroundColor: checked ? accent : "#D1D5DB" }}
-      >
-        <div
-          className="absolute top-[2px] w-[14px] h-[14px] bg-white rounded-full shadow-sm transition-all duration-200"
-          style={{ left: checked ? "18px" : "2px" }}
-        />
-      </div>
-      {label && (
-        <span className="text-xs" style={{ color: checked ? GREEN_DARK : "#6B7280" }}>
-          {label}
-        </span>
-      )}
-    </button>
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <path
+        d="M1.5 5L4 7.5L8.5 2.5"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
-// ─── QR data URL generator ────────────────────────────────────────────────────
+// ─── Custom green checkbox ────────────────────────────────────────────────────
+function GreenCheckbox({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <div
+      className="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center cursor-pointer transition-all"
+      style={
+        checked
+          ? { borderColor: GREEN, backgroundColor: GREEN }
+          : { borderColor: "#D1D5DB", backgroundColor: "white" }
+      }
+      onClick={onChange}
+    >
+      {checked && <CheckIcon />}
+    </div>
+  );
+}
+
+// ─── QR helpers ───────────────────────────────────────────────────────────────
 function generateQRDataURL(url: string): string {
   try {
     const qr = QRCode(0, "L");
@@ -95,16 +96,12 @@ export default function InteractivitySection({
 
   const baseUrl = siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "https://zineground.com";
 
-  // Issue QR display: prefer stored qr_path, fall back to client-side preview
+  // Issue QR: prefer stored qr_path, fall back to client-side preview
   const issueQrImageUrl = issueQrLink?.qr_path
     ? issueQrLink.qr_path
     : slug
     ? generateQRDataURL(`${baseUrl}/issues/${slug}`)
     : "";
-
-  const issueQrRedirectUrl = issueQrLink
-    ? `${baseUrl}${issueQrLink.redirect_path}`
-    : null;
 
   function add(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -112,20 +109,10 @@ export default function InteractivitySection({
     const fd = new FormData(e.currentTarget);
     const label = (fd.get("label") as string)?.trim() ?? "";
     let url = (fd.get("url") as string)?.trim() ?? "";
-
     if (!url) return;
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-
     const linkId = crypto.randomUUID();
-    const next: InteractiveLink = {
-      id: linkId,
-      label,
-      url,
-      generateQR: formQR,
-      redirect_path: null,
-      qr_path: null,
-    };
-    onChange([...links, next]);
+    onChange([...links, { id: linkId, label, url, generateQR: formQR, redirect_path: null, qr_path: null }]);
     e.currentTarget.reset();
     setFormQR(true);
   }
@@ -134,10 +121,7 @@ export default function InteractivitySection({
     const linkToRemove = regularLinks.find((l) => l.id === id);
     if (linkToRemove && issueId) {
       try {
-        const response = await fetch(
-          `/api/zinemat/deletelink?linkId=${id}&issueId=${issueId}`,
-          { method: "DELETE" }
-        );
+        const response = await fetch(`/api/zinemat/deletelink?linkId=${id}&issueId=${issueId}`, { method: "DELETE" });
         if (!response.ok) {
           const errorData = await response.json();
           console.error("❌ [InteractivitySection] Delete error:", errorData);
@@ -154,9 +138,7 @@ export default function InteractivitySection({
   };
 
   const toggleQR = (id: string) =>
-    onChange(
-      links.map((l) => (l.id === id ? { ...l, generateQR: !l.generateQR } : l))
-    );
+    onChange(links.map((l) => (l.id === id ? { ...l, generateQR: !l.generateQR } : l)));
 
   return (
     <div className="relative">
@@ -165,11 +147,7 @@ export default function InteractivitySection({
         <div className="absolute inset-0 z-10 flex items-start justify-center backdrop-blur-sm bg-white/80 rounded-md pointer-events-none">
           <div
             className="mt-6 text-sm px-4 py-2 rounded shadow"
-            style={{
-              backgroundColor: `${GREEN}22`,
-              border: `1px solid ${GREEN}88`,
-              color: GREEN_DARK,
-            }}
+            style={{ backgroundColor: `${GREEN}22`, border: `1px solid ${GREEN}88`, color: GREEN_DARK }}
           >
             💡 Save your draft before adding links or generating QR codes.
           </div>
@@ -180,11 +158,8 @@ export default function InteractivitySection({
 
         {/* ── Issue QR Block ──────────────────────────────────────────────── */}
         <div
-          className="rounded-xl border-2 p-3 mb-4 flex items-start gap-3"
-          style={{
-            borderColor: `${GREEN}88`,
-            backgroundColor: `${GREEN}0F`,
-          }}
+          className="rounded-xl border-2 p-4 mb-4 flex items-start gap-4"
+          style={{ borderColor: `${GREEN}88`, backgroundColor: `${GREEN}0F` }}
         >
           {/* QR image */}
           <div className="flex-shrink-0">
@@ -192,12 +167,12 @@ export default function InteractivitySection({
               <img
                 src={issueQrImageUrl}
                 alt="Issue QR Code"
-                className="w-[72px] h-[72px] rounded-md border"
+                className="w-[88px] h-[88px] rounded-md border"
                 style={{ borderColor: `${GREEN}55` }}
               />
             ) : (
               <div
-                className="w-[72px] h-[72px] rounded-md border flex items-center justify-center text-xs text-center"
+                className="w-[88px] h-[88px] rounded-md border flex items-center justify-center text-xs text-center"
                 style={{ borderColor: `${GREEN}55`, color: GREEN_DARK }}
               >
                 QR pending
@@ -207,38 +182,25 @@ export default function InteractivitySection({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold mb-0.5" style={{ color: GREEN_DARK }}>
+            <div className="text-sm font-semibold mb-1" style={{ color: GREEN_DARK }}>
               Issue QR Code
             </div>
-            <div className="text-xs text-gray-500 mb-1.5">
-              Scans redirect to your published zine via Zineground. Print it in your zine
-              or share it anywhere.
+            <div className="text-sm text-gray-500 mb-2">
+              Scans redirect to your published zine via Zineground. Print it in your zine or share it anywhere.
             </div>
             {!issueQrLink && (
-              <div className="text-[10px]" style={{ color: `${GREEN_DARK}99` }}>
+              <div className="text-xs" style={{ color: `${GREEN_DARK}99` }}>
                 ⏳ Will activate after your first save
               </div>
             )}
             {issueQrLink && issueQrImageUrl && (
               <button
                 type="button"
-                onClick={() =>
-                  downloadQR(
-                    issueQrLink.qr_path || issueQrImageUrl,
-                    slug || "issue"
-                  )
-                }
-                className="text-xs font-medium px-2.5 py-1 rounded-lg transition-colors"
-                style={{
-                  backgroundColor: GREEN,
-                  color: "white",
-                }}
-                onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)
-                }
-                onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)
-                }
+                onClick={() => downloadQR(issueQrLink.qr_path || issueQrImageUrl, slug || "issue")}
+                className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+                style={{ backgroundColor: GREEN, color: "white" }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)}
               >
                 ↓ Download
               </button>
@@ -249,7 +211,6 @@ export default function InteractivitySection({
         {/* ── Add Link Form ────────────────────────────────────────────────── */}
         <form ref={formRef} onSubmit={add} className="mb-4 space-y-2">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-            {/* Label input */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-600">Label</label>
               <input
@@ -259,8 +220,6 @@ export default function InteractivitySection({
                 disabled={!issueId}
               />
             </div>
-
-            {/* URL input */}
             <div className="space-y-1 md:col-span-2">
               <label className="text-xs font-medium text-gray-600">Link URL</label>
               <input
@@ -270,17 +229,12 @@ export default function InteractivitySection({
                 disabled={!issueId}
               />
             </div>
-
-            {/* QR toggle + Add button */}
             <div className="flex items-end gap-2">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-600">QR</label>
-                <div className="flex items-center h-[38px]">
-                  <PillToggle
-                    checked={formQR}
-                    onChange={setFormQR}
-                    label={formQR ? "On" : "Off"}
-                  />
+                <div className="flex items-center gap-2 h-[38px]">
+                  <GreenCheckbox checked={formQR} onChange={() => setFormQR(!formQR)} />
+                  <span className="text-sm text-gray-600">{formQR ? "On" : "Off"}</span>
                 </div>
               </div>
               <button
@@ -293,11 +247,8 @@ export default function InteractivitySection({
               </button>
             </div>
           </div>
-
           {regularLinks.length >= maxLinks && (
-            <div className="text-xs text-orange-600">
-              Maximum {maxLinks} links reached
-            </div>
+            <div className="text-xs text-orange-600">Maximum {maxLinks} links reached</div>
           )}
         </form>
 
@@ -307,9 +258,8 @@ export default function InteractivitySection({
             <div className="text-xs font-semibold text-gray-500 mb-2">
               Added Links ({regularLinks.length}/{maxLinks})
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {regularLinks.map((l, index) => {
-                // QR for this link: prefer stored qr_path, fall back to client-side
                 const qrUrl = l.qr_path
                   ? l.qr_path
                   : l.redirect_path
@@ -319,69 +269,63 @@ export default function InteractivitySection({
                   : "";
 
                 return (
-                  <div
-                    key={l.id}
-                    className="rounded-xl border bg-white p-3 flex gap-3 items-start"
-                  >
-                    {/* Link info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm mb-0.5">
-                        {l.label || `Link ${index + 1}`}
+                  <div key={l.id} className="rounded-xl border bg-white p-4">
+                    {/* Title + URL + Remove */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-base mb-1">
+                          {l.label || `Link ${index + 1}`}
+                        </div>
+                        <a
+                          className="text-sm text-blue-600 underline break-all"
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {l.url}
+                        </a>
                       </div>
-                      <a
-                        className="text-xs text-blue-600 underline break-all"
-                        href={l.url}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        onClick={() => remove(l.id)}
+                        className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition flex-shrink-0"
                       >
-                        {l.url}
-                      </a>
-
-                      <div className="mt-2">
-                        <PillToggle
-                          checked={l.generateQR}
-                          onChange={() => toggleQR(l.id)}
-                          label="Generate QR"
-                        />
-                      </div>
+                        ✕
+                      </button>
                     </div>
 
-                    {/* Inline QR preview when enabled */}
-                    {l.generateQR && qrUrl && (
-                      <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                        <img
-                          src={qrUrl}
-                          alt={`QR for ${l.label}`}
-                          className="w-[60px] h-[60px] rounded border border-gray-200"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            downloadQR(qrUrl, l.label || `link-${index + 1}`)
-                          }
-                          className="text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors"
-                          style={{ backgroundColor: GREEN, color: "white" }}
-                          onMouseEnter={(e) =>
-                            ((e.currentTarget as HTMLElement).style.backgroundColor =
-                              GREEN_DARK)
-                          }
-                          onMouseLeave={(e) =>
-                            ((e.currentTarget as HTMLElement).style.backgroundColor =
-                              GREEN)
-                          }
-                        >
-                          ↓ DL
-                        </button>
-                      </div>
-                    )}
+                    {/* Generate QR checkbox + QR preview row */}
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Checkbox */}
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <GreenCheckbox checked={l.generateQR} onChange={() => toggleQR(l.id)} />
+                        <span className="text-sm text-gray-700">Generate QR</span>
+                      </label>
 
-                    {/* Remove */}
-                    <button
-                      onClick={() => remove(l.id)}
-                      className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition flex-shrink-0"
-                    >
-                      ✕
-                    </button>
+                      {/* Download button LEFT, QR image RIGHT */}
+                      {l.generateQR && qrUrl && (
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => downloadQR(qrUrl, l.label || `link-${index + 1}`)}
+                            className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                            style={{ backgroundColor: GREEN, color: "white" }}
+                            onMouseEnter={(e) =>
+                              ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)
+                            }
+                            onMouseLeave={(e) =>
+                              ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)
+                            }
+                          >
+                            ↓ Download QR
+                          </button>
+                          <img
+                            src={qrUrl}
+                            alt={`QR for ${l.label}`}
+                            className="w-[96px] h-[96px] rounded-md border border-gray-200 flex-shrink-0"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
