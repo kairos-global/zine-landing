@@ -220,8 +220,11 @@ export default function InteractivityView() {
   const checklist = useMemo(() => {
     const basicsOk = basics.title.trim().length > 0;
     const coverOk = !!(existingCoverUrl || uploadedCoverUrl || coverFile);
-    return { basics: basicsOk, cover: coverOk };
-  }, [basics.title, existingCoverUrl, uploadedCoverUrl, coverFile]);
+    const pdfOk = !!(existingPdfUrl || uploadedPdfUrl || pdfFile);
+    const interactivityOk = links.filter((l) => l.label !== "__issue_qr__").length > 0;
+    const distributionOk = distribution.self_distribute || distribution.print_for_me;
+    return { basics: basicsOk, cover: coverOk, pdf: pdfOk, interactivity: interactivityOk, distribution: distributionOk };
+  }, [basics.title, existingCoverUrl, uploadedCoverUrl, coverFile, existingPdfUrl, uploadedPdfUrl, pdfFile, links, distribution]);
 
   const canPublish = checklist.basics && checklist.cover;
 

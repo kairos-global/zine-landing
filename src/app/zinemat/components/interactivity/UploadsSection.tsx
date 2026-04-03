@@ -22,30 +22,31 @@ export default function UploadsSection({
 
   return (
     <div className="flex flex-col md:flex-row gap-4">
-      {/* Cover Upload */}
-      <div className="flex-1 rounded-md border border-yellow-300 bg-yellow-50 p-4 shadow-sm relative">
-        <label className="block text-sm font-semibold text-yellow-900 mb-2">
+
+      {/* Cover Upload — faded/light yellow */}
+      <div className="flex-1 rounded-xl border border-yellow-200 bg-white p-4 shadow-sm relative">
+        <label className="block text-sm font-semibold text-yellow-700 mb-2">
           Cover image (jpg/png/webp) — optional
         </label>
 
         <div
           onClick={() => coverRef.current?.click()}
-          className="cursor-pointer border-2 border-dashed border-yellow-300 rounded-md p-4 text-center hover:bg-yellow-100 transition"
+          className="cursor-pointer border-2 border-dashed border-yellow-200 rounded-xl p-4 text-center hover:bg-yellow-50 transition"
         >
           {coverFile ? (
-            <p className="text-sm text-yellow-900">📸 Selected: {coverFile.name}</p>
+            <p className="text-sm font-bold text-yellow-800">📸 Selected: {coverFile.name}</p>
           ) : existingCoverUrl ? (
             <div className="space-y-2">
-              <p className="text-xs text-yellow-700">✓ Existing cover uploaded</p>
-              <img 
-                src={existingCoverUrl} 
-                alt="Cover preview" 
-                className="max-h-32 mx-auto rounded"
+              <p className="text-sm font-bold text-yellow-800">✓ Cover uploaded</p>
+              <img
+                src={existingCoverUrl}
+                alt="Cover preview"
+                className="max-h-32 mx-auto rounded-lg shadow-sm"
               />
-              <p className="text-xs text-yellow-600">Click to replace</p>
+              <p className="text-xs text-yellow-500">Click to replace</p>
             </div>
           ) : (
-            <p className="text-sm text-yellow-500">Click to upload an image file</p>
+            <p className="text-sm text-yellow-400">Click to upload an image file</p>
           )}
         </div>
 
@@ -53,7 +54,7 @@ export default function UploadsSection({
           <button
             type="button"
             onClick={() => onCoverChange(null)}
-            className="absolute top-4 right-4 text-xs bg-yellow-200 hover:bg-yellow-300 text-yellow-900 font-medium px-2 py-0.5 rounded transition"
+            className="absolute top-4 right-4 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-2 py-0.5 rounded transition"
           >
             Remove
           </button>
@@ -68,34 +69,40 @@ export default function UploadsSection({
         />
       </div>
 
-      {/* PDF Upload */}
-      <div className="flex-1 rounded-md border border-gray-300 bg-gray-50 p-4 shadow-sm relative">
-        <label className="block text-sm font-semibold text-gray-800 mb-2">
+      {/* PDF Upload — rich yellow (was gray) */}
+      <div className="flex-1 rounded-xl border border-yellow-300 bg-yellow-50 p-4 shadow-sm relative">
+        <label className="block text-sm font-semibold text-yellow-900 mb-2">
           Digital zine copy (PDF) — optional
         </label>
 
         <div
           onClick={() => pdfRef.current?.click()}
-          className="cursor-pointer border-2 border-dashed border-gray-300 rounded-md p-4 text-center hover:bg-gray-100 transition"
+          className="cursor-pointer border-2 border-dashed border-yellow-300 rounded-xl p-4 text-center hover:bg-yellow-100 transition"
         >
           {pdfFile ? (
-            <p className="text-sm text-gray-800">📄 Selected: {pdfFile.name}</p>
+            <p className="text-sm font-bold text-yellow-900">📄 Selected: {pdfFile.name}</p>
           ) : existingPdfUrl ? (
-            <div className="space-y-1">
-              <p className="text-xs text-gray-700">✓ Existing PDF uploaded</p>
-              <a 
-                href={existingPdfUrl} 
-                target="_blank" 
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-xs text-blue-600 underline hover:text-blue-800"
-              >
-                View current PDF
-              </a>
-              <p className="text-xs text-gray-500">Click to replace</p>
+            <div className="space-y-2">
+              {/* PDF preview card */}
+              <div className="flex items-center justify-center gap-3 bg-white rounded-lg border border-yellow-200 px-3 py-3 mx-auto max-w-xs">
+                <span className="text-3xl flex-shrink-0">📄</span>
+                <div className="text-left min-w-0">
+                  <p className="text-sm font-bold text-yellow-900 leading-tight">✓ PDF uploaded</p>
+                  <a
+                    href={existingPdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-blue-600 underline hover:text-blue-800 block truncate max-w-[160px]"
+                  >
+                    View current PDF
+                  </a>
+                </div>
+              </div>
+              <p className="text-xs text-yellow-600">Click to replace</p>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Click to upload your zine PDF</p>
+            <p className="text-sm text-yellow-500">Click to upload your zine PDF</p>
           )}
         </div>
 
@@ -103,7 +110,7 @@ export default function UploadsSection({
           <button
             type="button"
             onClick={() => onPdfChange(null)}
-            className="absolute top-4 right-4 text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium px-2 py-0.5 rounded transition"
+            className="absolute top-4 right-4 text-xs bg-yellow-200 hover:bg-yellow-300 text-yellow-900 font-medium px-2 py-0.5 rounded transition"
           >
             Remove
           </button>
