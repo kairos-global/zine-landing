@@ -59,14 +59,14 @@ export default function FinalChecklist({
     : (checklist as Checklist);
 
   const requiredItems = [
-    { key: "basics", ok: c.basics, label: "Title", desc: "A) Basics — required", icon: "✏️" },
-    { key: "cover", ok: c.cover, label: "Cover", desc: "B) Uploads — required", icon: "🖼️" },
+    { key: "basics", ok: c.basics, label: "Title", desc: "A) Basics — required" },
+    { key: "cover", ok: c.cover, label: "Cover", desc: "B) Uploads — required" },
   ];
 
   const optionalItems = [
-    { key: "pdf", ok: !!c.pdf, label: "PDF copy", desc: "B) Uploads", icon: "📄" },
-    { key: "interactivity", ok: !!c.interactivity, label: "Links & QR", desc: "C) Interactivity", icon: "🔗" },
-    { key: "distribution", ok: !!c.distribution, label: "Distribution", desc: "D) Distribution", icon: "📦" },
+    { key: "pdf", ok: !!c.pdf, label: "PDF copy", desc: "B) Uploads" },
+    { key: "interactivity", ok: !!c.interactivity, label: "Links & QR", desc: "C) Interactivity" },
+    { key: "distribution", ok: !!c.distribution, label: "Distribution", desc: "D) Distribution" },
   ];
 
   const requiredDone = requiredItems.filter((i) => i.ok).length;
@@ -117,7 +117,7 @@ export default function FinalChecklist({
                 className="text-sm font-bold leading-tight"
                 style={{ color: item.ok ? BLUE_DARK : "#EF4444" }}
               >
-                {item.icon} {item.label}
+                {item.label}
               </div>
               <div className="text-xs text-gray-400 mt-0.5">{item.desc}</div>
             </div>
@@ -148,7 +148,7 @@ export default function FinalChecklist({
               ) : (
                 <span style={{ color: "#D1D5DB" }}>○</span>
               )}
-              {item.icon} {item.label}
+              {item.label}
             </div>
           ))}
         </div>
@@ -162,7 +162,9 @@ export default function FinalChecklist({
           border: `1.5px solid ${allRequiredDone ? `${BLUE}55` : "#FECACA"}`,
         }}
       >
-        <span className="text-xl flex-shrink-0">{allRequiredDone ? "🚀" : "📋"}</span>
+        <div className="flex-shrink-0 mt-0.5">
+          {allRequiredDone ? <DoneIcon /> : <PendingIcon required />}
+        </div>
         <div>
           <div
             className="text-sm font-bold"
