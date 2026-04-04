@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAdmin } from "@/lib/useAdmin";
 
 export default function DashboardPage() {
-  const { isSignedIn, isLoaded } = useUser();
+  const { isSignedIn, isLoaded, user } = useUser();
   const router = useRouter();
   const { isAdmin: userIsAdmin } = useAdmin();
 
@@ -33,106 +33,116 @@ export default function DashboardPage() {
     );
   }
 
+  const firstName = user?.firstName || user?.username || null;
+
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+    <div className="max-w-4xl mx-auto px-6 py-10">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-black">
+            {firstName ? `Hey, ${firstName}.` : "Dashboard"}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">Welcome to Zineground.</p>
+        </div>
 
         <SignOutButton redirectUrl="/">
-          <button className="rounded-md border border-black bg-white px-3 py-2 text-sm">
+          <button className="rounded-md border border-black bg-black text-white px-4 py-2 text-sm font-medium hover:bg-white hover:text-black transition-colors cursor-pointer">
             Sign out
           </button>
         </SignOutButton>
       </div>
 
+      {/* Cards grid */}
       <div className="grid sm:grid-cols-2 gap-4">
+
         <Link
           href="/zinemat"
-          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
             Make a Zine
           </div>
-          <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Open ZineMat
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            Open ZineMat and build your zine from scratch — layouts, links, QR codes, and more.
           </div>
         </Link>
 
         <Link
           href="/dashboard/library"
-          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
             My Library
           </div>
-          <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Drafts & published (we’ll scope to your account once issues have a
-            user_id)
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            All your saved drafts and published issues in one place. Download PDFs, share links, and manage your zines.
           </div>
         </Link>
 
         <Link
           href="/dashboard/analytics"
-          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
             Analytics
           </div>
-          <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            QR scan tracking by issue
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            See how your zines are moving. Track QR scans and reader engagement across every published issue.
           </div>
         </Link>
 
         <Link
           href="/dashboard/distributor"
-          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
             Distributor Portal
           </div>
-          <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Register as a distributor, manage stock, and place orders
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            Apply to become a Zineground distributor, manage your stock locations, and place wholesale orders.
           </div>
         </Link>
 
         <Link
           href="/dashboard/creator"
-          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
             Creator Portal
           </div>
-          <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Zine orders and market orders — fulfill and manage
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            Manage print orders, track fulfillment, and handle incoming requests for your published zines.
           </div>
         </Link>
 
         <Link
           href="/dashboard/market"
-          className="rounded-xl p-4 bg-white hover:bg-black transition group"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
           <div className="text-lg font-semibold text-black group-hover:text-white">
             Market
           </div>
-          <div className="text-sm text-gray-600 group-hover:text-gray-200">
-            Purchase or sell design services — flyers, logos, zine design, and more
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            Buy and sell design services within the Zineground community — covers, layouts, logos, flyers, and more.
           </div>
         </Link>
 
-        {/* Admin Dashboard - only visible to admins */}
+        {/* Admin Dashboard — only visible to admins */}
         {userIsAdmin && (
           <Link
             href="/dashboard/admin"
-            className="rounded-xl p-4 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 transition group"
+            className="rounded-xl p-5 bg-gradient-to-br from-purple-500 to-purple-700 border border-purple-400 shadow-sm hover:from-purple-600 hover:to-purple-800 transition-colors group"
           >
             <div className="text-lg font-semibold text-white">
               Admin Dashboard
             </div>
-            <div className="text-sm text-purple-100">
-              Manage distributors, users, and platform settings
+            <div className="text-sm text-purple-100 mt-1">
+              Manage distributors, review applications, and oversee platform operations.
             </div>
           </Link>
         )}
+
       </div>
     </div>
   );
