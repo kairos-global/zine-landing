@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAdmin } from "@/lib/useAdmin";
 
 export default function DashboardPage() {
-  const { isSignedIn, isLoaded, user } = useUser();
+  const { isSignedIn, isLoaded } = useUser();
   const router = useRouter();
   const { isAdmin: userIsAdmin } = useAdmin();
 
@@ -33,18 +33,11 @@ export default function DashboardPage() {
     );
   }
 
-  const firstName = user?.firstName || user?.username || null;
-
   return (
     <div className="max-w-4xl mx-auto px-6 py-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-black">
-            {firstName ? `Hey, ${firstName}.` : "Dashboard"}
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Welcome to Zineground.</p>
-        </div>
+        <h1 className="text-2xl font-bold text-black">Dashboard</h1>
 
         <SignOutButton redirectUrl="/">
           <button className="rounded-md border border-black bg-black text-white px-4 py-2 text-sm font-medium hover:bg-white hover:text-black transition-colors cursor-pointer">
@@ -64,7 +57,7 @@ export default function DashboardPage() {
             Make a Zine
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            Open ZineMat and build your zine from scratch — layouts, links, QR codes, and more.
+            Open ZineMat and build your zine from scratch.
           </div>
         </Link>
 
@@ -76,7 +69,7 @@ export default function DashboardPage() {
             My Library
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            All your saved drafts and published issues in one place. Download PDFs, share links, and manage your zines.
+            Your saved drafts and published issues in one place.
           </div>
         </Link>
 
@@ -88,7 +81,7 @@ export default function DashboardPage() {
             Analytics
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            See how your zines are moving. Track QR scans and reader engagement across every published issue.
+            Track QR scans and reader engagement across your published issues.
           </div>
         </Link>
 
@@ -100,7 +93,7 @@ export default function DashboardPage() {
             Distributor Portal
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            Apply to become a Zineground distributor, manage your stock locations, and place wholesale orders.
+            Apply to become a Zineground distributor and manage your stock locations.
           </div>
         </Link>
 
@@ -112,7 +105,7 @@ export default function DashboardPage() {
             Creator Portal
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            Manage print orders, track fulfillment, and handle incoming requests for your published zines.
+            Manage print orders and fulfillment for your published zines.
           </div>
         </Link>
 
@@ -124,7 +117,7 @@ export default function DashboardPage() {
             Market
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            Buy and sell design services within the Zineground community — covers, layouts, logos, flyers, and more.
+            Buy and sell design services within the Zineground community.
           </div>
         </Link>
 
@@ -138,7 +131,7 @@ export default function DashboardPage() {
               Admin Dashboard
             </div>
             <div className="text-sm text-purple-100 mt-1">
-              Manage distributors, review applications, and oversee platform operations.
+              Manage distributors and oversee platform operations.
             </div>
           </Link>
         )}

@@ -1,46 +1,52 @@
 'use client'
 
+const sections = [
+  {
+    color: '#A4A4A4',
+    title: 'Browse Zines',
+    body: 'Discover self-published zines from creators in your community. From poetry and personal essays to local guides and niche obsessions — everything is independent and on the ground.',
+  },
+  {
+    color: '#65CBF1',
+    title: 'Upload Zines',
+    body: 'Use ZineMat, our built-in zine toolkit, to design and publish your zine directly on Zineground. Build your layout, add interactive links, generate QR codes, and publish — all in one place.',
+  },
+  {
+    color: '#F2DC6F',
+    title: 'My Library',
+    body: 'All your work, always accessible. Save drafts as you go, manage your published issues, and download your PDFs whenever you need them.',
+  },
+  {
+    color: '#D16FF2',
+    title: 'Distribution',
+    body: 'Physical zine distribution through a growing network of local shops, cafés, and venues. Apply to become a distributor or order print copies of your work to put in the hands of real readers.',
+  },
+  {
+    color: '#F26565',
+    title: 'The Map',
+    body: 'Find Zineground distributors near you. Every approved location is verified and pinned so readers always know where to pick up a copy.',
+  },
+  {
+    color: '#82E385',
+    title: 'The Market',
+    body: 'A space to buy and sell creative services within the Zineground community. Covers, layouts, illustrations, logos — if it belongs on a zine, it belongs here.',
+  },
+]
+
 export default function AboutPage() {
   return (
-    <main className="min-h-screen px-4 py-12 md:px-16 bg-[#F0EBCC] text-black">
-      <h1 className="text-4xl md:text-5xl font-semibold text-center mb-12">About</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl mx-auto [&>*]:min-h-[280px]">
-        <div className="bg-[#888888] text-white rounded-3xl p-6 md:p-8 shadow-md flex flex-col justify-between">
-          <h2 className="text-2xl font-semibold mb-2">What is a zine?</h2>
-          <p className="text-base leading-relaxed">
-            A zine is a small, self-published magazine. You can design it, write it, collage it, or create it however you want.
-            <br /><br />
-            Use digital tools, print it by hand, fold it, copy it, or leave it messy on purpose. There are no rules — just your voice on the page.
-          </p>
-        </div>
-
-        <div className="bg-[#888888] text-white rounded-3xl p-6 md:p-8 shadow-md flex flex-col justify-between">
-          <h2 className="text-2xl font-semibold mb-2">What is zineground?</h2>
-          <p className="text-base leading-relaxed">
-            A local print and digital zine.
-            <br /><br />
-            We feature creative talent, local events, and standout businesses from our community.
-          </p>
-        </div>
-
-        <div className="bg-[#888888] text-white rounded-3xl p-6 md:p-8 shadow-md flex flex-col justify-between">
-          <h2 className="text-2xl font-semibold mb-2">Get Featured!</h2>
-          <p className="text-base leading-relaxed">
-            Artists, musicians, designers, writers, organizers, and more.
-            <br /><br />
-            If you’re making something or moving culture, we want to highlight you. Use the “Feature Me!” page to apply.
-          </p>
-        </div>
-
-        <div className="bg-[#888888] text-white rounded-3xl p-6 md:p-8 shadow-md flex flex-col justify-between">
-          <h2 className="text-2xl font-semibold mb-2">Advertise or Distribute</h2>
-          <p className="text-base leading-relaxed">
-            Run a shop, café, venue, or want to support the zine? You can advertise or become a local distributor of the zine!
-            <br /><br />
-            Check out “Advertise” and “Distribute” to get started.
-          </p>
-        </div>
+    <main className="min-h-screen px-6 py-14 md:px-16 bg-[#F0EBCC] text-black">
+      <div className="max-w-3xl mx-auto flex flex-col gap-5">
+        {sections.map((section, i) => (
+          <div
+            key={i}
+            className={`rounded-3xl p-8 w-[85%] ${i % 2 === 0 ? 'mr-auto' : 'ml-auto'}`}
+            style={{ backgroundColor: section.color }}
+          >
+            <h2 className="text-xl font-semibold mb-2">{section.title}</h2>
+            <p className="text-base leading-relaxed">{section.body}</p>
+          </div>
+        ))}
       </div>
     </main>
   )
