@@ -24,7 +24,6 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Redirect non-admins (middleware should handle this, but double-check)
     if (!adminLoading && !userIsAdmin) {
       router.push("/dashboard");
     }
@@ -44,27 +43,26 @@ export default function AdminDashboardPage() {
         setLoading(false);
       }
     }
-
-    if (userIsAdmin) {
-      fetchStats();
-    }
+    if (userIsAdmin) fetchStats();
   }, [userIsAdmin]);
 
   if (adminLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-600">
-        Loading admin dashboard...
+        Loading...
       </div>
     );
   }
 
-  if (!userIsAdmin) {
-    return null; // Will redirect
-  }
+  if (!userIsAdmin) return null;
+
+  const pendingDist = stats?.pendingDistributors ?? 0;
+  const pendingCreators = stats?.pendingPaidCreators ?? 0;
 
   return (
     <div className="min-h-screen bg-[#F0EBCC] text-black">
       <div className="max-w-6xl mx-auto px-6 py-8">
+
         {/* Header */}
         <div className="mb-8">
           <Link
@@ -73,210 +71,171 @@ export default function AdminDashboardPage() {
           >
             ← Back to Dashboard
           </Link>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-gray-600 mt-1">
-            Manage distributors, users, and platform settings
-          </p>
+          <h1 className="text-3xl font-bold">Admin</h1>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          <StatCard
-            title="Total Users"
-            value={stats?.totalUsers || 0}
-            icon="👥"
-          />
-          <StatCard
-            title="Published Issues"
-            value={stats?.totalIssues || 0}
-            icon="📚"
-          />
-          <StatCard
-            title="QR Code Scans"
-            value={stats?.totalQRScans || 0}
-            icon="📊"
-          />
-          <StatCard
-            title="Pending Distributors"
-            value={stats?.pendingDistributors || 0}
-            icon="⏳"
-            highlight={true}
-          />
-          <StatCard
-            title="Approved Distributors"
-            value={stats?.approvedDistributors || 0}
-            icon="✅"
-          />
-          <StatCard
-            title="Total Distributors"
-            value={stats?.totalDistributors || 0}
-            icon="🏪"
-          />
-          <StatCard
-            title="Pending Paid Creators"
-            value={stats?.pendingPaidCreators || 0}
-            icon="⏳"
-            highlight={true}
-          />
-          <StatCard
-            title="Approved Paid Creators"
-            value={stats?.approvedPaidCreators || 0}
-            icon="✅"
-          />
-          <StatCard
-            title="Total Paid Creators"
-            value={stats?.totalPaidCreators || 0}
-            icon="🛒"
-          />
+        {/* ── Top 3 platform stats ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Total Users</div>
+            <div className="text-4xl font-bold">{stats?.totalUsers ?? 0}</div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Published Issues</div>
+            <div className="text-4xl font-bold">{stats?.totalIssues ?? 0}</div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">QR Code Scans</div>
+            <div className="text-4xl font-bold">{stats?.totalQRScans ?? 0}</div>
+          </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Link
-              href="/dashboard/admin/distributors"
-              className="block p-6 rounded-xl bg-white border border-gray-200 hover:border-purple-500 hover:shadow-lg transition group"
+        {/* ── Split stat cards ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+          {/* Distributors */}
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex">
+            <div
+              className={`flex-1 p-5 border-r border-gray-100 ${
+                pendingDist > 0 ? "bg-amber-50" : ""
+              }`}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1 group-hover:text-purple-600">
-                    Manage Distributors
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Approve or reject distributor applications
-                  </p>
-                  {stats && stats.pendingDistributors > 0 && (
-                    <div className="mt-2 inline-block px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded">
-                      {stats.pendingDistributors} pending
-                    </div>
-                  )}
-                </div>
-                <span className="text-2xl">🏪</span>
+              <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                Distributors — Pending
               </div>
-            </Link>
-
-            <Link
-              href="/dashboard/admin/paid-creators"
-              className="block p-6 rounded-xl bg-white border border-gray-200 hover:border-purple-500 hover:shadow-lg transition group"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1 group-hover:text-purple-600">
-                    Manage Paid Creators
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Approve or reject paid creator applications
-                  </p>
-                  {stats && stats.pendingPaidCreators > 0 && (
-                    <div className="mt-2 inline-block px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded">
-                      {stats.pendingPaidCreators} pending
-                    </div>
-                  )}
-                </div>
-                <span className="text-2xl">🛒</span>
-              </div>
-            </Link>
-
-            <Link
-              href="/dashboard/admin/orders"
-              className="block p-6 rounded-xl bg-white border border-gray-200 hover:border-purple-500 hover:shadow-lg transition group"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1 group-hover:text-purple-600">
-                    Manage Orders
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    View and fulfill distributor orders
-                  </p>
-                </div>
-                <span className="text-2xl">📦</span>
-              </div>
-            </Link>
-
-            <div className="block p-6 rounded-xl bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1">Manage Users</h3>
-                  <p className="text-sm text-gray-600">
-                    View and manage user accounts
-                  </p>
-                  <div className="mt-2 inline-block px-2 py-1 bg-gray-200 text-gray-600 text-xs font-medium rounded">
-                    Coming soon
-                  </div>
-                </div>
-                <span className="text-2xl">👥</span>
+              <div
+                className={`text-4xl font-bold ${
+                  pendingDist > 0 ? "text-amber-600" : "text-gray-300"
+                }`}
+              >
+                {pendingDist}
               </div>
             </div>
+            <div className="flex-1 p-5">
+              <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                Distributors — Total
+              </div>
+              <div className="text-4xl font-bold">{stats?.totalDistributors ?? 0}</div>
+            </div>
+          </div>
 
-            <div className="block p-6 rounded-xl bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1">
-                    Content Moderation
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Review and manage published issues
-                  </p>
-                  <div className="mt-2 inline-block px-2 py-1 bg-gray-200 text-gray-600 text-xs font-medium rounded">
-                    Coming soon
-                  </div>
-                </div>
-                <span className="text-2xl">📚</span>
+          {/* Paid Creators */}
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex">
+            <div
+              className={`flex-1 p-5 border-r border-gray-100 ${
+                pendingCreators > 0 ? "bg-amber-50" : ""
+              }`}
+            >
+              <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                Paid Creators — Pending
+              </div>
+              <div
+                className={`text-4xl font-bold ${
+                  pendingCreators > 0 ? "text-amber-600" : "text-gray-300"
+                }`}
+              >
+                {pendingCreators}
               </div>
             </div>
-
-            <div className="block p-6 rounded-xl bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold mb-1">
-                    Platform Analytics
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Detailed platform insights and reports
-                  </p>
-                  <div className="mt-2 inline-block px-2 py-1 bg-gray-200 text-gray-600 text-xs font-medium rounded">
-                    Coming soon
-                  </div>
-                </div>
-                <span className="text-2xl">📊</span>
+            <div className="flex-1 p-5">
+              <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                Paid Creators — Total
               </div>
+              <div className="text-4xl font-bold">{stats?.totalPaidCreators ?? 0}</div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function StatCard({
-  title,
-  value,
-  icon,
-  highlight = false,
-}: {
-  title: string;
-  value: number | string;
-  icon: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`p-6 rounded-xl border ${
-        highlight
-          ? "bg-orange-50 border-orange-300"
-          : "bg-white border-gray-200"
-      }`}
-    >
-      <div className="flex items-start justify-between">
+        {/* ── Quick Actions ── */}
         <div>
-          <div className="text-sm text-gray-600 mb-1">{title}</div>
-          <div className="text-3xl font-bold">{value}</div>
+          <h2 className="text-xs uppercase tracking-widest text-gray-500 font-semibold mb-4">
+            Quick Actions
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+            {/* Manage Distributors */}
+            <Link
+              href="/dashboard/admin/distributors"
+              className="group relative bg-white border border-gray-200 rounded-xl p-5 hover:border-[#D16FF2] hover:shadow-md transition-all"
+            >
+              <div
+                className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-[#D16FF2] opacity-0 group-hover:opacity-100 transition-opacity"
+              />
+              <div className="text-base font-semibold mb-1 group-hover:text-[#D16FF2] transition-colors">
+                Manage Distributors
+              </div>
+              <div className="text-sm text-gray-500">Review and approve distributor applications</div>
+              {pendingDist > 0 && (
+                <div className="mt-3 inline-block px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
+                  {pendingDist} pending
+                </div>
+              )}
+            </Link>
+
+            {/* Fulfil Orders */}
+            <Link
+              href="/dashboard/admin/orders"
+              className="group relative bg-white border border-gray-200 rounded-xl p-5 hover:border-[#82E385] hover:shadow-md transition-all"
+            >
+              <div
+                className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-[#82E385] opacity-0 group-hover:opacity-100 transition-opacity"
+              />
+              <div className="text-base font-semibold mb-1 group-hover:text-[#4CAF50] transition-colors">
+                Fulfil Distributor Orders
+              </div>
+              <div className="text-sm text-gray-500">Review payments and ship zine orders</div>
+            </Link>
+
+            {/* Manage Paid Creators */}
+            <Link
+              href="/dashboard/admin/paid-creators"
+              className="group relative bg-white border border-gray-200 rounded-xl p-5 hover:border-[#65CBF1] hover:shadow-md transition-all"
+            >
+              <div
+                className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-[#65CBF1] opacity-0 group-hover:opacity-100 transition-opacity"
+              />
+              <div className="text-base font-semibold mb-1 group-hover:text-[#0EA5E9] transition-colors">
+                Manage Paid Creators
+              </div>
+              <div className="text-sm text-gray-500">Approve or reject paid creator applications</div>
+              {pendingCreators > 0 && (
+                <div className="mt-3 inline-block px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
+                  {pendingCreators} pending
+                </div>
+              )}
+            </Link>
+
+            {/* Manage Users — coming soon */}
+            <div className="relative bg-white border border-gray-100 rounded-xl p-5 opacity-50 cursor-not-allowed select-none">
+              <div className="text-base font-semibold mb-1 text-gray-400">Manage Users</div>
+              <div className="text-sm text-gray-400">View and manage user accounts</div>
+              <div className="mt-3 inline-block px-2 py-0.5 bg-gray-100 text-gray-400 text-xs font-medium rounded">
+                Coming soon
+              </div>
+            </div>
+
+            {/* Content Moderation — coming soon */}
+            <div className="relative bg-white border border-gray-100 rounded-xl p-5 opacity-50 cursor-not-allowed select-none">
+              <div className="text-base font-semibold mb-1 text-gray-400">Content Moderation</div>
+              <div className="text-sm text-gray-400">Review and manage published issues</div>
+              <div className="mt-3 inline-block px-2 py-0.5 bg-gray-100 text-gray-400 text-xs font-medium rounded">
+                Coming soon
+              </div>
+            </div>
+
+            {/* Platform Analytics — coming soon */}
+            <div className="relative bg-white border border-gray-100 rounded-xl p-5 opacity-50 cursor-not-allowed select-none">
+              <div className="text-base font-semibold mb-1 text-gray-400">Platform Analytics</div>
+              <div className="text-sm text-gray-400">Detailed platform insights and reports</div>
+              <div className="mt-3 inline-block px-2 py-0.5 bg-gray-100 text-gray-400 text-xs font-medium rounded">
+                Coming soon
+              </div>
+            </div>
+
+          </div>
         </div>
-        <span className="text-3xl">{icon}</span>
+
       </div>
     </div>
   );
 }
-
