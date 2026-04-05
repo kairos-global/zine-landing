@@ -10,6 +10,12 @@ type Order = {
   id: string;
   distributor_id: string;
   status: "draft" | "placed" | "fulfilled" | "cancelled";
+  payment_status?: string;
+  stripe_payment_intent_id?: string;
+  shipping_cost?: number;
+  tracking_number?: string;
+  shipped_at?: string;
+  fulfillment_notes?: string;
   created_at: string;
   updated_at?: string;
   distributor: {
@@ -69,29 +75,61 @@ export default function AdminOrdersPage() {
     }
   }
 
-  async function handleStatusChange(
+  async function handleFulfill(
     orderId: string,
-    newStatus: "fulfilled" | "cancelled"
+    trackingNumber: string,
+    shippedAt: string,
+    fulfillmentNotes: string
   ) {
     setProcessingId(orderId);
     try {
       const res = await fetch(`/api/admin/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({
+          status: "fulfilled",
+          tracking_number: trackingNumber,
+          shipped_at: shippedAt,
+          fulfillment_notes: fulfillmentNotes,
+        }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        toast.success(data.message || `Order ${newStatus}`);
-        fetchOrders(); // Refresh the list
+        toast.success(data.message || "Order fulfilled");
+        fetchOrders();
       } else {
         const err = await res.json();
-        toast.error(err.error || "Failed to update order");
+        toast.error(err.error || "Failed to fulfill order");
       }
     } catch (err) {
-      console.error("Error updating order:", err);
-      toast.error("Failed to update order");
+      console.error("Error fulfilling order:", err);
+      toast.error("Failed to fulfill order");
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function handleCancel(orderId: string) {
+    setProcessingId(orderId);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || "Order cancelled");
+        fetchOrders();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to cancel order");
+      }
+    } catch (err) {
+      console.error("Error cancelling order:", err);
+      toast.error("Failed to cancel order");
     } finally {
       setProcessingId(null);
     }
@@ -109,7 +147,6 @@ export default function AdminOrdersPage() {
     return null;
   }
 
-  // DB uses draft | placed | fulfilled | cancelled; show draft + placed as "Pending"
   const pendingOrders = orders.filter(
     (o) => o.status === "draft" || o.status === "placed"
   );
@@ -127,8 +164,10 @@ export default function AdminOrdersPage() {
           >
             ← Back to Admin Dashboard
           </Link>
-          <h1 className="text-3xl font-bold">Order Management</h1>
-          <p className="text-gray-600 mt-1">View and fulfill distributor orders</p>
+          <h1 className="text-3xl font-bold">Fulfil Distributor Orders</h1>
+          <p className="text-gray-600 mt-1">
+            Review payment confirmations and ship zine orders to distributors
+          </p>
         </div>
 
         {/* Stats */}
@@ -156,12 +195,10 @@ export default function AdminOrdersPage() {
         {/* Orders List */}
         {orders.length === 0 ? (
           <div className="text-center py-12">
-            <div className="text-4xl mb-4">📦</div>
             <p className="text-gray-600">No orders yet</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Pending Orders First */}
             {pendingOrders.length > 0 && (
               <>
                 <h2 className="text-xl font-semibold mt-6 mb-3">
@@ -171,15 +208,14 @@ export default function AdminOrdersPage() {
                   <OrderCard
                     key={order.id}
                     order={order}
-                    onFulfill={() => handleStatusChange(order.id, "fulfilled")}
-                    onCancel={() => handleStatusChange(order.id, "cancelled")}
+                    onFulfill={handleFulfill}
+                    onCancel={() => handleCancel(order.id)}
                     processing={processingId === order.id}
                   />
                 ))}
               </>
             )}
 
-            {/* Fulfilled Orders */}
             {fulfilledOrders.length > 0 && (
               <>
                 <h2 className="text-xl font-semibold mt-6 mb-3">
@@ -191,7 +227,6 @@ export default function AdminOrdersPage() {
               </>
             )}
 
-            {/* Cancelled Orders */}
             {cancelledOrders.length > 0 && (
               <>
                 <h2 className="text-xl font-semibold mt-6 mb-3">
@@ -209,6 +244,14 @@ export default function AdminOrdersPage() {
   );
 }
 
+// -------- Helpers --------
+
+function todayString() {
+  return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+}
+
+// -------- OrderCard --------
+
 function OrderCard({
   order,
   onFulfill,
@@ -216,10 +259,23 @@ function OrderCard({
   processing,
 }: {
   order: Order;
-  onFulfill?: () => void;
+  onFulfill?: (
+    orderId: string,
+    trackingNumber: string,
+    shippedAt: string,
+    fulfillmentNotes: string
+  ) => void;
   onCancel?: () => void;
   processing: boolean;
 }) {
+  const [showFulfillForm, setShowFulfillForm] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [shippedAt, setShippedAt] = useState(todayString());
+  const [fulfillmentNotes, setFulfillmentNotes] = useState("");
+
+  const isPending = order.status === "draft" || order.status === "placed";
+  const isFulfilled = order.status === "fulfilled";
+
   const statusColors: Record<Order["status"], string> = {
     draft: "bg-amber-100 text-amber-700",
     placed: "bg-orange-100 text-orange-700",
@@ -229,31 +285,61 @@ function OrderCard({
 
   const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
 
+  const isPaid = order.payment_status === "paid";
+
+  function handleConfirmFulfill() {
+    if (!trackingNumber.trim()) {
+      toast.error("Tracking number is required");
+      return;
+    }
+    onFulfill?.(order.id, trackingNumber.trim(), shippedAt, fulfillmentNotes.trim());
+    setShowFulfillForm(false);
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
+      {/* Header row */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
             <h3 className="text-lg font-semibold">
               {order.distributor.business_name}
             </h3>
             <span
-              className={`px-2 py-1 text-xs font-medium rounded ${
-                statusColors[order.status]
-              }`}
+              className={`px-2 py-1 text-xs font-medium rounded ${statusColors[order.status]}`}
             >
               {order.status}
             </span>
+            {/* Payment badge */}
+            {isPaid ? (
+              <span className="px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                Payment confirmed
+              </span>
+            ) : (
+              <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-100 text-yellow-700 border border-yellow-200">
+                Payment pending
+              </span>
+            )}
+            {isPaid && order.stripe_payment_intent_id && (
+              <span className="text-xs text-gray-400 font-mono">
+                {order.stripe_payment_intent_id.slice(0, 22)}…
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-600">{order.distributor.business_address}</p>
           <p className="text-sm text-gray-600">
             Contact: {order.distributor.contact_name} ({order.distributor.contact_email})
           </p>
+          {order.shipping_cost != null && (
+            <p className="text-sm text-gray-500 mt-1">
+              Shipping paid: ${Number(order.shipping_cost).toFixed(2)}
+            </p>
+          )}
         </div>
-        <div className="text-right text-sm text-gray-600">
+        <div className="text-right text-sm text-gray-600 ml-4 shrink-0">
           <div>Ordered: {new Date(order.created_at).toLocaleDateString()}</div>
-          {order.updated_at && (order.status === "fulfilled" || order.status === "cancelled") && (
-            <div>{order.status === "fulfilled" ? "Fulfilled" : "Cancelled"}: {new Date(order.updated_at).toLocaleDateString()}</div>
+          {order.updated_at && isFulfilled && (
+            <div>Fulfilled: {new Date(order.updated_at).toLocaleDateString()}</div>
           )}
         </div>
       </div>
@@ -288,15 +374,38 @@ function OrderCard({
         </div>
       </div>
 
-      {/* Actions */}
-      {(order.status === "draft" || order.status === "placed") && onFulfill && onCancel && (
+      {/* Fulfillment info (for fulfilled orders) */}
+      {isFulfilled && (order.tracking_number || order.shipped_at || order.fulfillment_notes) && (
+        <div className="border-t border-gray-200 pt-4 mb-4 bg-green-50 rounded-lg p-4 mt-2">
+          <h4 className="font-semibold text-sm text-green-800 mb-2">Fulfillment Details</h4>
+          {order.tracking_number && (
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Tracking #:</span> {order.tracking_number}
+            </p>
+          )}
+          {order.shipped_at && (
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Shipped:</span>{" "}
+              {new Date(order.shipped_at).toLocaleDateString()}
+            </p>
+          )}
+          {order.fulfillment_notes && (
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Notes:</span> {order.fulfillment_notes}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Pending action buttons */}
+      {isPending && !showFulfillForm && onFulfill && onCancel && (
         <div className="flex gap-3 border-t border-gray-200 pt-4">
           <button
-            onClick={onFulfill}
+            onClick={() => setShowFulfillForm(true)}
             disabled={processing}
             className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium"
           >
-            {processing ? "Processing..." : "✓ Fulfill Order"}
+            {processing ? "Processing..." : "Fulfill Order"}
           </button>
           <button
             onClick={onCancel}
@@ -307,7 +416,69 @@ function OrderCard({
           </button>
         </div>
       )}
+
+      {/* Inline fulfillment form */}
+      {isPending && showFulfillForm && (
+        <div className="border-t border-gray-200 pt-4 space-y-4">
+          <h4 className="font-semibold text-sm text-gray-700">Fulfillment Details</h4>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tracking Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="e.g. 1Z999AA10123456784"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Shipment Date <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={shippedAt}
+                onChange={(e) => setShippedAt(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes (optional)
+            </label>
+            <textarea
+              value={fulfillmentNotes}
+              onChange={(e) => setFulfillmentNotes(e.target.value)}
+              placeholder="Carrier, packaging info, special instructions..."
+              rows={2}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleConfirmFulfill}
+              disabled={processing}
+              className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium"
+            >
+              {processing ? "Processing..." : "Confirm & Fulfill Order"}
+            </button>
+            <button
+              onClick={() => setShowFulfillForm(false)}
+              disabled={processing}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

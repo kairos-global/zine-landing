@@ -149,12 +149,17 @@ type DistributorOrder = {
   updated_at?: string;
   shipping_cost?: number;
   payment_status?: string;
+  tracking_number?: string;
+  shipped_at?: string;
+  fulfillment_notes?: string;
   items: Array<{
     id: string;
     quantity: number;
     issue: Issue;
   }>;
 };
+
+const CART_STORAGE_KEY = "zineground_distributor_cart";
 
 // ========== APPROVED PORTAL ==========
 function ApprovedPortal({ distributor }: { distributor: Distributor }) {
@@ -163,9 +168,28 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   const [stock, setStock] = useState<StockItem[]>([]);
   const [orders, setOrders] = useState<DistributorOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
+
+  // Cart — initialised from localStorage so it persists across page visits
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      return stored ? (JSON.parse(stored) as CartItem[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Persist cart to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch {
+      // localStorage may be unavailable in some environments — fail silently
+    }
+  }, [cart]);
 
   useEffect(() => {
     fetchIssues();
@@ -179,6 +203,7 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
     if (paymentStatus === "success" && orderId) {
       toast.success("Payment successful! Your order is being processed.");
       setCart([]);
+      localStorage.removeItem(CART_STORAGE_KEY);
       fetchStock();
       setActiveTab("orders");
       fetchOrders();
@@ -665,13 +690,14 @@ function OrdersView({
     <div className="space-y-4">
       {orders.map((order) => {
         const totalItems = order.items?.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
+        const isFulfilled = order.status === "fulfilled";
         return (
           <div
             key={order.id}
             className="bg-white rounded-xl border border-gray-200 p-6"
           >
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-sm font-medium text-gray-500">
                   {new Date(order.created_at).toLocaleDateString()}
                 </span>
@@ -694,6 +720,7 @@ function OrdersView({
                 </span>
               )}
             </div>
+
             <div className="border-t border-gray-100 pt-4">
               <p className="text-xs font-medium text-gray-500 mb-2">
                 Order items ({totalItems} total)
@@ -710,6 +737,34 @@ function OrdersView({
                 ))}
               </ul>
             </div>
+
+            {/* Shipment info — shown once admin fulfils the order */}
+            {isFulfilled && (order.tracking_number || order.shipped_at || order.fulfillment_notes) && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">
+                  Shipment Info
+                </p>
+                <div className="space-y-1">
+                  {order.tracking_number && (
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium">Tracking #:</span>{" "}
+                      <span className="font-mono">{order.tracking_number}</span>
+                    </p>
+                  )}
+                  {order.shipped_at && (
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium">Shipped:</span>{" "}
+                      {new Date(order.shipped_at).toLocaleDateString()}
+                    </p>
+                  )}
+                  {order.fulfillment_notes && (
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium">Note:</span> {order.fulfillment_notes}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

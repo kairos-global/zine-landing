@@ -10,8 +10,13 @@ const supabase = createClient(
 
 /**
  * PATCH /api/admin/orders/[id]
- * Update order status or fulfill order
- * Body: { status: "pending" | "fulfilled" | "cancelled" }
+ * Update order status, and optionally save fulfillment details.
+ * Body: {
+ *   status: "pending" | "fulfilled" | "cancelled",
+ *   tracking_number?: string,   // required when fulfilling
+ *   shipped_at?: string,        // ISO date string "YYYY-MM-DD"
+ *   fulfillment_notes?: string,
+ * }
  */
 export async function PATCH(
   req: Request,
@@ -31,9 +36,9 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
-    const { status } = body;
+    const { status, tracking_number, shipped_at, fulfillment_notes } = body;
 
-    // Validate status (API: pending | fulfilled | cancelled; DB enum: draft | placed | fulfilled | cancelled)
+    // Validate status
     if (!status || !["pending", "fulfilled", "cancelled"].includes(status)) {
       return NextResponse.json(
         { error: "Invalid status. Must be: pending, fulfilled, or cancelled" },
@@ -44,7 +49,6 @@ export async function PATCH(
 
     // If fulfilling, update distributor stock
     if (status === "fulfilled") {
-      // Get order items
       const { data: orderItems, error: itemsError } = await supabase
         .from("distributor_order_items")
         .select("*, order:distributor_orders(distributor_id)")
@@ -59,9 +63,7 @@ export async function PATCH(
 
       const distributorId = orderItems[0].order.distributor_id;
 
-      // Update or insert stock for each item
       for (const item of orderItems) {
-        // Check if stock exists
         const { data: existingStock } = await supabase
           .from("distributor_stock")
           .select("*")
@@ -70,13 +72,11 @@ export async function PATCH(
           .single();
 
         if (existingStock) {
-          // Update existing stock
           await supabase
             .from("distributor_stock")
             .update({ quantity: existingStock.quantity + item.quantity })
             .eq("id", existingStock.id);
         } else {
-          // Insert new stock
           await supabase
             .from("distributor_stock")
             .insert([
@@ -90,10 +90,21 @@ export async function PATCH(
       }
     }
 
-    // Update order status
+    // Build the update payload
+    const updatePayload: Record<string, unknown> = {
+      status: statusForDb,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (status === "fulfilled") {
+      if (tracking_number) updatePayload.tracking_number = tracking_number;
+      if (shipped_at) updatePayload.shipped_at = shipped_at;
+      if (fulfillment_notes !== undefined) updatePayload.fulfillment_notes = fulfillment_notes;
+    }
+
     const { data, error } = await supabase
       .from("distributor_orders")
-      .update({ status: statusForDb, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
@@ -116,6 +127,3 @@ export async function PATCH(
     );
   }
 }
-
-
-
