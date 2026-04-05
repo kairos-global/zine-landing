@@ -86,18 +86,6 @@ export default function DashboardPage() {
         </Link>
 
         <Link
-          href="/dashboard/distributor"
-          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
-        >
-          <div className="text-lg font-semibold text-black group-hover:text-white">
-            Distributor Portal
-          </div>
-          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
-            Apply to become a Zineground distributor and manage your stock locations.
-          </div>
-        </Link>
-
-        <Link
           href="/dashboard/creator"
           className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
@@ -118,6 +106,18 @@ export default function DashboardPage() {
           </div>
           <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
             Buy and sell design services within the Zineground community.
+          </div>
+        </Link>
+
+        <Link
+          href="/dashboard/distributor"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
+        >
+          <div className="text-lg font-semibold text-black group-hover:text-white">
+            Distributor Portal
+          </div>
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            Apply to become a Zineground distributor and manage your stock locations.
           </div>
         </Link>
 

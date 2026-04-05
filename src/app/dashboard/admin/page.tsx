@@ -175,12 +175,12 @@ export default function AdminDashboardPage() {
             {/* Fulfil Orders */}
             <Link
               href="/dashboard/admin/orders"
-              className="group relative bg-white border border-gray-200 rounded-xl p-5 hover:border-[#82E385] hover:shadow-md transition-all"
+              className="group relative bg-white border border-gray-200 rounded-xl p-5 hover:border-[#D16FF2] hover:shadow-md transition-all"
             >
               <div
-                className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-[#82E385] opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-[#D16FF2] opacity-0 group-hover:opacity-100 transition-opacity"
               />
-              <div className="text-base font-semibold mb-1 group-hover:text-[#4CAF50] transition-colors">
+              <div className="text-base font-semibold mb-1 group-hover:text-[#D16FF2] transition-colors">
                 Fulfil Distributor Orders
               </div>
               <div className="text-sm text-gray-500">Review payments and ship zine orders</div>
