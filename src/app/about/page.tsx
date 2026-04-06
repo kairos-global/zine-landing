@@ -40,7 +40,7 @@ export default function AboutPage() {
         {sections.map((section, i) => (
           <div
             key={i}
-            className={`rounded-3xl p-8 w-[85%] ${i % 2 === 0 ? 'mr-auto' : 'ml-auto'}`}
+            className={`rounded-3xl p-8 w-[85%] ${i % 2 === 0 ? 'mr-auto' : 'ml-auto'} border-2 border-dotted border-black`}
             style={{ backgroundColor: section.color }}
           >
             <h2 className="text-xl font-semibold mb-2">{section.title}</h2>
