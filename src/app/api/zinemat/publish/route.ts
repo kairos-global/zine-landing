@@ -33,6 +33,8 @@ interface IssueUpdate {
   published_at?: string;
   self_distribute?: boolean;
   print_for_me?: boolean;
+  max_copies_per_order?: number;
+  auto_approve_quantity?: number;
   zine_format?: "mini" | "half_letter";
 }
 
@@ -119,32 +121,16 @@ export async function POST(req: Request) {
 
     // Parse distribution settings
     const distributionRaw = formData.get("distribution");
-    let distribution = { self_distribute: false, print_for_me: false };
+    let distribution: {
+      self_distribute: boolean;
+      print_for_me: boolean;
+      max_copies_per_order?: number;
+      auto_approve_quantity?: number;
+    } = { self_distribute: false, print_for_me: false };
     if (distributionRaw) {
       distribution = JSON.parse(distributionRaw.toString());
     }
-
-    // If print_for_me is enabled, verify payment has been made
-    if (distribution.print_for_me) {
-      const { data: payment } = await supabase
-        .from("creator_print_payments")
-        .select("payment_status")
-        .eq("issue_id", issueId)
-        .eq("payment_status", "paid")
-        .maybeSingle();
-
-      if (!payment) {
-        return NextResponse.json(
-          {
-            error: "Payment required",
-            requiresPayment: true,
-            issueId,
-            message: "Please complete payment for print-for-me distribution before publishing.",
-          },
-          { status: 402 }
-        );
-      }
-    }
+    // No upfront payment gate — creators pay per copy when distributors order.
 
     const zineFormatRaw = formData.get("zine_format") as string | null;
     const zine_format: "mini" | "half_letter" | undefined =
@@ -161,6 +147,12 @@ export async function POST(req: Request) {
       profile_id: profileId,
       self_distribute: distribution.self_distribute,
       print_for_me: distribution.print_for_me,
+      ...(distribution.max_copies_per_order != null
+        ? { max_copies_per_order: distribution.max_copies_per_order }
+        : {}),
+      ...(distribution.auto_approve_quantity != null
+        ? { auto_approve_quantity: distribution.auto_approve_quantity }
+        : {}),
       ...(zine_format !== undefined ? { zine_format } : {}),
     };
 

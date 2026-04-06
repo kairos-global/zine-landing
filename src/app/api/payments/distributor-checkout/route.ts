@@ -9,8 +9,23 @@ const supabase = createClient(
 );
 
 /**
+ * Tiered shipping rates based on total copies ordered.
+ * Covers standard USPS/carrier costs for zine shipments.
+ */
+export function calculateShippingCost(totalQuantity: number): number {
+  if (totalQuantity <= 10) return 5.0;
+  if (totalQuantity <= 25) return 8.0;
+  if (totalQuantity <= 50) return 12.0;
+  if (totalQuantity <= 100) return 18.0;
+  if (totalQuantity <= 200) return 25.0;
+  if (totalQuantity <= 500) return 40.0;
+  return 60.0;
+}
+
+/**
  * POST /api/payments/distributor-checkout
- * Create Stripe Checkout session for distributor order shipping
+ * Create Stripe Checkout session for distributor order shipping.
+ * Shipping cost is quantity-based (tiered), not a flat fee.
  * Body: { orderId: string }
  */
 export async function POST(req: Request) {
@@ -61,13 +76,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Distributors only pay shipping (not printing). Flat $10 until we integrate real shipping.
-    const SHIPPING_FLAT_CENTS = 1000; // $10.00
-    const shippingCost = SHIPPING_FLAT_CENTS / 100;
+    // Calculate total quantity across all items
+    const totalQuantity: number = (order.items ?? []).reduce(
+      (sum: number, item: { quantity: number }) => sum + item.quantity,
+      0
+    );
 
-    // Use origin only so redirect goes to /dashboard/distributor, not /api/.../dashboard/distributor
+    const shippingCost = calculateShippingCost(totalQuantity);
+
     const appOrigin =
-      typeof process.env.NEXT_PUBLIC_APP_URL === "string" && process.env.NEXT_PUBLIC_APP_URL
+      typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
+      process.env.NEXT_PUBLIC_APP_URL
         ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
         : "http://localhost:3000";
 
@@ -83,7 +102,7 @@ export async function POST(req: Request) {
       `${appOrigin}/dashboard/distributor?payment=cancelled`
     );
 
-    // Update order with checkout session ID and shipping cost
+    // Update order with checkout session ID and computed shipping cost
     await supabase
       .from("distributor_orders")
       .update({
@@ -96,6 +115,7 @@ export async function POST(req: Request) {
       checkoutUrl: session.url,
       sessionId: session.id,
       shippingCost,
+      totalQuantity,
     });
   } catch (err) {
     console.error("[DistributorCheckout] Error:", err);
@@ -105,4 +125,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

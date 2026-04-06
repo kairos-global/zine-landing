@@ -27,6 +27,9 @@ type Issue = {
   pdf_url?: string;
   status: string;
   published_at?: string;
+  print_for_me?: boolean;
+  max_copies_per_order?: number;
+  auto_approve_quantity?: number;
 };
 
 type CartItem = {
@@ -257,15 +260,16 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   }
 
   function addToCart(issueId: string) {
+    const issue = issues.find((i) => i.id === issueId);
+    const maxQty = issue?.max_copies_per_order ?? 500;
     const existing = cart.find((item) => item.issue_id === issueId);
     if (existing) {
+      const newQty = Math.min(existing.quantity + 10, maxQty);
       setCart(cart.map((item) =>
-        item.issue_id === issueId
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
+        item.issue_id === issueId ? { ...item, quantity: newQty } : item
       ));
     } else {
-      setCart([...cart, { issue_id: issueId, quantity: 10 }]);
+      setCart([...cart, { issue_id: issueId, quantity: Math.min(10, maxQty) }]);
     }
     toast.success("Added to cart");
   }
@@ -519,6 +523,11 @@ function BrowseZines({
                     Published: {new Date(issue.published_at).toLocaleDateString()}
                   </p>
                 )}
+                {issue.print_for_me && issue.max_copies_per_order && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Max {issue.max_copies_per_order} copies/order
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => onAddToCart(issue.id)}
@@ -554,7 +563,7 @@ function BrowseZines({
                           <p className="text-xs text-gray-500 truncate">{issue.slug}</p>
                         )}
                       </div>
-                      <div className="flex items-center flex-shrink-0">
+                      <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
                         <label htmlFor={`cart-qty-${item.issue_id}`} className="sr-only">
                           Quantity for {issue?.title || "item"}
                         </label>
@@ -568,22 +577,26 @@ function BrowseZines({
                             const v = e.target.value.replace(/\D/g, "");
                             if (v === "") return;
                             const n = parseInt(v, 10);
-                            if (!isNaN(n) && n >= 0 && n <= 99) {
+                            const maxQty = issue?.max_copies_per_order ?? 500;
+                            if (!isNaN(n) && n >= 0 && n <= maxQty) {
                               onUpdateQuantity(item.issue_id, n);
                             }
                           }}
                           onBlur={(e) => {
                             const v = e.target.value.replace(/\D/g, "").trim();
-                            if (v === "") {
-                              onUpdateQuantity(item.issue_id, 1);
-                              return;
-                            }
+                            const maxQty = issue?.max_copies_per_order ?? 500;
+                            if (v === "") { onUpdateQuantity(item.issue_id, 1); return; }
                             const n = parseInt(v, 10);
                             if (isNaN(n) || n < 1) onUpdateQuantity(item.issue_id, 1);
-                            else if (n > 99) onUpdateQuantity(item.issue_id, 99);
+                            else if (n > maxQty) onUpdateQuantity(item.issue_id, maxQty);
                           }}
-                          className="w-11 h-11 rounded border border-gray-300 text-center text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                          className="w-14 h-11 rounded border border-gray-300 text-center text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                         />
+                        {issue?.max_copies_per_order && (
+                          <span className="text-xs text-gray-400">
+                            max {issue.max_copies_per_order}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -597,9 +610,21 @@ function BrowseZines({
               >
                 {placing ? "Processing..." : "Proceed to Payment"}
               </button>
-              <p className="text-xs text-gray-500 text-center mt-2">
-                $10 flat shipping at checkout
-              </p>
+              {(() => {
+                const totalQty = cart.reduce((s, i) => s + i.quantity, 0);
+                const shipping =
+                  totalQty <= 10 ? 5 :
+                  totalQty <= 25 ? 8 :
+                  totalQty <= 50 ? 12 :
+                  totalQty <= 100 ? 18 :
+                  totalQty <= 200 ? 25 :
+                  totalQty <= 500 ? 40 : 60;
+                return (
+                  <p className="text-xs text-gray-500 text-center mt-2">
+                    Est. shipping: <strong>${shipping}.00</strong> for {totalQty} copies
+                  </p>
+                );
+              })()}
             </>
           )}
         </div>

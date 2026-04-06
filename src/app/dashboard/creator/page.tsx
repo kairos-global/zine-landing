@@ -1,10 +1,31 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import toast from "react-hot-toast";
 import { PaidCreatorProfile, type MarketMeProfile } from "@/app/components/PaidCreatorProfile";
+
+type ApprovalItem = {
+  id: string;
+  quantity: number;
+  creator_approval_status: string;
+  creator_reviewed_at: string | null;
+  cost_dollars: number;
+  is_paid: boolean;
+  order: {
+    id: string;
+    status: string;
+    created_at: string;
+    distributor: {
+      business_name: string;
+      contact_name: string;
+      contact_email: string;
+    } | null;
+  } | null;
+  issue: { id: string; title: string | null } | null;
+};
 
 type CreatorOrder = {
   id: string;
@@ -36,6 +57,17 @@ function CreatorPortalContent() {
   const [orders, setOrders] = useState<CreatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [marketMe, setMarketMe] = useState<MarketMeProfile | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+
+  const fetchApprovals = useCallback(() => {
+    setApprovalsLoading(true);
+    fetch("/api/creator/order-approvals")
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data) => setApprovals(data.items || []))
+      .catch(() => setApprovals([]))
+      .finally(() => setApprovalsLoading(false));
+  }, []);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -47,13 +79,12 @@ function CreatorPortalContent() {
       setLoading(true);
       fetch("/api/creator/orders")
         .then((res) => res.ok ? res.json() : { orders: [] })
-        .then((data) => {
-          setOrders(data.orders || []);
-        })
+        .then((data) => setOrders(data.orders || []))
         .catch(() => setOrders([]))
         .finally(() => setLoading(false));
+      fetchApprovals();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchApprovals]);
 
   useEffect(() => {
     if (activeTab === "market-orders") {
@@ -122,7 +153,14 @@ function CreatorPortalContent() {
         </div>
 
         {activeTab === "zine-orders" ? (
-          <ZineOrdersView orders={orders} loading={loading} />
+          <div className="space-y-8">
+            <OrderApprovalsView
+              items={approvals}
+              loading={approvalsLoading}
+              onRefresh={fetchApprovals}
+            />
+            <ZineOrdersView orders={orders} loading={loading} />
+          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="min-w-0">
@@ -262,6 +300,177 @@ function ZineOrdersView({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ========== ORDER APPROVALS VIEW ==========
+function OrderApprovalsView({
+  items,
+  loading,
+  onRefresh,
+}: {
+  items: ApprovalItem[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [payLoading, setPayLoading] = useState<string | null>(null);
+
+  async function handleAction(itemId: string, action: "approve" | "reject") {
+    setActionLoading(itemId + action);
+    try {
+      const res = await fetch("/api/creator/order-approvals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderItemId: itemId, action }),
+      });
+      if (res.ok) {
+        toast.success(action === "approve" ? "Order approved" : "Order rejected");
+        onRefresh();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Action failed");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handlePay(itemId: string) {
+    setPayLoading(itemId);
+    try {
+      const res = await fetch("/api/payments/creator-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderItemId: itemId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to start payment");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setPayLoading(null);
+    }
+  }
+
+  // Split into pending approvals vs awaiting payment
+  const pending = items.filter((i) => i.creator_approval_status === "pending_approval");
+  const awaitingPayment = items.filter(
+    (i) =>
+      (i.creator_approval_status === "auto_approved" ||
+        i.creator_approval_status === "approved") &&
+      !i.is_paid
+  );
+
+  if (loading) {
+    return <div className="text-center py-6 text-gray-600 text-sm">Loading approvals...</div>;
+  }
+
+  if (pending.length === 0 && awaitingPayment.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      {/* Pending approvals */}
+      {pending.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3 text-amber-700">
+            Pending approval ({pending.length})
+          </h2>
+          <div className="space-y-3">
+            {pending.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white rounded-xl border border-amber-200 p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {item.issue?.title || "Untitled"}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {item.order?.distributor?.business_name || "Unknown distributor"} wants{" "}
+                      <strong>{item.quantity} copies</strong>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Your cost if approved: ${item.cost_dollars.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={actionLoading === item.id + "approve"}
+                      onClick={() => handleAction(item.id, "approve")}
+                      className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 disabled:opacity-50"
+                    >
+                      {actionLoading === item.id + "approve" ? "..." : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionLoading === item.id + "reject"}
+                      onClick={() => handleAction(item.id, "reject")}
+                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 disabled:opacity-50"
+                    >
+                      {actionLoading === item.id + "reject" ? "..." : "Reject"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Awaiting payment */}
+      {awaitingPayment.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3 text-blue-700">
+            Awaiting your payment ({awaitingPayment.length})
+          </h2>
+          <div className="space-y-3">
+            {awaitingPayment.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white rounded-xl border border-blue-200 p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {item.issue?.title || "Untitled"}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {item.order?.distributor?.business_name || "Distributor"} ordered{" "}
+                      <strong>{item.quantity} copies</strong>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {item.creator_approval_status === "auto_approved"
+                        ? "Auto-approved"
+                        : "You approved this order"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={payLoading === item.id}
+                    onClick={() => handlePay(item.id)}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50"
+                  >
+                    {payLoading === item.id
+                      ? "..."
+                      : `Pay $${item.cost_dollars.toFixed(2)}`}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -131,12 +131,49 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create order items
-    const orderItems = items.map((item) => ({
-      order_id: order.id,
-      issue_id: item.issue_id,
-      quantity: item.quantity,
-    }));
+    // Fetch print_for_me settings for all issues in this order
+    const issueIds = items.map((i) => i.issue_id);
+    const { data: issueSettings } = await supabase
+      .from("issues")
+      .select("id, print_for_me, max_copies_per_order, auto_approve_quantity")
+      .in("id", issueIds);
+
+    const issueMap = new Map(
+      (issueSettings || []).map((iss) => [iss.id, iss])
+    );
+
+    // Validate quantities against creator limits
+    for (const item of items) {
+      const iss = issueMap.get(item.issue_id);
+      if (iss?.print_for_me && iss.max_copies_per_order != null) {
+        if (item.quantity > iss.max_copies_per_order) {
+          return NextResponse.json(
+            {
+              error: "Order quantity exceeds creator limit",
+              details: `The creator allows a maximum of ${iss.max_copies_per_order} copies per order for this zine. You requested ${item.quantity}.`,
+            },
+            { status: 422 }
+          );
+        }
+      }
+    }
+
+    // Build order items with approval status
+    const orderItems = items.map((item) => {
+      const iss = issueMap.get(item.issue_id);
+      let creator_approval_status = "auto_approved";
+      if (iss?.print_for_me) {
+        const threshold = iss.auto_approve_quantity ?? 20;
+        creator_approval_status =
+          item.quantity <= threshold ? "auto_approved" : "pending_approval";
+      }
+      return {
+        order_id: order.id,
+        issue_id: item.issue_id,
+        quantity: item.quantity,
+        creator_approval_status,
+      };
+    });
 
     const { error: itemsError } = await supabase
       .from("distributor_order_items")

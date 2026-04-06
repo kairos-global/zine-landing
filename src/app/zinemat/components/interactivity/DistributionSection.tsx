@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import toast from "react-hot-toast";
-
 export type Distribution = {
   self_distribute: boolean;
   print_for_me: boolean;
+  max_copies_per_order?: number;
+  auto_approve_quantity?: number;
 };
 
 // Purple palette constants
@@ -34,50 +33,54 @@ function CheckIcon() {
   );
 }
 
+function LimitInput({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1" style={{ color: PURPLE_DARK }}>
+        {label}
+      </label>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10);
+          if (!isNaN(v) && v >= min && v <= max) onChange(v);
+        }}
+        className="w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-1"
+        style={{ borderColor: `${PURPLE}66`, color: PURPLE_DARK }}
+      />
+      <p className="text-xs mt-1" style={{ color: `${PURPLE_DARK}99` }}>
+        {hint}
+      </p>
+    </div>
+  );
+}
+
 export default function DistributionSection({
   value,
   onChange,
-  issueId,
-  hasPayment,
 }: {
   value: Distribution;
   onChange: (next: Distribution) => void;
-  issueId?: string;
-  hasPayment?: boolean;
 }) {
-  const [processingPayment, setProcessingPayment] = useState(false);
-
-  async function handlePaymentClick() {
-    if (!issueId) {
-      toast.error("Issue ID is required");
-      return;
-    }
-
-    setProcessingPayment(true);
-    try {
-      const res = await fetch("/api/payments/creator-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issueId }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to create payment session");
-        return;
-      }
-
-      const data = await res.json();
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      }
-    } catch (err) {
-      console.error("Error initiating payment:", err);
-      toast.error("Failed to initiate payment");
-    } finally {
-      setProcessingPayment(false);
-    }
-  }
+  const maxCopies = value.max_copies_per_order ?? 50;
+  const autoApprove = value.auto_approve_quantity ?? 20;
 
   return (
     <div className="space-y-3">
@@ -115,7 +118,7 @@ export default function DistributionSection({
           type="checkbox"
           checked={value.self_distribute}
           onChange={(e) =>
-            onChange({ self_distribute: e.target.checked, print_for_me: false })
+            onChange({ ...value, self_distribute: e.target.checked, print_for_me: false })
           }
           className="sr-only"
         />
@@ -175,7 +178,7 @@ export default function DistributionSection({
           type="checkbox"
           checked={value.print_for_me}
           onChange={(e) =>
-            onChange({ self_distribute: false, print_for_me: e.target.checked })
+            onChange({ ...value, self_distribute: false, print_for_me: e.target.checked })
           }
           className="sr-only"
         />
@@ -208,61 +211,41 @@ export default function DistributionSection({
               </span>
             </div>
             <div className="mt-0.5 text-xs text-gray-500">
-              Zineground will print and deliver any distributor&apos;s order of copies for your zine,{" "}
-              anywhere in the world where distributors are located, no exceptions. This helps us build{" "}
-              a worldwide distribution network.
+              Zineground prints and delivers orders for your zine to distributors worldwide.
+              You are charged <strong>10¢ per copy</strong> when a distributor&apos;s order is approved — no upfront fee.
             </div>
           </div>
         </div>
       </label>
 
-      {/* Payment notice */}
+      {/* Order limit controls — shown when print_for_me is active */}
       {value.print_for_me && (
-        <div className="mt-1 space-y-2">
-          {hasPayment ? (
-            <div
-              className="p-3 rounded-lg text-sm"
-              style={{
-                backgroundColor: `${PURPLE}12`,
-                border: `1px solid ${PURPLE}55`,
-                color: PURPLE_DARK,
-              }}
-            >
-              ✅ Payment completed! Your zine will be available for distributors to order once published.
-            </div>
-          ) : (
-            <div
-              className="p-3 rounded-lg space-y-2"
-              style={{
-                backgroundColor: `${PURPLE}10`,
-                border: `1px solid ${PURPLE}44`,
-              }}
-            >
-              <p className="text-sm font-medium" style={{ color: PURPLE_DARK }}>
-                💳 Payment Required ($25)
-              </p>
-              <p className="text-xs" style={{ color: `${PURPLE_DARK}cc` }}>
-                You need to pay a one-time fee to enable print-for-me distribution. This allows Zineground to print and ship your zine to distributors worldwide.
-              </p>
-              {issueId && (
-                <button
-                  onClick={handlePaymentClick}
-                  disabled={processingPayment}
-                  className="mt-2 w-full px-4 py-2 text-white rounded-lg transition disabled:opacity-50 text-sm font-medium"
-                  style={{ backgroundColor: PURPLE }}
-                  onMouseEnter={(e) => {
-                    if (!processingPayment)
-                      (e.currentTarget as HTMLElement).style.backgroundColor = PURPLE_DARK;
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = PURPLE;
-                  }}
-                >
-                  {processingPayment ? "Processing..." : "Pay $25 to Enable"}
-                </button>
-              )}
-            </div>
-          )}
+        <div
+          className="rounded-xl p-4 space-y-4"
+          style={{
+            backgroundColor: `${PURPLE}0d`,
+            border: `1px solid ${PURPLE}44`,
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: PURPLE_DARK }}>
+            Order controls
+          </p>
+          <LimitInput
+            label="Max copies per order"
+            hint="Distributors cannot request more than this in a single order. (1–500)"
+            value={maxCopies}
+            min={1}
+            max={500}
+            onChange={(v) => onChange({ ...value, max_copies_per_order: v })}
+          />
+          <LimitInput
+            label="Auto-approve below"
+            hint="Orders up to this quantity are approved automatically. Above it, you approve manually in the Creator Portal. Set to 0 to review every order."
+            value={autoApprove}
+            min={0}
+            max={maxCopies}
+            onChange={(v) => onChange({ ...value, auto_approve_quantity: v })}
+          />
         </div>
       )}
     </div>

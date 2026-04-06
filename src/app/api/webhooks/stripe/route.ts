@@ -98,16 +98,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       }
     }
   } else if (type === "creator_print_for_me") {
-    const issueId = metadata.issueId;
-    if (issueId) {
-      await supabase
-        .from("creator_print_payments")
-        .update({
-          payment_status: "paid",
-          stripe_payment_intent_id: session.payment_intent as string,
-        })
-        .eq("stripe_checkout_session_id", session.id);
-    }
+    // Update payment record via checkout session ID (works for both old and new model)
+    await supabase
+      .from("creator_print_payments")
+      .update({
+        payment_status: "paid",
+        stripe_payment_intent_id: session.payment_intent as string,
+      })
+      .eq("stripe_checkout_session_id", session.id);
   }
 }
 
@@ -136,15 +134,27 @@ async function handlePaymentIntentSucceeded(
       }
     }
   } else if (type === "creator_print_for_me") {
-    const issueId = metadata.issueId;
-    if (issueId) {
+    // Try to match by orderItemId (new model) first, then fall back to issueId (legacy)
+    const orderItemId = metadata.orderItemId;
+    if (orderItemId) {
       await supabase
         .from("creator_print_payments")
         .update({
           payment_status: "paid",
           stripe_payment_intent_id: paymentIntent.id,
         })
-        .eq("issue_id", issueId);
+        .eq("distributor_order_item_id", orderItemId);
+    } else {
+      const issueId = metadata.issueId;
+      if (issueId) {
+        await supabase
+          .from("creator_print_payments")
+          .update({
+            payment_status: "paid",
+            stripe_payment_intent_id: paymentIntent.id,
+          })
+          .eq("issue_id", issueId);
+      }
     }
   }
 }
@@ -168,14 +178,20 @@ async function handlePaymentIntentFailed(
         .eq("id", orderId);
     }
   } else if (type === "creator_print_for_me") {
-    const issueId = metadata.issueId;
-    if (issueId) {
+    const orderItemId = metadata.orderItemId;
+    if (orderItemId) {
       await supabase
         .from("creator_print_payments")
-        .update({
-          payment_status: "failed",
-        })
-        .eq("issue_id", issueId);
+        .update({ payment_status: "failed" })
+        .eq("distributor_order_item_id", orderItemId);
+    } else {
+      const issueId = metadata.issueId;
+      if (issueId) {
+        await supabase
+          .from("creator_print_payments")
+          .update({ payment_status: "failed" })
+          .eq("issue_id", issueId);
+      }
     }
   }
 }

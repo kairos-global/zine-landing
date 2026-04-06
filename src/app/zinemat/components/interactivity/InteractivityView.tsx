@@ -42,7 +42,6 @@ export default function InteractivityView() {
     self_distribute: false,
     print_for_me: false,
   });
-  const [hasPayment, setHasPayment] = useState<boolean>(false);
   const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
   const [loading, setLoading] = useState<boolean>(!!editId);
   const [saving, setSaving] = useState(false);
@@ -74,14 +73,9 @@ export default function InteractivityView() {
       try {
         console.log("📖 [ZineMat] Loading issue:", editId);
         
-        // Check URL params for payment success
+        // Clean payment URL params if present (from old flow)
         const paymentStatus = searchParams?.get("payment");
-        if (paymentStatus === "success") {
-          toast.success("Payment successful! You can now publish with print-for-me distribution.");
-          // Clean URL
-          router.replace(`/zinemat?id=${editId}`, { scroll: false });
-        } else if (paymentStatus === "cancelled") {
-          toast.error("Payment was cancelled.");
+        if (paymentStatus) {
           router.replace(`/zinemat?id=${editId}`, { scroll: false });
         }
         
@@ -108,23 +102,13 @@ export default function InteractivityView() {
           setCoverCleared(false);
           setPdfCleared(false);
           
-          // Load distribution settings
+          // Load distribution settings including creator-set limits
           setDistribution({
             self_distribute: data.issue.self_distribute ?? false,
             print_for_me: data.issue.print_for_me ?? false,
+            max_copies_per_order: data.issue.max_copies_per_order ?? 50,
+            auto_approve_quantity: data.issue.auto_approve_quantity ?? 20,
           });
-
-          // Always check payment status when issue exists (not just if print_for_me is true)
-          // This handles cases where user paid but hasn't published yet
-          const paymentRes = await fetch(`/api/payments/check?issueId=${editId}`);
-          if (paymentRes.ok) {
-            const paymentData = await paymentRes.json();
-            setHasPayment(paymentData.hasPayment || false);
-            // If payment exists but print_for_me isn't set, enable it
-            if (paymentData.hasPayment && !data.issue.print_for_me) {
-              setDistribution(prev => ({ ...prev, print_for_me: true }));
-            }
-          }
         }
 
         if (data.links) {
@@ -454,8 +438,6 @@ export default function InteractivityView() {
                   <DistributionSection
                     value={distribution}
                     onChange={setDistribution}
-                    issueId={editId || undefined}
-                    hasPayment={hasPayment}
                   />
                 )}
               </Card>

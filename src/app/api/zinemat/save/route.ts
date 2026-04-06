@@ -33,6 +33,8 @@ interface IssueUpdate {
   published_at?: string | null;
   self_distribute?: boolean;
   print_for_me?: boolean;
+  max_copies_per_order?: number;
+  auto_approve_quantity?: number;
   zine_format?: "mini" | "half_letter";
 }
 
@@ -109,7 +111,12 @@ export async function POST(req: Request) {
     }
 
     const distributionRaw = formData.get("distribution");
-    let distribution = { self_distribute: false, print_for_me: false };
+    let distribution: {
+      self_distribute: boolean;
+      print_for_me: boolean;
+      max_copies_per_order?: number;
+      auto_approve_quantity?: number;
+    } = { self_distribute: false, print_for_me: false };
     if (distributionRaw) {
       distribution = JSON.parse(distributionRaw.toString());
     }
@@ -127,6 +134,12 @@ export async function POST(req: Request) {
       pdf_url,
       self_distribute: distribution.self_distribute,
       print_for_me: distribution.print_for_me,
+      ...(distribution.max_copies_per_order != null
+        ? { max_copies_per_order: distribution.max_copies_per_order }
+        : {}),
+      ...(distribution.auto_approve_quantity != null
+        ? { auto_approve_quantity: distribution.auto_approve_quantity }
+        : {}),
       ...(zine_format ? { zine_format } : {}),
     };
 

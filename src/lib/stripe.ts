@@ -13,6 +13,8 @@ export type PaymentMetadata = {
   issueId?: string;
   profileId?: string;
   distributorId?: string;
+  orderItemId?: string;  // per-order-item creator print payment (new model)
+  quantity?: number;     // copies ordered in that item
   type: "distributor_shipping" | "creator_print_for_me";
 };
 
@@ -52,6 +54,8 @@ export async function createCheckoutSession(
       issueId: metadata.issueId || "",
       profileId: metadata.profileId || "",
       distributorId: metadata.distributorId || "",
+      orderItemId: metadata.orderItemId || "",
+      quantity: String(metadata.quantity ?? ""),
       type: metadata.type,
     },
   });
@@ -76,6 +80,8 @@ export async function createPaymentIntent(
       issueId: metadata.issueId || "",
       profileId: metadata.profileId || "",
       distributorId: metadata.distributorId || "",
+      orderItemId: metadata.orderItemId || "",
+      quantity: String(metadata.quantity ?? ""),
       type: metadata.type,
     },
   });
