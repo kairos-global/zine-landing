@@ -12,7 +12,7 @@ const supabase = createClient(
  * Tiered shipping rates based on total copies ordered.
  * Covers standard USPS/carrier costs for zine shipments.
  */
-export function calculateShippingCost(totalQuantity: number): number {
+function calculateShippingCost(totalQuantity: number): number {
   if (totalQuantity <= 10) return 5.0;
   if (totalQuantity <= 25) return 8.0;
   if (totalQuantity <= 50) return 12.0;
