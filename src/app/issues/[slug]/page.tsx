@@ -17,7 +17,7 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
   // 1) Fetch issue
   const { data: issue, error } = await supabase
     .from("issues")
-    .select("id, slug, title, published_at, pdf_url, cover_img_url, status")
+    .select("id, slug, title, published_at, pdf_url, cover_img_url, status, profile_id")
     .eq("slug", slug)
     .single();
 
@@ -32,6 +32,35 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
     .select("id, label, url, qr_path, redirect_path")
     .eq("issue_id", issue.id);
 
+  // 3) Fetch creator profile (for byline)
+  let creator: {
+    id: string;
+    displayName: string;
+    username: string | null;
+    avatarUrl: string | null;
+    handle: string;
+  } | null = null;
+  if (issue.profile_id) {
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("id, display_name, username, avatar_url, email")
+      .eq("id", issue.profile_id)
+      .maybeSingle();
+    if (p) {
+      const displayName =
+        p.display_name ||
+        p.username ||
+        (p.email ? p.email.split("@")[0] : "Zineground creator");
+      creator = {
+        id: p.id,
+        displayName,
+        username: p.username,
+        avatarUrl: p.avatar_url,
+        handle: p.username || p.id,
+      };
+    }
+  }
+
   const baseUrl = getSiteBaseUrl();
   const linksWithQR = (links ?? []).filter((l) => l.redirect_path);
 
@@ -42,6 +71,29 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
         {/* Zine info box / index */}
         <div className="rounded-xl border p-3 text-sm">
           <div className="font-medium mb-2">{issue.title}</div>
+          {creator && (
+            <Link
+              href={`/u/${creator.handle}`}
+              className="flex items-center gap-2 mb-3 rounded-lg border border-gray-200 p-2 hover:border-black transition-colors"
+            >
+              <div className="h-9 w-9 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                {creator.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={creator.avatarUrl}
+                    alt={creator.displayName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[10px] text-gray-400">—</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wide text-gray-500">By</div>
+                <div className="text-sm font-semibold truncate">{creator.displayName}</div>
+              </div>
+            </Link>
+          )}
           <nav className="grid gap-1">
             <a href="#read" className="underline">Digital copy</a>
             <a href="#links" className="underline">Links</a>

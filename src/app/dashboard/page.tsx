@@ -121,6 +121,18 @@ export default function DashboardPage() {
           </div>
         </Link>
 
+        <Link
+          href="/dashboard/profile"
+          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
+        >
+          <div className="text-lg font-semibold text-black group-hover:text-white">
+            Profile
+          </div>
+          <div className="text-sm text-gray-500 mt-1 group-hover:text-gray-300">
+            Your public profile — name, picture, and published zines.
+          </div>
+        </Link>
+
         {/* Admin Dashboard — only visible to admins */}
         {userIsAdmin && (
           <Link
