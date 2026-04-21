@@ -8,14 +8,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const BUCKET = "profile-avatars";
+const BUCKET = "zineground";
+const AVATAR_FOLDER = "avatars";
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 /**
  * POST /api/profile/upload
  * Upload a profile avatar. multipart/form-data with "file".
- * Returns { url }. Create bucket "profile-avatars" in Supabase Storage (public).
+ * Returns { url }. Uploads to the existing "zineground" public bucket
+ * under the "avatars/" folder (matches the covers/, issues/, qr-codes/ pattern).
  */
 export async function POST(req: Request) {
   try {
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const ext = file.name.split(".").pop() || "jpg";
-    const path = `${profileId}/${Date.now()}-${Math.random()
+    const path = `${AVATAR_FOLDER}/${profileId}/${Date.now()}-${Math.random()
       .toString(36)
       .slice(2)}.${ext}`;
 
