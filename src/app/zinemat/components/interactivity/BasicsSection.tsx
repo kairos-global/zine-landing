@@ -1,13 +1,7 @@
 "use client";
 
-import { ZINE_CATEGORIES, ZineCategoryKey } from "@/lib/zine-categories";
-
 export type ZineFormat = "mini" | "half_letter";
-export type Basics = {
-  title: string;
-  zine_format: ZineFormat;
-  category: ZineCategoryKey | null;
-};
+export type Basics = { title: string; zine_format: ZineFormat };
 
 export default function BasicsSection({
   value,
@@ -66,34 +60,6 @@ export default function BasicsSection({
             );
           })}
         </div>
-      </div>
-
-      {/* Category — optional */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">
-          Category <span className="text-gray-400 font-normal">— optional</span>
-        </label>
-        <select
-          className="w-full rounded-xl border px-3 py-2 bg-white text-sm"
-          value={value.category ?? ""}
-          onChange={(e) => {
-            const next = e.target.value;
-            onChange({
-              ...value,
-              category: next === "" ? null : (next as ZineCategoryKey),
-            });
-          }}
-        >
-          <option value="">— None —</option>
-          {ZINE_CATEGORIES.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-gray-500">
-          Helps readers and distributors browse by type.
-        </p>
       </div>
     </div>
   );
