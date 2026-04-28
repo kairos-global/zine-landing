@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import toast from "react-hot-toast";
 
 import BasicsSection, { Basics, ZineFormat } from "./BasicsSection";
+import { isZineCategoryKey } from "@/lib/zine-categories";
 import UploadsSection from "./UploadsSection";
 import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
 import DistributionSection, { Distribution } from "./DistributionSection";
@@ -32,7 +33,7 @@ export default function InteractivityView() {
   const editId = searchParams?.get("id") ?? null;
   const { isSignedIn, user } = useUser();
 
-  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: "half_letter" });
+  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: "half_letter", category: null });
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null);
@@ -96,6 +97,7 @@ export default function InteractivityView() {
           setBasics({
             title: data.issue.title ?? "",
             zine_format: (data.issue.zine_format as ZineFormat) ?? "half_letter",
+            category: isZineCategoryKey(data.issue.category) ? data.issue.category : null,
           });
           setExistingCoverUrl(data.issue.cover_img_url);
           setExistingPdfUrl(data.issue.pdf_url);
@@ -243,6 +245,7 @@ export default function InteractivityView() {
     const formData = new FormData();
     formData.append("title", basics.title.trim() || "Untitled");
     formData.append("zine_format", basics.zine_format);
+    formData.append("category", basics.category ?? "");
     formData.append("issueId", issueId);
     if (coverCleared) formData.append("cover_url", "");
     else if (uploadedCoverUrl) formData.append("cover_url", uploadedCoverUrl);
@@ -252,7 +255,7 @@ export default function InteractivityView() {
     formData.append("interactiveLinks", JSON.stringify(links.filter((l) => l.label !== "__issue_qr__")));
     formData.append("distribution", JSON.stringify(distribution));
     return formData;
-  }, [basics.title, basics.zine_format, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);
+  }, [basics.title, basics.zine_format, basics.category, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);
 
   const SAVE_TIMEOUT_MS = 90_000; // 90s for large PDFs
 
@@ -308,7 +311,7 @@ export default function InteractivityView() {
       }
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [user, loading, editId, issueId, basics.title, basics.zine_format, uploadedCoverUrl, uploadedPdfUrl, links, distribution, performSave, router]);
+  }, [user, loading, editId, issueId, basics.title, basics.zine_format, basics.category, uploadedCoverUrl, uploadedPdfUrl, links, distribution, performSave, router]);
 
   // Save button: save then go to My Library
   const handleSave = async () => {

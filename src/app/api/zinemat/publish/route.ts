@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { getOrCreateProfileId } from "@/lib/profile";
 import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
 import { getSiteBaseUrl } from "@/lib/site-url";
+import { isZineCategoryKey, ZineCategoryKey } from "@/lib/zine-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ interface IssueUpdate {
   max_copies_per_order?: number;
   auto_approve_quantity?: number;
   zine_format?: "mini" | "half_letter";
+  category?: ZineCategoryKey | null;
 }
 
 export async function POST(req: Request) {
@@ -138,6 +140,14 @@ export async function POST(req: Request) {
         ? zineFormatRaw
         : undefined;
 
+    // Category is optional; empty string clears it, valid key sets it, anything else is ignored
+    let category: ZineCategoryKey | null | undefined = undefined;
+    if (formData.has("category")) {
+      const raw = (formData.get("category") as string) ?? "";
+      if (raw === "") category = null;
+      else if (isZineCategoryKey(raw)) category = raw;
+    }
+
     const updates: IssueUpdate = {
       title,
       slug,
@@ -154,6 +164,7 @@ export async function POST(req: Request) {
         ? { auto_approve_quantity: distribution.auto_approve_quantity }
         : {}),
       ...(zine_format !== undefined ? { zine_format } : {}),
+      ...(category !== undefined ? { category } : {}),
     };
 
     // Only set published_at if this is the first time publishing

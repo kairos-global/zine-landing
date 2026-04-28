@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 // Flip view route: /issues/[slug]/flip
 import { getSiteBaseUrl } from "@/lib/site-url";
+import { zineCategoryLabel } from "@/lib/zine-categories";
 import { IssueQRCode } from "./IssueQRCode";
 
 // Use service role key for server-side rendering to bypass RLS
@@ -17,7 +18,7 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
   // 1) Fetch issue
   const { data: issue, error } = await supabase
     .from("issues")
-    .select("id, slug, title, published_at, pdf_url, cover_img_url, status, profile_id")
+    .select("id, slug, title, published_at, pdf_url, cover_img_url, status, profile_id, category")
     .eq("slug", slug)
     .single();
 
@@ -63,6 +64,7 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
 
   const baseUrl = getSiteBaseUrl();
   const linksWithQR = (links ?? []).filter((l) => l.redirect_path);
+  const categoryLabel = zineCategoryLabel(issue.category);
 
   return (
     <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 md:grid-cols-[280px_1fr]">
@@ -71,6 +73,13 @@ export default async function IssuePage({ params }: { params: Promise<{ slug: st
         {/* Zine info box / index */}
         <div className="rounded-xl border p-3 text-sm">
           <div className="font-medium mb-2">{issue.title}</div>
+          {categoryLabel && (
+            <div className="mb-3">
+              <span className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-xs text-neutral-600">
+                {categoryLabel}
+              </span>
+            </div>
+          )}
           {creator && (
             <Link
               href={`/u/${creator.handle}`}
