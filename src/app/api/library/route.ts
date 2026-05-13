@@ -50,6 +50,37 @@ export async function GET() {
       issueQrLinks = qrData || [];
     }
 
+    // Fetch issues the user has collected (from other creators)
+    const { data: collectionRows } = await supabase
+      .from("collections")
+      .select("issue_id, collected_at")
+      .eq("profile_id", profileId)
+      .order("collected_at", { ascending: false });
+
+    let collectedIssues: {
+      id: string;
+      title: string | null;
+      slug: string | null;
+      cover_img_url: string | null;
+      collected_at: string;
+    }[] = [];
+
+    if (collectionRows && collectionRows.length > 0) {
+      const collectedIds = collectionRows.map((r: { issue_id: string }) => r.issue_id);
+      const { data: collectedData } = await supabase
+        .from("issues")
+        .select("id, title, slug, cover_img_url")
+        .in("id", collectedIds)
+        .eq("status", "published");
+
+      if (collectedData) {
+        collectedIssues = collectedData.map((issue: { id: string; title: string | null; slug: string | null; cover_img_url: string | null }) => {
+          const row = collectionRows.find((r: { issue_id: string; collected_at: string }) => r.issue_id === issue.id);
+          return { ...issue, collected_at: row?.collected_at ?? "" };
+        });
+      }
+    }
+
     return NextResponse.json({
       profile: {
         id: profileId,
@@ -57,6 +88,7 @@ export async function GET() {
       },
       issues: issues || [],
       issueQrLinks,
+      collectedIssues,
     });
   } catch (error) {
     console.error("❌ [Library API] Unexpected error:", error);

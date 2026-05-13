@@ -208,7 +208,7 @@ export default function InteractivityView() {
     const basicsOk = basics.title.trim().length > 0;
     const coverOk = !!(existingCoverUrl || uploadedCoverUrl || coverFile);
     const pdfOk = !!(existingPdfUrl || uploadedPdfUrl || pdfFile);
-    const interactivityOk = links.filter((l) => l.label !== "__issue_qr__").length > 0;
+    const interactivityOk = links.filter((l) => l.label !== "__issue_qr__" && l.label !== "__collection_qr__").length > 0;
     const distributionOk = distribution.self_distribute || distribution.print_for_me;
     return { basics: basicsOk, cover: coverOk, pdf: pdfOk, interactivity: interactivityOk, distribution: distributionOk };
   }, [basics.title, existingCoverUrl, uploadedCoverUrl, coverFile, existingPdfUrl, uploadedPdfUrl, pdfFile, links, distribution]);
@@ -252,8 +252,8 @@ export default function InteractivityView() {
     else if (uploadedCoverUrl) formData.append("cover_url", uploadedCoverUrl);
     if (pdfCleared) formData.append("pdf_url", "");
     else if (uploadedPdfUrl) formData.append("pdf_url", uploadedPdfUrl);
-    // Exclude the auto-generated issue QR link — the save route manages it separately
-    formData.append("interactiveLinks", JSON.stringify(links.filter((l) => l.label !== "__issue_qr__")));
+    // Exclude auto-generated QR links — the save route manages them separately
+    formData.append("interactiveLinks", JSON.stringify(links.filter((l) => l.label !== "__issue_qr__" && l.label !== "__collection_qr__")));
     formData.append("distribution", JSON.stringify(distribution));
     return formData;
   }, [basics.title, basics.zine_format, category, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);

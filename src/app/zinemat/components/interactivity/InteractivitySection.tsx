@@ -90,9 +90,12 @@ export default function InteractivitySection({
   const [formQR, setFormQR] = useState(true);
   const maxLinks = 8;
 
-  // Separate issue QR link from user links
+  // Separate auto-generated QR links from user links
   const issueQrLink = links.find((l) => l.label === "__issue_qr__");
-  const regularLinks = links.filter((l) => l.label !== "__issue_qr__");
+  const collectionQrLink = links.find((l) => l.label === "__collection_qr__");
+  const regularLinks = links.filter(
+    (l) => l.label !== "__issue_qr__" && l.label !== "__collection_qr__"
+  );
 
   const baseUrl = siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "https://zineground.com";
 
@@ -101,6 +104,13 @@ export default function InteractivitySection({
     ? issueQrLink.qr_path
     : slug
     ? generateQRDataURL(`${baseUrl}/issues/${slug}`)
+    : "";
+
+  // Collection QR: prefer stored qr_path, fall back to client-side preview
+  const collectionQrImageUrl = collectionQrLink?.qr_path
+    ? collectionQrLink.qr_path
+    : issueId
+    ? generateQRDataURL(`${baseUrl}/collect/${issueId}`)
     : "";
 
   function add(e: React.FormEvent<HTMLFormElement>) {
@@ -201,6 +211,67 @@ export default function InteractivitySection({
                 style={{ backgroundColor: GREEN, color: "white" }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)}
+              >
+                ↓ Download
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Collection QR Block ─────────────────────────────────────────── */}
+        <div
+          className="rounded-xl border-2 p-4 mb-4 flex items-start gap-4"
+          style={{ borderColor: `${GREEN}88`, backgroundColor: `${GREEN}0F` }}
+        >
+          {/* QR image */}
+          <div className="flex-shrink-0">
+            {collectionQrImageUrl ? (
+              <img
+                src={collectionQrImageUrl}
+                alt="Collection QR Code"
+                className="w-[88px] h-[88px] rounded-md border"
+                style={{ borderColor: `${GREEN}55` }}
+              />
+            ) : (
+              <div
+                className="w-[88px] h-[88px] rounded-md border flex items-center justify-center text-xs text-center"
+                style={{ borderColor: `${GREEN}55`, color: GREEN_DARK }}
+              >
+                QR pending
+              </div>
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold mb-1" style={{ color: GREEN_DARK }}>
+              Collection QR Code
+            </div>
+            <div className="text-sm text-gray-500 mb-2">
+              Readers scan this to add your zine to their Zineground collection. Print it inside your zine.
+            </div>
+            {!collectionQrLink && (
+              <div className="text-xs" style={{ color: `${GREEN_DARK}99` }}>
+                Will activate after your first save
+              </div>
+            )}
+            {collectionQrLink && collectionQrImageUrl && (
+              <button
+                type="button"
+                onClick={() =>
+                  downloadQR(
+                    collectionQrLink.qr_path || collectionQrImageUrl,
+                    `collection-${slug || issueId || "qr"}`
+                  )
+                }
+                className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+                style={{ backgroundColor: GREEN, color: "white" }}
+                onMouseEnter={(e) =>
+                  ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)
+                }
+                onMouseLeave={(e) =>
+                  ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)
+                }
               >
                 ↓ Download
               </button>

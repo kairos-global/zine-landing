@@ -22,6 +22,14 @@ type IssueQrLink = {
   redirect_path: string | null;
 };
 
+type CollectedIssue = {
+  id: string;
+  title: string | null;
+  slug: string | null;
+  cover_img_url: string | null;
+  collected_at: string;
+};
+
 export default function LibraryPage() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
@@ -29,6 +37,7 @@ export default function LibraryPage() {
   const [published, setPublished] = useState<Issue[]>([]);
   const [allIssues, setAllIssues] = useState<Issue[]>([]);
   const [issueQrLinks, setIssueQrLinks] = useState<IssueQrLink[]>([]);
+  const [collectedIssues, setCollectedIssues] = useState<CollectedIssue[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,35 +49,21 @@ export default function LibraryPage() {
 
     async function fetchIssues() {
       if (!user) return;
-      
       try {
-        console.log("📚 [Library] Fetching library data...");
-        
         const response = await fetch("/api/library");
-        
         if (!response.ok) {
-          const errorData = await response.json();
-          console.error("❌ [Library] API error:", errorData);
           setLoading(false);
           return;
         }
-
         const data = await response.json();
-        console.log("✅ [Library] Received data:", data);
-
         const issues = data.issues || [];
-        const draftIssues = issues.filter((i: Issue) => i.status === "draft");
-        const publishedIssues = issues.filter((i: Issue) => i.status === "published");
-
-        console.log("✅ [Library] Saved:", draftIssues.length, "Published:", publishedIssues.length);
-
-        setDrafts(draftIssues);
-        setPublished(publishedIssues);
+        setDrafts(issues.filter((i: Issue) => i.status === "draft"));
+        setPublished(issues.filter((i: Issue) => i.status === "published"));
         setAllIssues(issues);
         setIssueQrLinks(data.issueQrLinks || []);
+        setCollectedIssues(data.collectedIssues || []);
         setLoading(false);
-      } catch (err) {
-        console.error("❌ [Library] Unexpected error:", err);
+      } catch {
         setLoading(false);
       }
     }
@@ -105,9 +100,9 @@ export default function LibraryPage() {
         </button>
       </div>
 
-      {/* Mobile: stacked (Saved then Published), each section scrolls horizontally. Desktop: side-by-side, 2 per row grid. */}
+      {/* Saved + Published grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 min-w-0 mb-8">
-        {/* Saved — on mobile first column; on desktop left */}
+        {/* Saved */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             Saved
@@ -117,7 +112,6 @@ export default function LibraryPage() {
           </h2>
           {drafts.length === 0 ? (
             <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-              <div className="text-3xl sm:text-5xl mb-2 sm:mb-3">✍️</div>
               <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">Nothing saved yet</h3>
               <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm">Create a zine in ZineMat and click Save to see it here.</p>
               <button
@@ -138,7 +132,7 @@ export default function LibraryPage() {
           )}
         </section>
 
-        {/* Published — on mobile second (below Saved); on desktop right */}
+        {/* Published */}
         <section className="min-w-0">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             Published
@@ -148,7 +142,6 @@ export default function LibraryPage() {
           </h2>
           {published.length === 0 ? (
             <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-              <div className="text-3xl sm:text-5xl mb-2 sm:mb-3">🚀</div>
               <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No published issues yet</h3>
               <p className="text-gray-600 text-xs sm:text-sm">Publish your first zine to share it with the world!</p>
             </div>
@@ -163,9 +156,10 @@ export default function LibraryPage() {
           )}
         </section>
       </div>
-      {/* ── Zine QR Codes section ───────────────────────────────────────────── */}
+
+      {/* Zine QR Codes */}
       {allIssues.length > 0 && (
-        <section className="min-w-0">
+        <section className="min-w-0 mb-8">
           <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
             Zine QR Codes
             <span className="text-xs sm:text-sm font-normal text-gray-500">
@@ -177,7 +171,6 @@ export default function LibraryPage() {
           </p>
           {issueQrLinks.length === 0 ? (
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-dashed border-green-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-              <div className="text-3xl sm:text-5xl mb-2 sm:mb-3">🔲</div>
               <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No QR codes yet</h3>
               <p className="text-gray-600 text-xs sm:text-sm">Open a saved zine in ZineMat and add the Interactivity section to generate your Issue QR.</p>
             </div>
@@ -201,6 +194,80 @@ export default function LibraryPage() {
           )}
         </section>
       )}
+
+      {/* Collected */}
+      <section className="min-w-0">
+        <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
+          Collected
+          {collectedIssues.length > 0 && (
+            <span className="text-xs sm:text-sm font-normal text-gray-500">({collectedIssues.length})</span>
+          )}
+        </h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Zines you&apos;ve collected by scanning a Collection QR code.
+        </p>
+        {collectedIssues.length === 0 ? (
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-dashed border-purple-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
+            <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No collected zines yet</h3>
+            <p className="text-gray-600 text-xs sm:text-sm">Scan a Collection QR code from a zine to add it here.</p>
+          </div>
+        ) : (
+          <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
+            {collectedIssues.map((issue) => (
+              <div key={issue.id} className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-auto snap-start">
+                <CollectedCard issue={issue} router={router} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CollectedCard({
+  issue,
+  router,
+}: {
+  issue: CollectedIssue;
+  router: ReturnType<typeof useRouter>;
+}) {
+  return (
+    <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-purple-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
+      <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+        {issue.cover_img_url ? (
+          <img
+            src={issue.cover_img_url}
+            alt={issue.title || "Zine cover"}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            <p className="text-xs">No cover</p>
+          </div>
+        )}
+        <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
+          <span className="text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full shadow-sm bg-purple-500 text-white">
+            Collected
+          </span>
+        </div>
+      </div>
+      <div className="p-2 sm:p-4 flex flex-col flex-1 min-w-0">
+        <h3 className="font-bold text-sm sm:text-base mb-1 sm:mb-2 line-clamp-2 flex-1 text-gray-900">
+          {issue.title || "(Untitled)"}
+        </h3>
+        <p className="text-[10px] sm:text-xs text-gray-500 mb-2">
+          Collected {new Date(issue.collected_at).toLocaleDateString()}
+        </p>
+        {issue.slug && (
+          <button
+            onClick={() => router.push(`/issues/${issue.slug}`)}
+            className="w-full bg-purple-500 hover:bg-purple-600 text-white px-2 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-medium text-xs sm:text-sm transition"
+          >
+            View
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -222,7 +289,6 @@ function ZineQRCard({
 
   return (
     <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-green-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
-      {/* QR Image */}
       <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden p-2">
         {qrLink.qr_path ? (
           <img
@@ -232,15 +298,10 @@ function ZineQRCard({
           />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
-            <div className="text-center">
-              <div className="text-3xl mb-1">🔲</div>
-              <p className="text-xs">Pending</p>
-            </div>
+            <p className="text-xs">Pending</p>
           </div>
         )}
       </div>
-
-      {/* Info */}
       <div className="p-2 sm:p-3 flex flex-col flex-1 min-w-0">
         <h3 className="font-bold text-xs sm:text-sm mb-2 line-clamp-2 flex-1 text-gray-900">
           {issue.title || "(Untitled)"}
@@ -268,7 +329,6 @@ function IssueCard({
 }) {
   return (
     <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
-      {/* Cover Image */}
       <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
         {issue.cover_img_url ? (
           <img
@@ -278,13 +338,9 @@ function IssueCard({
           />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
-            <div className="text-center">
-              <div className="text-3xl sm:text-5xl mb-1 sm:mb-2">📄</div>
-              <p className="text-xs sm:text-sm">No cover</p>
-            </div>
+            <p className="text-xs">No cover</p>
           </div>
         )}
-        {/* Status Badge */}
         <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
           <span
             className={`text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full shadow-sm ${
@@ -295,8 +351,6 @@ function IssueCard({
           </span>
         </div>
       </div>
-
-      {/* Content — tighter on mobile so more fits above the fold */}
       <div className="p-2 sm:p-4 flex flex-col flex-1 min-w-0">
         <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 flex-1 text-gray-900">
           {issue.title || "(Untitled)"}

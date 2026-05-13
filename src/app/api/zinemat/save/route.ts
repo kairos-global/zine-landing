@@ -252,6 +252,47 @@ export async function POST(req: Request) {
       qr_path: issueQrPath,
       redirect_path: issueQrRedirectPath,
     });
+
+    // ── Auto-upsert the Collection QR link ───────────────────────────────────
+    // Encodes a direct link to /collect/[issueId] — scanning records the
+    // collection in the user's library and redirects them to the issue page.
+    const { data: existingCollectionQr } = await supabase
+      .from("issue_links")
+      .select("id")
+      .eq("issue_id", issueId)
+      .eq("label", "__collection_qr__")
+      .maybeSingle();
+
+    const collectionQrLinkId = existingCollectionQr?.id ?? randomUUID();
+    const collectionQrUrl = `${getSiteBaseUrl()}/collect/${issueId}`;
+
+    let collectionQrPath: string | null = null;
+    try {
+      const collectionQrBuffer = await QRCode.toBuffer(collectionQrUrl, {
+        type: "png",
+        width: 400,
+      });
+      const { data: collectionQrData, error: collectionQrErr } = await supabase.storage
+        .from("zineground")
+        .upload(`qr-codes/${collectionQrLinkId}.png`, collectionQrBuffer, {
+          contentType: "image/png",
+          upsert: true,
+        });
+      if (!collectionQrErr && collectionQrData) {
+        collectionQrPath = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${collectionQrData.path}`;
+      }
+    } catch (qrErr) {
+      console.error("💾 [Save] Collection QR generation error:", qrErr);
+    }
+
+    await supabase.from("issue_links").upsert({
+      id: collectionQrLinkId,
+      issue_id: issueId,
+      label: "__collection_qr__",
+      url: collectionQrUrl,
+      qr_path: collectionQrPath,
+      redirect_path: null,
+    });
     // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({
