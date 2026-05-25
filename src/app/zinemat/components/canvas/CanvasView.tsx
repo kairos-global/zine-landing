@@ -10,7 +10,7 @@ export default function CanvasView() {
   const [format, setFormat] = useState<Format>("mini");
 
   return (
-    <div className="mx-auto max-w-3xl px-2 py-8 sm:px-4">
+    <div className="mx-auto max-w-5xl px-2 py-8 sm:px-4">
       {/* Format selector */}
       <section className="mb-10">
         <h2 className="mb-6 text-center text-xl font-semibold text-gray-900">Formats</h2>
@@ -48,7 +48,7 @@ export default function CanvasView() {
 
       {/* Canvas editor */}
       <section>
-        <ZineCanvas />
+        <ZineCanvas format={format} />
       </section>
     </div>
   );
