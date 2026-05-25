@@ -45,6 +45,30 @@ type El =
 let _eid = 1;
 const newId = () => _eid++;
 
+// ─── Rough.js minimal interface (loaded via CDN) ──────────────────────────────
+
+interface RoughOpts {
+  stroke?: string;
+  strokeWidth?: number;
+  roughness?: number;
+  seed?: number;
+  fill?: string;
+}
+
+interface RoughCanvas {
+  line(x1: number, y1: number, x2: number, y2: number, opts?: RoughOpts): void;
+  rectangle(x: number, y: number, w: number, h: number, opts?: RoughOpts): void;
+  ellipse(cx: number, cy: number, width: number, height: number, opts?: RoughOpts): void;
+}
+
+interface RoughLib {
+  canvas(el: HTMLCanvasElement): RoughCanvas;
+}
+
+interface WindowWithRough extends Window {
+  rough?: RoughLib;
+}
+
 // ─── Coordinate helper ────────────────────────────────────────────────────────
 
 function cvtPos(canvas: HTMLCanvasElement, e: React.MouseEvent): Pt {
@@ -73,7 +97,7 @@ function strokePath(ctx: CanvasRenderingContext2D, pts: Pt[]) {
 
 // ─── Element renderer ─────────────────────────────────────────────────────────
 
-function draw(ctx: CanvasRenderingContext2D, el: El, rc: any, imgs: Map<string, HTMLImageElement>) {
+function draw(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas | null, imgs: Map<string, HTMLImageElement>) {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -223,7 +247,7 @@ export default function ZineCanvas() {
   const isDrawing = useRef(false);
   const origin = useRef<Pt>({ x: 0, y: 0 });
   const live = useRef<El | null>(null);
-  const roughLib = useRef<any>(null);
+  const roughLib = useRef<RoughLib | null>(null);
   const imgs = useRef<Map<string, HTMLImageElement>>(new Map());
   const elsRef = useRef<El[]>([]);
   const colorRef = useRef(color);
@@ -241,11 +265,11 @@ export default function ZineCanvas() {
   // ── Load rough.js 4.6.4 from CDN ─────────────────────────────────────────
 
   useEffect(() => {
-    if ((window as any).rough) { roughLib.current = (window as any).rough; return; }
+    if ((window as WindowWithRough).rough) { roughLib.current = (window as WindowWithRough).rough ?? null; return; }
     const s = document.createElement("script");
     s.src = "https://unpkg.com/roughjs@4.6.4/bundled/rough.js";
     s.onload = () => {
-      roughLib.current = (window as any).rough;
+      roughLib.current = (window as WindowWithRough).rough ?? null;
       redraw(elsRef.current, null);
     };
     document.head.appendChild(s);
