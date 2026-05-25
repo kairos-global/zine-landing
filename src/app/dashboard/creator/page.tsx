@@ -206,7 +206,6 @@ function ZineOrdersView({
   if (orders.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-        <div className="text-4xl mb-4">📦</div>
         <p className="text-gray-600">No orders for your zines yet</p>
         <p className="text-sm text-gray-500 mt-2">
           When distributors order copies of your print-for-me zines, they’ll show up here for you to fulfill.
@@ -515,7 +514,6 @@ function MarketOrdersView() {
   if (orders.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-        <div className="text-4xl mb-4">🎨</div>
         <p className="text-gray-600">Market orders</p>
         <p className="text-sm text-gray-500 mt-2">
           When buyers purchase your services, orders will show here. You can accept or decline, then upload the deliverable when accepted.

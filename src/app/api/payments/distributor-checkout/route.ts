@@ -76,6 +76,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    // Prevent double-payment: reject if already paid or already placed
+    if (order.payment_status === "paid" || order.status === "placed") {
+      return NextResponse.json(
+        { error: "This order has already been paid." },
+        { status: 400 }
+      );
+    }
+
+    if (order.status === "cancelled" || order.status === "fulfilled") {
+      return NextResponse.json(
+        { error: "This order cannot be paid — it is " + order.status + "." },
+        { status: 400 }
+      );
+    }
+
     // Calculate total quantity across all items
     const totalQuantity: number = (order.items ?? []).reduce(
       (sum: number, item: { quantity: number }) => sum + item.quantity,

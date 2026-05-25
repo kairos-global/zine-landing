@@ -99,13 +99,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
   } else if (type === "creator_print_for_me") {
     // Update payment record via checkout session ID (works for both old and new model)
-    await supabase
+    const { error: creatorError } = await supabase
       .from("creator_print_payments")
       .update({
         payment_status: "paid",
         stripe_payment_intent_id: session.payment_intent as string,
       })
       .eq("stripe_checkout_session_id", session.id);
+    if (creatorError) {
+      console.error("[StripeWebhook] creator_print_payments update failed:", creatorError);
+      throw creatorError;
+    }
   }
 }
 

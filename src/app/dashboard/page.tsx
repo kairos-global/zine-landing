@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdmin } from "@/lib/useAdmin";
 
@@ -10,12 +10,27 @@ export default function DashboardPage() {
   const { isSignedIn, isLoaded } = useUser();
   const router = useRouter();
   const { isAdmin: userIsAdmin } = useAdmin();
+  const [pendingApprovals, setPendingApprovals] = useState(0);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       router.push("/sign-in");
     }
   }, [isLoaded, isSignedIn, router]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    fetch("/api/creator/order-approvals")
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data) => {
+        const pending = (data.items || []).filter(
+          (i: { creator_approval_status: string }) =>
+            i.creator_approval_status === "pending_approval"
+        ).length;
+        setPendingApprovals(pending);
+      })
+      .catch(() => {});
+  }, [isSignedIn]);
 
   if (!isLoaded) {
     return (
@@ -87,8 +102,13 @@ export default function DashboardPage() {
 
         <Link
           href="/dashboard/creator"
-          className="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
+          className="relative rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:bg-black hover:border-black transition-colors group"
         >
+          {pendingApprovals > 0 && (
+            <span className="absolute top-3 right-3 flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
+              {pendingApprovals}
+            </span>
+          )}
           <div className="text-lg font-semibold text-black group-hover:text-white">
             Creator Portal
           </div>

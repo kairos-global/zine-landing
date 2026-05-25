@@ -95,7 +95,8 @@ export async function GET() {
       quantity: item.quantity,
       creator_approval_status: item.creator_approval_status,
       creator_reviewed_at: item.creator_reviewed_at,
-      cost_dollars: (item.quantity * 10) / 100, // $0.10 per copy
+      // Match the minimum enforced by creator-checkout ($0.50 Stripe minimum)
+      cost_dollars: Math.max((item.quantity * 10) / 100, 0.50),
       is_paid: paidItemIds.has(item.id),
       order: item.order,
       issue: item.issue,

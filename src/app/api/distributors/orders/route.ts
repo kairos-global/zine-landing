@@ -109,7 +109,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create order (distributor_order_status enum: draft | placed | fulfilled | cancelled)
+    // Orders start as 'draft' (pre-payment). The webhook moves them to 'placed'
+    // once Stripe confirms. DB column default is 'placed' but is never used —
+    // we always set status explicitly on insert.
     const { data: order, error: orderError } = await supabase
       .from("distributor_orders")
       .insert([
