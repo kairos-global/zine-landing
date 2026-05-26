@@ -34,6 +34,7 @@ type Tool = "select" | "pencil" | "line" | "arrow" | "rect" | "diamond" | "ellip
 type FillStyle = "none" | "hachure" | "cross-hatch" | "solid";
 type StrokeDash = "solid" | "dashed" | "dotted";
 type EdgeStyle = "sharp" | "round";
+type ArrowCurve = "straight" | "curved" | "elbow";
 type HandleId = "TL" | "TR" | "BL" | "BR";
 
 interface Pt { x: number; y: number }
@@ -43,9 +44,9 @@ interface ElBase { id: number; color: string; sw: number; opacity: number }
 type El =
   | (ElBase & { type: "pencil"; pts: Pt[] })
   | (ElBase & { type: "line";   x1: number; y1: number; x2: number; y2: number; roughness: number; dash: StrokeDash })
-  | (ElBase & { type: "arrow";  x1: number; y1: number; x2: number; y2: number; roughness: number; dash: StrokeDash })
+  | (ElBase & { type: "arrow";  x1: number; y1: number; x2: number; y2: number; roughness: number; dash: StrokeDash; curve: ArrowCurve })
   | (ElBase & { type: "rect";   x: number; y: number; w: number; h: number; roughness: number; dash: StrokeDash; fillStyle: FillStyle; fillColor: string; edges: EdgeStyle })
-  | (ElBase & { type: "diamond";x: number; y: number; w: number; h: number; roughness: number; dash: StrokeDash; fillStyle: FillStyle; fillColor: string })
+  | (ElBase & { type: "diamond";x: number; y: number; w: number; h: number; roughness: number; dash: StrokeDash; fillStyle: FillStyle; fillColor: string; edges: EdgeStyle })
   | (ElBase & { type: "ellipse";cx: number; cy: number; rx: number; ry: number; roughness: number; dash: StrokeDash; fillStyle: FillStyle; fillColor: string })
   | (ElBase & { type: "text";   x: number; y: number; text: string; fs: number })
   | (ElBase & { type: "image";  x: number; y: number; w: number; h: number; src: string });
@@ -65,6 +66,7 @@ interface RoughCanvas {
   rectangle(x: number, y: number, w: number, h: number, opts?: RoughOpts): void;
   ellipse(cx: number, cy: number, w: number, h: number, opts?: RoughOpts): void;
   polygon(pts: number[][], opts?: RoughOpts): void;
+  path(d: string, opts?: RoughOpts): void;
 }
 interface RoughLib { canvas(el: HTMLCanvasElement): RoughCanvas }
 interface WindowWithRough extends Window { rough?: RoughLib }
@@ -191,8 +193,7 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
       strokePath(ctx,el.pts);
       break;
 
-    case "line":
-    case "arrow": {
+    case "line": {
       const da=dashArr(el.dash);
       if(rc){
         rc.line(el.x1,el.y1,el.x2,el.y2,{stroke:el.color,strokeWidth:el.sw,roughness:el.roughness,seed:el.id,...(da.length?{strokeLineDash:da}:{})});
@@ -201,7 +202,37 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
         if(da.length) ctx.setLineDash(da);
         ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
       }
-      if(el.type==="arrow") drawArrowhead(ctx,el.x1,el.y1,el.x2,el.y2,el.sw,el.color);
+      break;
+    }
+
+    case "arrow": {
+      const da=dashArr(el.dash);
+      const opts:RoughOpts={stroke:el.color,strokeWidth:el.sw,roughness:el.roughness,seed:el.id,...(da.length?{strokeLineDash:da}:{})};
+      if(el.curve==="curved"){
+        const mx=(el.x1+el.x2)/2,my=(el.y1+el.y2)/2;
+        const dx=el.x2-el.x1,dy=el.y2-el.y1,len=Math.hypot(dx,dy)||1;
+        const cpx=mx-(dy/len)*len*0.25,cpy=my+(dx/len)*len*0.25;
+        if(rc) rc.path(`M ${el.x1} ${el.y1} Q ${cpx} ${cpy} ${el.x2} ${el.y2}`,opts);
+        else {
+          ctx.strokeStyle=el.color;ctx.lineWidth=el.sw;if(da.length)ctx.setLineDash(da);
+          ctx.beginPath();ctx.moveTo(el.x1,el.y1);ctx.quadraticCurveTo(cpx,cpy,el.x2,el.y2);ctx.stroke();
+        }
+        drawArrowhead(ctx,cpx,cpy,el.x2,el.y2,el.sw,el.color);
+      } else if(el.curve==="elbow"){
+        if(rc) rc.path(`M ${el.x1} ${el.y1} L ${el.x2} ${el.y1} L ${el.x2} ${el.y2}`,opts);
+        else {
+          ctx.strokeStyle=el.color;ctx.lineWidth=el.sw;if(da.length)ctx.setLineDash(da);
+          ctx.beginPath();ctx.moveTo(el.x1,el.y1);ctx.lineTo(el.x2,el.y1);ctx.lineTo(el.x2,el.y2);ctx.stroke();
+        }
+        drawArrowhead(ctx,el.x2,el.y1,el.x2,el.y2,el.sw,el.color);
+      } else {
+        if(rc) rc.line(el.x1,el.y1,el.x2,el.y2,opts);
+        else {
+          ctx.strokeStyle=el.color;ctx.lineWidth=el.sw;if(da.length)ctx.setLineDash(da);
+          ctx.beginPath();ctx.moveTo(el.x1,el.y1);ctx.lineTo(el.x2,el.y2);ctx.stroke();
+        }
+        drawArrowhead(ctx,el.x1,el.y1,el.x2,el.y2,el.sw,el.color);
+      }
       break;
     }
 
@@ -224,9 +255,10 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
         else ctx.rect(el.x,el.y,el.w,el.h);
         ctx.stroke();
       } else if(rc){
+        const pts:number[][]=[[el.x,el.y],[el.x+el.w,el.y],[el.x+el.w,el.y+el.h],[el.x,el.y+el.h]];
         const opts:RoughOpts={stroke:el.color,strokeWidth:el.sw,roughness:el.roughness,seed:el.id,...(da.length?{strokeLineDash:da}:{})};
         if(el.fillStyle!=="none"){ opts.fill=el.fillColor; opts.fillStyle=el.fillStyle; }
-        rc.rectangle(el.x,el.y,el.w,el.h,opts);
+        rc.polygon(pts,opts);
       } else {
         ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
         if(da.length) ctx.setLineDash(da);
@@ -239,16 +271,38 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
     case "diamond": {
       const cx=el.x+el.w/2, cy=el.y+el.h/2;
       const da=dashArr(el.dash);
-      const pts:number[][]=[[cx,el.y],[el.x+el.w,cy],[cx,el.y+el.h],[el.x,cy]];
-      if(rc){
+      const corners:number[][]=[[cx,el.y],[el.x+el.w,cy],[cx,el.y+el.h],[el.x,cy]];
+      if(el.edges==="round"){
+        const r=Math.min(el.w,el.h)*0.15;
+        const n=corners.length;
+        ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
+        if(da.length) ctx.setLineDash(da);
+        ctx.beginPath();
+        for(let i=0;i<n;i++){
+          const [px,py]=corners[i];
+          const [nx,ny]=corners[(i+1)%n];
+          const [ppx,ppy]=corners[(i-1+n)%n];
+          const dx1=px-ppx,dy1=py-ppy,len1=Math.hypot(dx1,dy1);
+          const ux1=dx1/len1,uy1=dy1/len1;
+          const dx2=nx-px,dy2=ny-py,len2=Math.hypot(dx2,dy2);
+          const ux2=dx2/len2,uy2=dy2/len2;
+          const cr=Math.min(r,len1/2,len2/2);
+          if(i===0) ctx.moveTo(px-ux1*cr,py-uy1*cr);
+          else ctx.lineTo(px-ux1*cr,py-uy1*cr);
+          ctx.quadraticCurveTo(px,py,px+ux2*cr,py+uy2*cr);
+        }
+        ctx.closePath();
+        if(el.fillStyle!=="none"){ctx.fillStyle=el.fillColor;ctx.fill();}
+        ctx.stroke();
+      } else if(rc){
         const opts:RoughOpts={stroke:el.color,strokeWidth:el.sw,roughness:el.roughness,seed:el.id,...(da.length?{strokeLineDash:da}:{})};
-        if(el.fillStyle!=="none"){ opts.fill=el.fillColor; opts.fillStyle=el.fillStyle; }
-        rc.polygon(pts,opts);
+        if(el.fillStyle!=="none"){opts.fill=el.fillColor;opts.fillStyle=el.fillStyle;}
+        rc.polygon(corners,opts);
       } else {
         ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
         if(da.length) ctx.setLineDash(da);
         ctx.beginPath(); ctx.moveTo(cx,el.y); ctx.lineTo(el.x+el.w,cy); ctx.lineTo(cx,el.y+el.h); ctx.lineTo(el.x,cy); ctx.closePath();
-        if(el.fillStyle!=="none"){ ctx.fillStyle=el.fillColor; ctx.fill(); }
+        if(el.fillStyle!=="none"){ctx.fillStyle=el.fillColor;ctx.fill();}
         ctx.stroke();
       }
       break;
@@ -381,12 +435,15 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   const [sloppiness,setSloppiness]= useState(1.2);
   const [dash,      setDash]      = useState<StrokeDash>("solid");
   const [opacity,   setOpacity]   = useState(100);
-  const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("sharp");
+  const [edgeStyle,  setEdgeStyle]  = useState<EdgeStyle>("sharp");
+  const [arrowCurve, setArrowCurve] = useState<ArrowCurve>("straight");
+  const [fontSize,   setFontSize]   = useState<number>(72);
 
   // Canvas state
-  const [els,     setEls]     = useState<El[]>([]);
-  const [history, setHistory] = useState<El[][]>([]);
-  const [selId,   setSelId]   = useState<number|null>(null);
+  const [els,       setEls]       = useState<El[]>([]);
+  const [history,   setHistory]   = useState<El[][]>([]);
+  const [redoStack, setRedoStack] = useState<El[][]>([]);
+  const [selId,     setSelId]     = useState<number|null>(null);
 
   // Stable refs (for useCallback / event handlers with [] deps)
   const elsRef    = useRef<El[]>([]);
@@ -396,6 +453,10 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   const opacityRef= useRef(opacity);
   const roughLib  = useRef<RoughLib|null>(null);
   const imgs      = useRef<Map<string,HTMLImageElement>>(new Map());
+  const sidebarRef    = useRef<HTMLDivElement>(null);
+  const prevCursorRef = useRef<string>("crosshair");
+  const fontSizeRef   = useRef<number>(72);
+  const textareaRef   = useRef<HTMLTextAreaElement>(null);
 
   // Drawing refs
   const isDrawing  = useRef(false);
@@ -409,6 +470,16 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   useEffect(()=>{ colorRef.current=color; },[color]);
   useEffect(()=>{ swRef.current=sw; },[sw]);
   useEffect(()=>{ opacityRef.current=opacity; },[opacity]);
+  useEffect(()=>{ fontSizeRef.current=fontSize; },[fontSize]);
+
+  // Focus textarea when it appears
+  useEffect(()=>{ if(txt.visible) setTimeout(()=>textareaRef.current?.focus(),0); },[txt.visible]);
+
+  // Reset canvas cursor when tool changes
+  useEffect(()=>{
+    const c=tool==="select"?"default":cursors[tool];
+    prevCursorRef.current=c; setCanvasCursor(c);
+  },[tool]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Text overlay
   const [txt,setTxt]=useState({visible:false,cx:0,cy:0,left:0,top:0,scale:1,val:""});
@@ -421,6 +492,10 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   // Colour picker popouts
   const [strokePicker,setStrokePicker]=useState<{x:number;y:number}|null>(null);
   const [bgPicker,    setBgPicker]    =useState<{x:number;y:number}|null>(null);
+
+  // Canvas cursor
+  const [canvasCursor, setCanvasCursor] = useState<string>("crosshair");
+  const setCursor = (c: string) => { if(prevCursorRef.current!==c){ prevCursorRef.current=c; setCanvasCursor(c); } };
 
   // ── Load rough.js ──────────────────────────────────────────────────────────
   useEffect(()=>{
@@ -459,7 +534,8 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
       if(ev.target instanceof HTMLInputElement||ev.target instanceof HTMLTextAreaElement) return;
       const k=ev.key.toLowerCase();
       if(tmap[k]){ setTool(tmap[k] as Tool); return; }
-      if((ev.metaKey||ev.ctrlKey)&&k==="z"){ ev.preventDefault(); undo(); return; }
+      if((ev.metaKey||ev.ctrlKey)&&ev.shiftKey&&k==="z"){ ev.preventDefault(); redo(); return; }
+      if((ev.metaKey||ev.ctrlKey)&&!ev.shiftKey&&k==="z"){ ev.preventDefault(); undo(); return; }
       if((ev.key==="Backspace"||ev.key==="Delete")&&selIdRef.current!==null){
         const id=selIdRef.current; selIdRef.current=null; setSelId(null);
         setEls(prev=>{ setHistory(h=>[...h,prev]); return prev.filter(e=>e.id!==id); });
@@ -527,8 +603,10 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
         if("fillStyle" in hit) setFillStyle(hit.fillStyle);
         if("fillColor" in hit) setFillColor(hit.fillColor);
         if("edges"     in hit) setEdgeStyle(hit.edges);
+        if(hit.type==="arrow")  setArrowCurve(hit.curve);
+        setCursor("move");
         selAction.current={mode:"moving",startPt:pt,origEl:hit};
-      } else { selIdRef.current=null; setSelId(null); selAction.current=null; }
+      } else { selIdRef.current=null; setSelId(null); selAction.current=null; setCursor("default"); }
       return;
     }
 
@@ -546,15 +624,31 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
 
   // ── Mouse move ──────────────────────────────────────────────────────────────
   function onMove(e:React.MouseEvent<HTMLCanvasElement>){
+    const canvas=canvasRef.current!; const pt=cvtPos(canvas,e);
+
     if(tool==="select"&&selAction.current){
-      const canvas=canvasRef.current!; const pt=cvtPos(canvas,e);
       const{mode,startPt,origEl,handle}=selAction.current;
       if(mode==="moving") selLive.current=moveEl(origEl,pt.x-startPt.x,pt.y-startPt.y);
       else if(mode==="resizing"&&handle) selLive.current=resizeEl(origEl,handle,pt);
       redraw(); return;
     }
+
+    // Handle hover cursor for select tool
+    if(tool==="select"&&!isDrawing.current){
+      const HANDLE_CURSORS:Record<HandleId,string>={TL:"nw-resize",TR:"ne-resize",BL:"sw-resize",BR:"se-resize"};
+      if(selIdRef.current!==null){
+        const selEl=elsRef.current.find(el=>el.id===selIdRef.current);
+        if(selEl){
+          const bb=getBBox(selEl);
+          const padBB={x:bb.x-SEL_PAD,y:bb.y-SEL_PAD,w:bb.w+SEL_PAD*2,h:bb.h+SEL_PAD*2};
+          const handle=hitHandle(pt,padBB);
+          setCursor(handle?HANDLE_CURSORS[handle]:hitEl(pt,selEl)?"move":"default");
+        }
+      } else { setCursor("default"); }
+    }
+
     if(!isDrawing.current) return;
-    const canvas=canvasRef.current!; const pt=cvtPos(canvas,e); const o=origin.current;
+    const o=origin.current;
 
     if(tool==="pencil"||tool==="eraser"){
       const el=live.current as Extract<El,{type:"pencil"}>|null;
@@ -562,11 +656,11 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
     } else if(tool==="line"){
       live.current={id:newId(),type:"line",x1:o.x,y1:o.y,x2:pt.x,y2:pt.y,color,sw,opacity,roughness:sloppiness,dash};
     } else if(tool==="arrow"){
-      live.current={id:newId(),type:"arrow",x1:o.x,y1:o.y,x2:pt.x,y2:pt.y,color,sw,opacity,roughness:sloppiness,dash};
+      live.current={id:newId(),type:"arrow",x1:o.x,y1:o.y,x2:pt.x,y2:pt.y,color,sw,opacity,roughness:sloppiness,dash,curve:arrowCurve};
     } else if(tool==="rect"){
       live.current={id:newId(),type:"rect",x:Math.min(o.x,pt.x),y:Math.min(o.y,pt.y),w:Math.abs(pt.x-o.x),h:Math.abs(pt.y-o.y),color,sw,opacity,roughness:sloppiness,dash,fillStyle,fillColor,edges:edgeStyle};
     } else if(tool==="diamond"){
-      live.current={id:newId(),type:"diamond",x:Math.min(o.x,pt.x),y:Math.min(o.y,pt.y),w:Math.abs(pt.x-o.x),h:Math.abs(pt.y-o.y),color,sw,opacity,roughness:sloppiness,dash,fillStyle,fillColor};
+      live.current={id:newId(),type:"diamond",x:Math.min(o.x,pt.x),y:Math.min(o.y,pt.y),w:Math.abs(pt.x-o.x),h:Math.abs(pt.y-o.y),color,sw,opacity,roughness:sloppiness,dash,fillStyle,fillColor,edges:edgeStyle};
     } else if(tool==="ellipse"){
       live.current={id:newId(),type:"ellipse",cx:(o.x+pt.x)/2,cy:(o.y+pt.y)/2,rx:Math.abs(pt.x-o.x)/2,ry:Math.abs(pt.y-o.y)/2,color,sw,opacity,roughness:sloppiness,dash,fillStyle,fillColor};
     }
@@ -578,6 +672,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
     if(tool==="select"&&selAction.current&&selLive.current){
       const committed=selLive.current; selLive.current=null; selAction.current=null;
       setEls(prev=>{setHistory(h=>[...h,prev]);return prev.map(e=>e.id===committed.id?committed:e);});
+      setCursor("move");
       return;
     }
     selAction.current=null;
@@ -658,7 +753,8 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   const ROUGH_TYPES=["line","arrow","rect","diamond","ellipse"] as const;
   const showFill  = (FILL_TYPES as readonly string[]).includes(tool)||(selType!==undefined&&(FILL_TYPES as readonly string[]).includes(selType));
   const showRough = (ROUGH_TYPES as readonly string[]).includes(tool)||(selType!==undefined&&(ROUGH_TYPES as readonly string[]).includes(selType));
-  const showEdges = tool==="rect"||selType==="rect";
+  const showArrowType = tool==="arrow"||selType==="arrow";
+  const showEdges = tool==="rect"||tool==="diamond"||selType==="rect"||selType==="diamond";
   const showLayers= selId!==null;
 
   const cursors:Record<Tool,string>={select:"default",pencil:"crosshair",eraser:"crosshair",line:"crosshair",arrow:"crosshair",rect:"crosshair",diamond:"crosshair",ellipse:"crosshair",text:"text"};
@@ -708,14 +804,14 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
       <div className="flex items-start gap-3">
 
         {/* ─ Sidebar ─ */}
-        <div className="w-44 flex-shrink-0 space-y-3.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+        <div ref={sidebarRef} className="w-44 flex-shrink-0 space-y-3.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
 
           {/* Stroke */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Stroke</p>
               <button type="button"
-                onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setStrokePicker({x:r.right+6,y:r.top});setBgPicker(null);}}
+                onClick={e=>{const s=sidebarRef.current!.getBoundingClientRect();setStrokePicker({x:s.right+8,y:e.currentTarget.getBoundingClientRect().top});setBgPicker(null);}}
                 className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-mono text-gray-500 hover:bg-gray-100">
                 <span className="h-3 w-3 rounded-sm border border-gray-300" style={{backgroundColor:color}}/>
                 {color}
@@ -738,7 +834,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
               <div className="mb-1.5 flex items-center justify-between">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Background</p>
                 <button type="button"
-                  onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setBgPicker({x:r.right+6,y:r.top});setStrokePicker(null);}}
+                  onClick={e=>{const s=sidebarRef.current!.getBoundingClientRect();setBgPicker({x:s.right+8,y:e.currentTarget.getBoundingClientRect().top});setStrokePicker(null);}}
                   className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-mono text-gray-500 hover:bg-gray-100">
                   <span className="h-3 w-3 rounded-sm border border-gray-300" style={{backgroundColor:fillColor}}/>
                   {fillColor.slice(0,7)}
@@ -831,6 +927,42 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
             </div>
           )}
 
+          {/* Arrow type */}
+          {showArrowType&&(
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Arrow type</p>
+              <div className="flex gap-1">
+                {([
+                  {v:"straight",icon:(
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                      <path d="M3 13L13 3" strokeLinecap="round"/>
+                      <path d="M13 3h-5M13 3v5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )},
+                  {v:"curved",icon:(
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                      <path d="M3 13 Q3 3 13 3" strokeLinecap="round"/>
+                      <path d="M13 3h-5M13 3v5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )},
+                  {v:"elbow",icon:(
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                      <path d="M3 13L13 13L13 3" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M13 3h-5M13 3v5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )},
+                ] as {v:ArrowCurve;icon:React.ReactNode}[]).map(({v,icon})=>(
+                  <button key={v} type="button" title={v}
+                    onClick={()=>{setArrowCurve(v);patchSel({curve:v});}}
+                    className={clsx("flex h-7 flex-1 items-center justify-center rounded border transition",
+                      arrowCurve===v?"border-[#65CBF1] bg-[#e8f8fd]":"border-gray-200 hover:border-gray-300")}>
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Edges (rect only) */}
           {showEdges&&(
             <div>
@@ -897,7 +1029,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
           <div ref={containerRef} className="relative rounded-sm shadow-[0_4px_28px_rgba(0,0,0,0.12)]"
             onDrop={onDrop} onDragOver={ev=>ev.preventDefault()}>
             <canvas ref={canvasRef} width={CW} height={CH}
-              style={{cursor:tool==="select"&&selId!==null?"move":cursors[tool],width:"100%",height:"auto",display:"block"}}
+              style={{cursor:canvasCursor,width:"100%",height:"auto",display:"block"}}
               className="rounded-sm"
               onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}/>
             {txt.visible&&(
