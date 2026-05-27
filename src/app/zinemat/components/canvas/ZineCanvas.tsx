@@ -182,9 +182,9 @@ function drawArrowhead(ctx: CanvasRenderingContext2D, x1:number,y1:number,x2:num
 }
 
 // ─── Hachure fill for rounded shapes (canvas clipping) ───────────────────────
-function drawHachure(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, cross: boolean) {
-  const step = 10;
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+function drawHachure(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, cross: boolean, sw: number) {
+  const step = Math.max(6, sw * 4);
+  ctx.strokeStyle = color; ctx.lineWidth = Math.max(0.5, sw / 2); ctx.setLineDash([]);
   for (let d = -h; d < w + 1; d += step) {
     ctx.beginPath(); ctx.moveTo(x + d, y); ctx.lineTo(x + d + h, y + h); ctx.stroke();
   }
@@ -257,7 +257,7 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
         const roundPath=()=>{ ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(el.x,el.y,el.w,el.h,r); else ctx.rect(el.x,el.y,el.w,el.h); };
         if(el.fillStyle!=="none"){
           if(el.fillStyle==="solid"){ ctx.fillStyle=el.fillColor; roundPath(); ctx.fill(); }
-          else { ctx.save(); roundPath(); ctx.clip(); drawHachure(ctx,el.x,el.y,el.w,el.h,el.fillColor,el.fillStyle==="cross-hatch"); ctx.restore(); }
+          else { ctx.save(); roundPath(); ctx.clip(); drawHachure(ctx,el.x,el.y,el.w,el.h,el.fillColor,el.fillStyle==="cross-hatch",el.sw); ctx.restore(); }
         }
         ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
         if(da.length) ctx.setLineDash(da);
@@ -302,7 +302,7 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
         };
         if(el.fillStyle!=="none"){
           if(el.fillStyle==="solid"){ ctx.fillStyle=el.fillColor; buildPath(); ctx.fill(); }
-          else { ctx.save(); buildPath(); ctx.clip(); drawHachure(ctx,el.x,el.y,el.w,el.h,el.fillColor,el.fillStyle==="cross-hatch"); ctx.restore(); }
+          else { ctx.save(); buildPath(); ctx.clip(); drawHachure(ctx,el.x,el.y,el.w,el.h,el.fillColor,el.fillStyle==="cross-hatch",el.sw); ctx.restore(); }
         }
         ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
         if(da.length) ctx.setLineDash(da);
