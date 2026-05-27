@@ -472,9 +472,6 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   useEffect(()=>{ opacityRef.current=opacity; },[opacity]);
   useEffect(()=>{ fontSizeRef.current=fontSize; },[fontSize]);
 
-  // Focus textarea when it appears
-  useEffect(()=>{ if(txt.visible) setTimeout(()=>textareaRef.current?.focus(),0); },[txt.visible]);
-
   // Reset canvas cursor when tool changes
   useEffect(()=>{
     const c=tool==="select"?"default":cursors[tool];
@@ -483,6 +480,9 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
 
   // Text overlay
   const [txt,setTxt]=useState({visible:false,cx:0,cy:0,left:0,top:0,scale:1,val:""});
+
+  // Focus textarea when it appears (must be after txt declaration)
+  useEffect(()=>{ if(txt.visible) setTimeout(()=>textareaRef.current?.focus(),0); },[txt.visible]);
 
   // Save modal
   const [modal,    setModal]    = useState({open:false,title:""});
@@ -538,7 +538,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
       if((ev.metaKey||ev.ctrlKey)&&!ev.shiftKey&&k==="z"){ ev.preventDefault(); undo(); return; }
       if((ev.key==="Backspace"||ev.key==="Delete")&&selIdRef.current!==null){
         const id=selIdRef.current; selIdRef.current=null; setSelId(null);
-        setEls(prev=>{ setHistory(h=>[...h,prev]); return prev.filter(e=>e.id!==id); });
+        setEls(prev=>{ setHistory(h=>[...h,prev]); setRedoStack([]); return prev.filter(e=>e.id!==id); });
       }
     }
     window.addEventListener("keydown",onKey);
@@ -573,8 +573,8 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
       committing.current=false;
       if(!s.visible) return s;
       if(!s.val.trim()) return{...s,visible:false,val:""};
-      const el:El={id:newId(),type:"text",x:s.cx,y:s.cy,text:s.val,color:colorRef.current,fs:72,sw:swRef.current,opacity:opacityRef.current};
-      setEls(prev=>{setHistory(h=>[...h,prev]);return[...prev,el];});
+      const el:El={id:newId(),type:"text",x:s.cx,y:s.cy,text:s.val,color:colorRef.current,fs:fontSizeRef.current,sw:swRef.current,opacity:opacityRef.current};
+      setEls(prev=>{setHistory(h=>[...h,prev]);setRedoStack([]);return[...prev,el];});
       return{...s,visible:false,val:""};
     });
   },[]);
@@ -603,7 +603,8 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
         if("fillStyle" in hit) setFillStyle(hit.fillStyle);
         if("fillColor" in hit) setFillColor(hit.fillColor);
         if("edges"     in hit) setEdgeStyle(hit.edges);
-        if(hit.type==="arrow")  setArrowCurve(hit.curve);
+        if(hit.type==="arrow") setArrowCurve(hit.curve);
+        if(hit.type==="text")  setFontSize(hit.fs);
         setCursor("move");
         selAction.current={mode:"moving",startPt:pt,origEl:hit};
       } else { selIdRef.current=null; setSelId(null); selAction.current=null; setCursor("default"); }
@@ -671,14 +672,14 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   function onUp(){
     if(tool==="select"&&selAction.current&&selLive.current){
       const committed=selLive.current; selLive.current=null; selAction.current=null;
-      setEls(prev=>{setHistory(h=>[...h,prev]);return prev.map(e=>e.id===committed.id?committed:e);});
+      setEls(prev=>{setHistory(h=>[...h,prev]);setRedoStack([]);return prev.map(e=>e.id===committed.id?committed:e);});
       setCursor("move");
       return;
     }
     selAction.current=null;
     if(!isDrawing.current) return;
     isDrawing.current=false;
-    if(live.current){ const c=live.current; live.current=null; setEls(prev=>{setHistory(h=>[...h,prev]);return[...prev,c];}); }
+    if(live.current){ const c=live.current; live.current=null; setEls(prev=>{setHistory(h=>[...h,prev]);setRedoStack([]);return[...prev,c];}); }
   }
 
   // ── Image helpers ───────────────────────────────────────────────────────────
@@ -706,9 +707,10 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
     const reader=new FileReader(); reader.onload=ev2=>placeImage(ev2.target!.result as string); reader.readAsDataURL(file); ev.target.value="";
   }
 
-  // ── Undo / Clear ───────────────────────────────────────────────────────────
-  function undo(){ setHistory(prev=>{ if(!prev.length) return prev; const next=[...prev]; setEls(next.pop()!); return next; }); }
-  function clearAll(){ setEls(prev=>{setHistory(h=>[...h,prev]);return[];}); selIdRef.current=null; setSelId(null); }
+  // ── Undo / Redo / Clear ────────────────────────────────────────────────────
+  function undo(){ setHistory(prev=>{ if(!prev.length) return prev; const next=[...prev]; const snap=next.pop()!; setRedoStack(r=>[...r,elsRef.current]); setEls(snap); return next; }); }
+  function redo(){ setRedoStack(prev=>{ if(!prev.length) return prev; const next=[...prev]; const snap=next.pop()!; setHistory(h=>[...h,elsRef.current]); setEls(snap); return next; }); }
+  function clearAll(){ setEls(prev=>{setHistory(h=>[...h,prev]);setRedoStack([]);return[];}); selIdRef.current=null; setSelId(null); }
 
   // ── Save & Export ──────────────────────────────────────────────────────────
   async function saveAndExport(title:string){
@@ -755,6 +757,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
   const showRough = (ROUGH_TYPES as readonly string[]).includes(tool)||(selType!==undefined&&(ROUGH_TYPES as readonly string[]).includes(selType));
   const showArrowType = tool==="arrow"||selType==="arrow";
   const showEdges = tool==="rect"||tool==="diamond"||selType==="rect"||selType==="diamond";
+  const showText  = tool==="text"||selType==="text";
   const showLayers= selId!==null;
 
   const cursors:Record<Tool,string>={select:"default",pencil:"crosshair",eraser:"crosshair",line:"crosshair",arrow:"crosshair",rect:"crosshair",diamond:"crosshair",ellipse:"crosshair",text:"text"};
@@ -788,6 +791,13 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" width="16" height="16">
             <path d="M4.5 8H12a5 5 0 010 10H6.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M7.5 5L4.5 8l3 3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <button type="button" title="Redo (⌘⇧Z)" onClick={redo} disabled={!redoStack.length}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-100 disabled:opacity-30">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" width="16" height="16">
+            <path d="M15.5 8H8a5 5 0 000 10h5.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12.5 5l3 3-3 3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
         <button type="button" onClick={clearAll}
@@ -983,6 +993,23 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
             </div>
           )}
 
+          {/* Font size (text tool only) */}
+          {showText&&(
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Font size</p>
+              <div className="flex gap-1">
+                {[{v:36,label:"S"},{v:72,label:"M"},{v:108,label:"L"},{v:144,label:"XL"}].map(s=>(
+                  <button key={s.v} type="button" title={`${s.v}px`}
+                    onClick={()=>{setFontSize(s.v);patchSel({fs:s.v});}}
+                    className={clsx("flex h-7 flex-1 items-center justify-center rounded border font-medium text-xs transition",
+                      fontSize===s.v?"border-[#65CBF1] bg-[#e8f8fd]":"border-gray-200 hover:border-gray-300")}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Opacity */}
           <div>
             <p className="mb-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-gray-400">
@@ -997,17 +1024,17 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
           {showLayers&&(
             <div>
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Layers</p>
-              <div className="grid grid-cols-4 gap-1">
+              <div className="grid grid-cols-2 gap-1">
                 {([
-                  {dir:"back",    title:"Send to back",    icon:"↙↙"},
-                  {dir:"backward",title:"Send backward",   icon:"↙"},
-                  {dir:"forward", title:"Bring forward",   icon:"↗"},
-                  {dir:"front",   title:"Bring to front",  icon:"↗↗"},
-                ] as {dir:"front"|"back"|"forward"|"backward";title:string;icon:string}[]).map(({dir,title,icon})=>(
-                  <button key={dir} type="button" title={title}
+                  {dir:"back",    label:"To back"},
+                  {dir:"backward",label:"Backward"},
+                  {dir:"forward", label:"Forward"},
+                  {dir:"front",   label:"To front"},
+                ] as {dir:"front"|"back"|"forward"|"backward";label:string}[]).map(({dir,label})=>(
+                  <button key={dir} type="button" title={label}
                     onClick={()=>layerOrder(dir)}
-                    className="flex h-7 items-center justify-center rounded border border-gray-200 text-xs text-gray-600 transition hover:border-gray-300 hover:bg-gray-50">
-                    {icon}
+                    className="flex h-7 items-center justify-center rounded border border-gray-200 px-1 text-[10px] font-medium text-gray-600 transition hover:border-gray-300 hover:bg-gray-50">
+                    {label}
                   </button>
                 ))}
               </div>
@@ -1017,7 +1044,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
           {/* Delete selected */}
           {showLayers&&(
             <button type="button"
-              onClick={()=>{ const id=selIdRef.current; if(!id) return; selIdRef.current=null; setSelId(null); setEls(prev=>{setHistory(h=>[...h,prev]);return prev.filter(e=>e.id!==id);}); }}
+              onClick={()=>{ const id=selIdRef.current; if(!id) return; selIdRef.current=null; setSelId(null); setEls(prev=>{setHistory(h=>[...h,prev]);setRedoStack([]);return prev.filter(e=>e.id!==id);}); }}
               className="w-full rounded-lg border border-red-200 bg-red-50 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100">
               Delete selected
             </button>
@@ -1037,11 +1064,11 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
                 onChange={ev=>{ev.target.style.height="auto";ev.target.style.height=ev.target.scrollHeight+"px";setTxt(s=>({...s,val:ev.target.value}));}}
                 onKeyDown={ev=>{if(ev.key==="Escape") setTxt(s=>({...s,visible:false,val:""})); if(ev.key==="Enter"&&(ev.metaKey||ev.ctrlKey)) commitTxt();}}
                 onBlur={commitTxt}
-                style={{position:"absolute",left:txt.left,top:txt.top,fontSize:`${Math.round(72*txt.scale)}px`,fontFamily:"sans-serif",lineHeight:1.2,color,background:"rgba(255,255,255,0.88)",border:"1.5px dashed #aaa",outline:"none",padding:"2px 6px",minWidth:120,resize:"none",overflow:"hidden",zIndex:10}}/>
+                style={{position:"absolute",left:txt.left,top:txt.top,fontSize:`${Math.round(fontSize*txt.scale)}px`,fontFamily:"sans-serif",lineHeight:1.2,color,background:"rgba(255,255,255,0.88)",border:"1.5px dashed #aaa",outline:"none",padding:"2px 6px",minWidth:120,resize:"none",overflow:"hidden",zIndex:10}}/>
             )}
           </div>
           <p className="mt-2 text-center text-xs text-gray-400">
-            V·P·L·A·R·D·E·T·X — shortcuts &nbsp;·&nbsp; ⌘Z undo &nbsp;·&nbsp; Del removes selected &nbsp;·&nbsp; drag images onto canvas
+            V·P·L·A·R·D·E·T·X — shortcuts &nbsp;·&nbsp; ⌘Z undo &nbsp;·&nbsp; ⌘⇧Z redo &nbsp;·&nbsp; Del removes selected &nbsp;·&nbsp; drag images onto canvas
           </p>
         </div>
       </div>
