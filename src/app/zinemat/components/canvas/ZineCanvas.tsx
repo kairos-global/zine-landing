@@ -181,6 +181,20 @@ function drawArrowhead(ctx: CanvasRenderingContext2D, x1:number,y1:number,x2:num
   ctx.restore();
 }
 
+// ─── Hachure fill for rounded shapes (canvas clipping) ───────────────────────
+function drawHachure(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, cross: boolean) {
+  const step = 10;
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+  for (let d = -h; d < w + 1; d += step) {
+    ctx.beginPath(); ctx.moveTo(x + d, y); ctx.lineTo(x + d + h, y + h); ctx.stroke();
+  }
+  if (cross) {
+    for (let d = 0; d < w + h + 1; d += step) {
+      ctx.beginPath(); ctx.moveTo(x + d, y); ctx.lineTo(x + d - h, y + h); ctx.stroke();
+    }
+  }
+}
+
 // ─── Draw element ─────────────────────────────────────────────────────────────
 function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, imgs: Map<string,HTMLImageElement>) {
   ctx.save();
@@ -239,21 +253,15 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
     case "rect": {
       const da=dashArr(el.dash);
       if(el.edges==="round"){
-        // Skip rough.js for rounded — use clean canvas roundRect
         const r=Math.min(el.w,el.h)*0.15;
+        const roundPath=()=>{ ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(el.x,el.y,el.w,el.h,r); else ctx.rect(el.x,el.y,el.w,el.h); };
+        if(el.fillStyle!=="none"){
+          if(el.fillStyle==="solid"){ ctx.fillStyle=el.fillColor; roundPath(); ctx.fill(); }
+          else { ctx.save(); roundPath(); ctx.clip(); drawHachure(ctx,el.x,el.y,el.w,el.h,el.fillColor,el.fillStyle==="cross-hatch"); ctx.restore(); }
+        }
         ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
         if(da.length) ctx.setLineDash(da);
-        if(el.fillStyle!=="none"){
-          ctx.fillStyle=el.fillColor;
-          ctx.beginPath();
-          if(ctx.roundRect) ctx.roundRect(el.x,el.y,el.w,el.h,r);
-          else ctx.rect(el.x,el.y,el.w,el.h);
-          ctx.fill();
-        }
-        ctx.beginPath();
-        if(ctx.roundRect) ctx.roundRect(el.x,el.y,el.w,el.h,r);
-        else ctx.rect(el.x,el.y,el.w,el.h);
-        ctx.stroke();
+        roundPath(); ctx.stroke();
       } else if(rc){
         const pts:number[][]=[[el.x,el.y],[el.x+el.w,el.y],[el.x+el.w,el.y+el.h],[el.x,el.y+el.h]];
         const opts:RoughOpts={stroke:el.color,strokeWidth:el.sw,roughness:el.roughness,seed:el.id,...(da.length?{strokeLineDash:da}:{})};
@@ -275,25 +283,30 @@ function drawEl(ctx: CanvasRenderingContext2D, el: El, rc: RoughCanvas|null, img
       if(el.edges==="round"){
         const r=Math.min(el.w,el.h)*0.15;
         const n=corners.length;
+        const buildPath=()=>{
+          ctx.beginPath();
+          for(let i=0;i<n;i++){
+            const [px,py]=corners[i];
+            const [nx,ny]=corners[(i+1)%n];
+            const [ppx,ppy]=corners[(i-1+n)%n];
+            const dx1=px-ppx,dy1=py-ppy,len1=Math.hypot(dx1,dy1);
+            const ux1=dx1/len1,uy1=dy1/len1;
+            const dx2=nx-px,dy2=ny-py,len2=Math.hypot(dx2,dy2);
+            const ux2=dx2/len2,uy2=dy2/len2;
+            const cr=Math.min(r,len1/2,len2/2);
+            if(i===0) ctx.moveTo(px-ux1*cr,py-uy1*cr);
+            else ctx.lineTo(px-ux1*cr,py-uy1*cr);
+            ctx.quadraticCurveTo(px,py,px+ux2*cr,py+uy2*cr);
+          }
+          ctx.closePath();
+        };
+        if(el.fillStyle!=="none"){
+          if(el.fillStyle==="solid"){ ctx.fillStyle=el.fillColor; buildPath(); ctx.fill(); }
+          else { ctx.save(); buildPath(); ctx.clip(); drawHachure(ctx,el.x,el.y,el.w,el.h,el.fillColor,el.fillStyle==="cross-hatch"); ctx.restore(); }
+        }
         ctx.strokeStyle=el.color; ctx.lineWidth=el.sw;
         if(da.length) ctx.setLineDash(da);
-        ctx.beginPath();
-        for(let i=0;i<n;i++){
-          const [px,py]=corners[i];
-          const [nx,ny]=corners[(i+1)%n];
-          const [ppx,ppy]=corners[(i-1+n)%n];
-          const dx1=px-ppx,dy1=py-ppy,len1=Math.hypot(dx1,dy1);
-          const ux1=dx1/len1,uy1=dy1/len1;
-          const dx2=nx-px,dy2=ny-py,len2=Math.hypot(dx2,dy2);
-          const ux2=dx2/len2,uy2=dy2/len2;
-          const cr=Math.min(r,len1/2,len2/2);
-          if(i===0) ctx.moveTo(px-ux1*cr,py-uy1*cr);
-          else ctx.lineTo(px-ux1*cr,py-uy1*cr);
-          ctx.quadraticCurveTo(px,py,px+ux2*cr,py+uy2*cr);
-        }
-        ctx.closePath();
-        if(el.fillStyle!=="none"){ctx.fillStyle=el.fillColor;ctx.fill();}
-        ctx.stroke();
+        buildPath(); ctx.stroke();
       } else if(rc){
         const opts:RoughOpts={stroke:el.color,strokeWidth:el.sw,roughness:el.roughness,seed:el.id,...(da.length?{strokeLineDash:da}:{})};
         if(el.fillStyle!=="none"){opts.fill=el.fillColor;opts.fillStyle=el.fillStyle;}
@@ -821,7 +834,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
             <div className="mb-1.5 flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Stroke</p>
               <button type="button"
-                onClick={e=>{const s=sidebarRef.current!.getBoundingClientRect();setStrokePicker({x:s.right+8,y:e.currentTarget.getBoundingClientRect().top});setBgPicker(null);}}
+                onClick={e=>{const s=sidebarRef.current!.getBoundingClientRect();setStrokePicker({x:s.right+4,y:e.clientY-10});setBgPicker(null);}}
                 className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-mono text-gray-500 hover:bg-gray-100">
                 <span className="h-3 w-3 rounded-sm border border-gray-300" style={{backgroundColor:color}}/>
                 {color}
@@ -844,7 +857,7 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
               <div className="mb-1.5 flex items-center justify-between">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Background</p>
                 <button type="button"
-                  onClick={e=>{const s=sidebarRef.current!.getBoundingClientRect();setBgPicker({x:s.right+8,y:e.currentTarget.getBoundingClientRect().top});setStrokePicker(null);}}
+                  onClick={e=>{const s=sidebarRef.current!.getBoundingClientRect();setBgPicker({x:s.right+4,y:e.clientY-10});setStrokePicker(null);}}
                   className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-mono text-gray-500 hover:bg-gray-100">
                   <span className="h-3 w-3 rounded-sm border border-gray-300" style={{backgroundColor:fillColor}}/>
                   {fillColor.slice(0,7)}
@@ -1060,11 +1073,14 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
               className="rounded-sm"
               onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}/>
             {txt.visible&&(
-              <textarea autoFocus rows={1} value={txt.val}
+              <textarea ref={textareaRef} autoFocus rows={1} value={txt.val}
                 onChange={ev=>{ev.target.style.height="auto";ev.target.style.height=ev.target.scrollHeight+"px";setTxt(s=>({...s,val:ev.target.value}));}}
-                onKeyDown={ev=>{if(ev.key==="Escape") setTxt(s=>({...s,visible:false,val:""})); if(ev.key==="Enter"&&(ev.metaKey||ev.ctrlKey)) commitTxt();}}
+                onKeyDown={ev=>{
+                  if(ev.key==="Escape"){ ev.preventDefault(); commitTxt(); }
+                  if((ev.metaKey||ev.ctrlKey)&&ev.key==="Enter"){ ev.preventDefault(); commitTxt(); }
+                }}
                 onBlur={commitTxt}
-                style={{position:"absolute",left:txt.left,top:txt.top,fontSize:`${Math.round(fontSize*txt.scale)}px`,fontFamily:"sans-serif",lineHeight:1.2,color,background:"rgba(255,255,255,0.88)",border:"1.5px dashed #aaa",outline:"none",padding:"2px 6px",minWidth:120,resize:"none",overflow:"hidden",zIndex:10}}/>
+                style={{position:"absolute",left:txt.left,top:txt.top,fontSize:`${Math.round(fontSize*txt.scale)}px`,fontFamily:"sans-serif",lineHeight:1.2,color,background:"rgba(255,255,255,0.92)",border:"2px solid #65CBF1",borderRadius:4,outline:"none",padding:"3px 8px",minWidth:80,resize:"none",overflow:"hidden",zIndex:10,boxShadow:"0 0 0 3px rgba(101,203,241,0.25)"}}/>
             )}
           </div>
           <p className="mt-2 text-center text-xs text-gray-400">
