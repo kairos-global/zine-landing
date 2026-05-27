@@ -625,8 +625,11 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
     }
 
     if(tool==="text"){
+      // Capture values now (event may be recycled), but defer state update until
+      // after the full mousedown→mouseup cycle so no blur fires before the textarea mounts.
       const r=canvas.getBoundingClientRect();
-      setTxt({visible:true,cx:pt.x,cy:pt.y,left:e.clientX-r.left,top:e.clientY-r.top,scale:r.width/CW,val:""});
+      const cx=pt.x,cy=pt.y,left=e.clientX-r.left,top=e.clientY-r.top,scale=r.width/CW;
+      setTimeout(()=>setTxt({visible:true,cx,cy,left,top,scale,val:""}),0);
       return;
     }
 
@@ -1073,7 +1076,8 @@ export default function ZineCanvas({ format = "mini" }: { format?: "mini" | "hal
               className="rounded-sm"
               onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}/>
             {txt.visible&&(
-              <textarea ref={textareaRef} autoFocus rows={1} value={txt.val}
+              <textarea ref={textareaRef} rows={1} value={txt.val}
+                onMouseDown={e=>e.stopPropagation()}
                 onChange={ev=>{ev.target.style.height="auto";ev.target.style.height=ev.target.scrollHeight+"px";setTxt(s=>({...s,val:ev.target.value}));}}
                 onKeyDown={ev=>{
                   if(ev.key==="Escape"){ ev.preventDefault(); commitTxt(); }
