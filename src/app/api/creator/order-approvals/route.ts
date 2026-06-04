@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkAndFinalizeOrder } from "@/lib/billing";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +31,7 @@ export async function GET() {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    // Find all order items for this creator's print_for_me issues
+    // Find all order items for this creator's print_for_me issues.
     const { data: items, error } = await supabase
       .from("distributor_order_items")
       .select(`
@@ -58,10 +59,13 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Filter to only items for this creator's issues
+    // Filter to only items for this creator's issues, excluding draft/cancelled orders
     const myItems = (items || []).filter(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (item: any) => item.issue?.profile_id === profile.id
+      (item: any) =>
+        item.issue?.profile_id === profile.id &&
+        item.order?.status !== "draft" &&
+        item.order?.status !== "cancelled"
     );
 
     // For approved/auto-approved items, check if already paid
@@ -95,8 +99,8 @@ export async function GET() {
       quantity: item.quantity,
       creator_approval_status: item.creator_approval_status,
       creator_reviewed_at: item.creator_reviewed_at,
-      // Match the minimum enforced by creator-checkout ($0.50 Stripe minimum)
-      cost_dollars: Math.max((item.quantity * 10) / 100, 0.50),
+      // Match the formula in creator-checkout: (qty × $0.10) + $0.30 flat fee, min $0.50
+      cost_dollars: Math.max((item.quantity * 10 + 30) / 100, 0.50),
       is_paid: paidItemIds.has(item.id),
       order: item.order,
       issue: item.issue,
@@ -186,6 +190,15 @@ export async function PATCH(req: Request) {
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
+
+    // After a creator decision, check if all items in this order are now resolved.
+    // This handles self-distribute items (which don't go through creator payment)
+    // and also catches cases where all items are rejected (→ cancel order).
+    // For print_for_me approved items, billing won't fire until they also pay.
+    await checkAndFinalizeOrder(orderItemId, supabase).catch((err) => {
+      // Non-fatal — order status stays as-is; billing will retry on next event.
+      console.error("[OrderApprovals] checkAndFinalizeOrder error:", err);
+    });
 
     return NextResponse.json({ success: true, newStatus });
   } catch (err) {

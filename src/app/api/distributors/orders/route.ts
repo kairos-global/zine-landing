@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
+import { stripe, createSetupCheckoutSession } from "@/lib/stripe";
+import { calculateTotalCharge } from "@/lib/shipping";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +21,6 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get distributor ID
     const { data: distributor } = await supabase
       .from("distributors")
       .select("id")
@@ -30,7 +31,6 @@ export async function GET() {
       return NextResponse.json({ error: "Distributor not found" }, { status: 404 });
     }
 
-    // Fetch orders with items
     const { data: orders, error } = await supabase
       .from("distributor_orders")
       .select(`
@@ -51,16 +51,24 @@ export async function GET() {
     return NextResponse.json({ orders: orders || [] });
   } catch (err) {
     console.error("Distributor orders GET error:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
 /**
  * POST /api/distributors/orders
- * Place a new distributor order
+ * Place a new distributor order.
+ *
+ * NEW FLOW (v2):
+ *   1. Validate cart + creator limits
+ *   2. Create order with status 'pending_creator_approval'
+ *   3. Create/reuse Stripe Customer for this distributor
+ *   4. Create a Stripe Checkout session in "setup" mode (saves card, no charge yet)
+ *   5. Return { order, setupCheckoutUrl, estimatedTotal }
+ *
+ * The distributor is redirected to Stripe to save their card.
+ * The actual charge happens automatically in billing.ts once all creators approve + pay.
+ *
  * Body: { items: [{ issue_id: string, quantity: number }] }
  */
 export async function POST(req: Request) {
@@ -83,10 +91,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get distributor (need business_address for required ship_to_address)
+    // Get distributor with all fields needed for Stripe customer creation
     const { data: distributor, error: distError } = await supabase
       .from("distributors")
-      .select("id, status, business_address")
+      .select("id, status, business_address, business_name, contact_email, contact_name, stripe_customer_id")
       .eq("user_id", userId)
       .single();
 
@@ -109,31 +117,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Orders start as 'draft' (pre-payment). The webhook moves them to 'placed'
-    // once Stripe confirms. DB column default is 'placed' but is never used —
-    // we always set status explicitly on insert.
-    const { data: order, error: orderError } = await supabase
-      .from("distributor_orders")
-      .insert([
-        {
-          distributor_id: distributor.id,
-          status: "draft",
-          ship_to_address: shipToAddress,
-        },
-      ])
-      .select()
-      .single();
-
-    if (orderError || !order) {
-      console.error("Error creating order:", orderError);
-      const message = orderError?.message || "Failed to create order";
-      return NextResponse.json(
-        { error: "Failed to create order", details: message },
-        { status: 500 }
-      );
-    }
-
-    // Fetch print_for_me settings for all issues in this order
+    // ── Validate quantities BEFORE creating any rows ──────────────────────────
     const issueIds = items.map((i) => i.issue_id);
     const { data: issueSettings } = await supabase
       .from("issues")
@@ -144,7 +128,6 @@ export async function POST(req: Request) {
       (issueSettings || []).map((iss) => [iss.id, iss])
     );
 
-    // Validate quantities against creator limits
     for (const item of items) {
       const iss = issueMap.get(item.issue_id);
       if (iss?.print_for_me && iss.max_copies_per_order != null) {
@@ -160,7 +143,46 @@ export async function POST(req: Request) {
       }
     }
 
-    // Build order items with approval status
+    // ── Create/reuse Stripe Customer for this distributor ─────────────────────
+    let stripeCustomerId = distributor.stripe_customer_id as string | null;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: distributor.contact_email || undefined,
+        name: distributor.business_name || distributor.contact_name || undefined,
+        metadata: { distributor_id: distributor.id },
+      });
+      stripeCustomerId = customer.id;
+      await supabase
+        .from("distributors")
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq("id", distributor.id);
+    }
+
+    // ── Create the order row ──────────────────────────────────────────────────
+    // Status 'pending_creator_approval': order is placed, card will be saved,
+    // but the distributor is NOT charged yet. Charge happens automatically once
+    // all creators approve and pay their print costs.
+    const { data: order, error: orderError } = await supabase
+      .from("distributor_orders")
+      .insert([
+        {
+          distributor_id: distributor.id,
+          status: "pending_creator_approval",
+          ship_to_address: shipToAddress,
+        },
+      ])
+      .select()
+      .single();
+
+    if (orderError || !order) {
+      console.error("Error creating order:", orderError);
+      return NextResponse.json(
+        { error: "Failed to create order", details: orderError?.message },
+        { status: 500 }
+      );
+    }
+
+    // ── Create order items ────────────────────────────────────────────────────
     const orderItems = items.map((item) => {
       const iss = issueMap.get(item.issue_id);
       let creator_approval_status = "auto_approved";
@@ -183,27 +205,50 @@ export async function POST(req: Request) {
 
     if (itemsError) {
       console.error("Error creating order items:", itemsError);
+      // Clean up the order row so we don't leave a dangling record
       await supabase.from("distributor_orders").delete().eq("id", order.id);
-      const message = itemsError?.message || "Failed to create order items";
       return NextResponse.json(
-        { error: "Failed to create order items", details: message },
+        { error: "Failed to create order items", details: itemsError?.message },
         { status: 500 }
       );
     }
 
+    // ── Create Stripe Setup Checkout ──────────────────────────────────────────
+    const appOrigin =
+      typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
+      process.env.NEXT_PUBLIC_APP_URL
+        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
+        : "http://localhost:3000";
+
+    const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
+    const estimatedTotal = calculateTotalCharge(totalQuantity);
+
+    const setupSession = await createSetupCheckoutSession(
+      stripeCustomerId,
+      `${appOrigin}/dashboard/distributor?setup=success`,
+      `${appOrigin}/dashboard/distributor?setup=cancelled`,
+      {
+        orderId: order.id,
+        type: "distributor_card_setup",
+      }
+    );
+
+    // Save setup session ID on the order so the webhook can match it
+    await supabase
+      .from("distributor_orders")
+      .update({ stripe_setup_session_id: setupSession.id })
+      .eq("id", order.id);
+
     return NextResponse.json({
       success: true,
-      order: order,
-      message: "Order placed successfully",
+      order,
+      setupCheckoutUrl: setupSession.url,
+      estimatedTotal,
+      totalQuantity,
+      message: "Order created. Complete card setup to confirm your order.",
     });
   } catch (err) {
     console.error("Distributor orders POST error:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
-
-
-

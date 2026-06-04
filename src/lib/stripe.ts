@@ -63,6 +63,33 @@ export async function createCheckoutSession(
   return session;
 }
 
+/**
+ * Create a Stripe Checkout session in "setup" mode.
+ * This saves the customer's card without charging them.
+ * The card is later charged automatically via a PaymentIntent (off-session).
+ */
+export async function createSetupCheckoutSession(
+  stripeCustomerId: string,
+  successUrl: string,
+  cancelUrl: string,
+  metadata: Record<string, string>
+) {
+  return await stripe.checkout.sessions.create({
+    mode: "setup",
+    customer: stripeCustomerId,
+    currency: "usd",
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata,
+    custom_text: {
+      submit: {
+        message:
+          "Your card is saved now. You will only be charged once creators approve their copies — the exact amount depends on which items are approved.",
+      },
+    },
+  });
+}
+
 export async function retrievePaymentIntent(paymentIntentId: string) {
   return await stripe.paymentIntents.retrieve(paymentIntentId);
 }

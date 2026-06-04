@@ -9,7 +9,8 @@ const supabase = createClient(
 );
 
 const PRINT_FOR_ME_CENTS_PER_COPY = 10; // $0.10 per copy
-const MIN_CHARGE_CENTS = 50; // Stripe minimum is $0.50
+const CREATOR_FLAT_FEE_CENTS = 30;      // $0.30 added to every creator payment (covers Stripe processing)
+const MIN_CHARGE_CENTS = 50;            // Stripe's own minimum charge
 
 /**
  * POST /api/payments/creator-checkout
@@ -97,24 +98,31 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if already paid for this item
+    // Block if already paid or a checkout session is already in flight
     const { data: existingPayment } = await supabase
       .from("creator_print_payments")
       .select("id, payment_status")
       .eq("distributor_order_item_id", orderItemId)
-      .eq("payment_status", "paid")
+      .in("payment_status", ["paid", "pending"])
       .maybeSingle();
 
-    if (existingPayment) {
+    if (existingPayment?.payment_status === "paid") {
       return NextResponse.json(
         { error: "Payment already completed for this order item" },
         { status: 400 }
       );
     }
+    if (existingPayment?.payment_status === "pending") {
+      return NextResponse.json(
+        { error: "A checkout session is already open for this order item. Complete or cancel it first." },
+        { status: 400 }
+      );
+    }
 
-    // Calculate cost: $0.10 per copy (minimum $0.50 for Stripe)
+    // Calculate cost: $0.10 per copy + $0.30 flat fee, minimum $0.50 for Stripe
+    // Example: 10 copies = $1.00 + $0.30 = $1.30
     const costCents = Math.max(
-      item.quantity * PRINT_FOR_ME_CENTS_PER_COPY,
+      item.quantity * PRINT_FOR_ME_CENTS_PER_COPY + CREATOR_FLAT_FEE_CENTS,
       MIN_CHARGE_CENTS
     );
     const costDollars = costCents / 100;

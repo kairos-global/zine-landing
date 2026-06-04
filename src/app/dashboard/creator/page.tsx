@@ -291,9 +291,14 @@ function ZineOrdersView({
               </ul>
             </div>
 
-            {(order.status === "placed" || order.status === "draft") && (
+            {order.status === "placed" && (
               <p className="text-xs text-gray-500 mt-4">
                 Produce and ship these copies to the address above. Fulfillment tracking can be added later.
+              </p>
+            )}
+            {order.status === "draft" && (
+              <p className="text-xs text-gray-400 mt-4">
+                Distributor payment pending — this order is not yet confirmed.
               </p>
             )}
           </div>

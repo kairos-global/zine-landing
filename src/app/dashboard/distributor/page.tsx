@@ -158,6 +158,7 @@ type DistributorOrder = {
   items: Array<{
     id: string;
     quantity: number;
+    creator_approval_status?: string;
     issue: Issue;
   }>;
 };
@@ -198,21 +199,32 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
     fetchIssues();
     fetchStock();
 
-    // Handle payment success/cancel from URL params
+    // Handle card setup return from Stripe
     const params = new URLSearchParams(window.location.search);
-    const paymentStatus = params.get("payment");
-    const orderId = params.get("orderId");
+    const setupStatus = params.get("setup");
 
-    if (paymentStatus === "success" && orderId) {
-      toast.success("Payment successful! Your order is being processed.");
+    if (setupStatus === "success") {
+      toast.success("Card saved! Your order is confirmed and waiting on creator approvals.");
       setCart([]);
       localStorage.removeItem(CART_STORAGE_KEY);
       fetchStock();
       setActiveTab("orders");
       fetchOrders();
       window.history.replaceState({}, "", "/dashboard/distributor");
-    } else if (paymentStatus === "cancelled") {
-      toast.error("Payment was cancelled. Your order was not placed.");
+    } else if (setupStatus === "cancelled") {
+      toast.error("Card setup was cancelled. Your order was not confirmed.");
+      window.history.replaceState({}, "", "/dashboard/distributor");
+    }
+
+    // Legacy: handle old ?payment=success flow
+    const paymentStatus = params.get("payment");
+    const orderId = params.get("orderId");
+    if (paymentStatus === "success" && orderId) {
+      toast.success("Payment successful! Your order is being processed.");
+      setCart([]);
+      localStorage.removeItem(CART_STORAGE_KEY);
+      setActiveTab("orders");
+      fetchOrders();
       window.history.replaceState({}, "", "/dashboard/distributor");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -292,7 +304,9 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
 
     setPlacing(true);
     try {
-      // Step 1: Create the order
+      // Create the order + get Stripe card-setup URL in one call.
+      // No charge happens yet — the card is saved and charged automatically
+      // once creators approve and pay for their print copies.
       const orderRes = await fetch("/api/distributors/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -301,34 +315,19 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
 
       if (!orderRes.ok) {
         const err = await orderRes.json().catch(() => ({}));
-        const msg = err.details ? `${err.error}: ${err.details}` : (err.error || "Failed to create order");
+        const msg = err.details
+          ? `${err.error}: ${err.details}`
+          : err.error || "Failed to create order";
         toast.error(msg);
         return;
       }
 
       const orderData = await orderRes.json();
-      const orderId = orderData.order.id;
 
-      // Step 2: Create checkout session for shipping payment
-      const checkoutRes = await fetch("/api/payments/distributor-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
-      });
-
-      if (!checkoutRes.ok) {
-        const err = await checkoutRes.json();
-        toast.error(err.error || "Failed to create payment session");
-        return;
-      }
-
-      const checkoutData = await checkoutRes.json();
-      
-      // Redirect to Stripe Checkout
-      if (checkoutData.checkoutUrl) {
-        window.location.href = checkoutData.checkoutUrl;
+      if (orderData.setupCheckoutUrl) {
+        window.location.href = orderData.setupCheckoutUrl;
       } else {
-        toast.error("Failed to get checkout URL");
+        toast.error("Failed to get card setup URL");
       }
     } catch (err) {
       console.error("Error placing order:", err);
@@ -608,7 +607,7 @@ function BrowseZines({
                 disabled={placing}
                 className="w-full px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium"
               >
-                {placing ? "Processing..." : "Proceed to Payment"}
+                {placing ? "Processing..." : "Place Order & Save Card"}
               </button>
               {(() => {
                 const totalQty = cart.reduce((s, i) => s + i.quantity, 0);
@@ -619,10 +618,17 @@ function BrowseZines({
                   totalQty <= 100 ? 18 :
                   totalQty <= 200 ? 25 :
                   totalQty <= 500 ? 40 : 60;
+                const total = (shipping + 0.50).toFixed(2);
                 return (
-                  <p className="text-xs text-gray-500 text-center mt-2">
-                    Est. shipping: <strong>${shipping}.00</strong> for {totalQty} copies
-                  </p>
+                  <div className="mt-3 text-xs text-gray-500 text-center space-y-1">
+                    <p>
+                      Est. max charge: <strong>${total}</strong> for {totalQty} copies
+                    </p>
+                    <p className="text-gray-400">(shipping + $0.50 fee, if all approved)</p>
+                    <p className="text-gray-400 pt-1">
+                      Your card is saved now — you are only charged once creators approve their copies.
+                    </p>
+                  </div>
                 );
               })()}
             </>
@@ -705,10 +711,33 @@ function OrdersView({
   }
 
   const statusStyles: Record<string, string> = {
+    pending_creator_approval: "bg-amber-100 text-amber-700",
     draft: "bg-amber-100 text-amber-700",
-    placed: "bg-orange-100 text-orange-700",
+    placed: "bg-blue-100 text-blue-700",
     fulfilled: "bg-green-100 text-green-700",
     cancelled: "bg-gray-100 text-gray-700",
+  };
+
+  const statusLabels: Record<string, string> = {
+    pending_creator_approval: "Awaiting creator approval",
+    draft: "Pending",
+    placed: "Confirmed",
+    fulfilled: "Fulfilled",
+    cancelled: "Cancelled",
+  };
+
+  const approvalStyles: Record<string, string> = {
+    auto_approved: "text-green-600",
+    approved: "text-green-600",
+    pending_approval: "text-amber-600",
+    rejected: "text-red-500 line-through",
+  };
+
+  const approvalLabels: Record<string, string> = {
+    auto_approved: "Approved",
+    approved: "Approved",
+    pending_approval: "Pending creator",
+    rejected: "Declined",
   };
 
   return (
@@ -731,7 +760,7 @@ function OrdersView({
                     statusStyles[order.status] ?? "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {order.status}
+                  {statusLabels[order.status] ?? order.status}
                 </span>
                 {order.payment_status === "paid" && (
                   <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700">
@@ -741,7 +770,7 @@ function OrdersView({
               </div>
               {order.shipping_cost != null && (
                 <span className="text-sm text-gray-600">
-                  Shipping: ${Number(order.shipping_cost).toFixed(2)}
+                  Charged: ${Number(order.shipping_cost).toFixed(2)}
                 </span>
               )}
             </div>
@@ -751,16 +780,29 @@ function OrdersView({
                 Order items ({totalItems} total)
               </p>
               <ul className="space-y-2">
-                {order.items?.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="font-medium">{item.issue?.title || "Untitled"}</span>
-                    <span className="text-gray-600">×{item.quantity}</span>
-                  </li>
-                ))}
+                {order.items?.map((item) => {
+                  const aStatus = item.creator_approval_status ?? "auto_approved";
+                  return (
+                    <li
+                      key={item.id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="font-medium">{item.issue?.title || "Untitled"}</span>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-medium ${approvalStyles[aStatus] ?? "text-gray-500"}`}>
+                          {approvalLabels[aStatus] ?? aStatus}
+                        </span>
+                        <span className="text-gray-600">×{item.quantity}</span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
+              {order.status === "pending_creator_approval" && (
+                <p className="text-xs text-gray-400 mt-3">
+                  Your card will be charged automatically once all creators approve. The final amount depends on how many copies are approved.
+                </p>
+              )}
             </div>
 
             {/* Shipment info — shown once admin fulfils the order */}

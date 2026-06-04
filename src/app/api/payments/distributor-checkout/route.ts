@@ -2,25 +2,20 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { createCheckoutSession } from "@/lib/stripe";
+import { calculateShippingCost, DISTRIBUTOR_SERVICE_FEE } from "@/lib/shipping";
+
+/**
+ * NOTE: This route is no longer used in the primary order flow (v2).
+ * Orders now collect the card via a Setup Checkout (distributors/orders POST)
+ * and charge automatically via billing.ts once creators approve.
+ *
+ * This route is kept as a manual fallback for admin use or legacy orders.
+ */
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-/**
- * Tiered shipping rates based on total copies ordered.
- * Covers standard USPS/carrier costs for zine shipments.
- */
-function calculateShippingCost(totalQuantity: number): number {
-  if (totalQuantity <= 10) return 5.0;
-  if (totalQuantity <= 25) return 8.0;
-  if (totalQuantity <= 50) return 12.0;
-  if (totalQuantity <= 100) return 18.0;
-  if (totalQuantity <= 200) return 25.0;
-  if (totalQuantity <= 500) return 40.0;
-  return 60.0;
-}
 
 /**
  * POST /api/payments/distributor-checkout
@@ -98,6 +93,8 @@ export async function POST(req: Request) {
     );
 
     const shippingCost = calculateShippingCost(totalQuantity);
+    // Total charge = tiered shipping + flat $0.50 service fee
+    const totalCharge = shippingCost + DISTRIBUTOR_SERVICE_FEE;
 
     const appOrigin =
       typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
@@ -106,7 +103,7 @@ export async function POST(req: Request) {
         : "http://localhost:3000";
 
     const session = await createCheckoutSession(
-      shippingCost,
+      totalCharge,
       "usd",
       {
         orderId: order.id,
@@ -117,19 +114,19 @@ export async function POST(req: Request) {
       `${appOrigin}/dashboard/distributor?payment=cancelled`
     );
 
-    // Update order with checkout session ID and computed shipping cost
+    // Save total charge (shipping + service fee) as shipping_cost on the order
     await supabase
       .from("distributor_orders")
       .update({
         stripe_checkout_session_id: session.id,
-        shipping_cost: shippingCost,
+        shipping_cost: totalCharge,
       })
       .eq("id", orderId);
 
     return NextResponse.json({
       checkoutUrl: session.url,
       sessionId: session.id,
-      shippingCost,
+      shippingCost: totalCharge,
       totalQuantity,
     });
   } catch (err) {
