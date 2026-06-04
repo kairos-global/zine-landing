@@ -160,8 +160,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     const orderId = metadata.orderId;
     if (!orderId) return;
 
-    // Build shipping info from Stripe session
-    const shippingDetails = session.shipping_details;
+    // shipping_details exists at runtime but isn't typed in this SDK version
+    type SessionExt = typeof session & {
+      shipping_details?: { name?: string; address?: Record<string, string> | null } | null;
+    };
+    const sess = session as SessionExt;
+    const shippingDetails = sess.shipping_details;
     const customerDetails = session.customer_details;
 
     const { error: storeErr } = await supabase
