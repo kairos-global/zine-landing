@@ -156,6 +156,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         throw error;
       }
     }
+  } else if (type === "store_order") {
+    const orderId = metadata.orderId;
+    if (!orderId) return;
+
+    // Build shipping info from Stripe session
+    const shippingDetails = session.shipping_details;
+    const customerDetails = session.customer_details;
+
+    const { error: storeErr } = await supabase
+      .from("store_orders")
+      .update({
+        status: "paid",
+        stripe_payment_intent_id: session.payment_intent as string,
+        total_cents: session.amount_total,
+        shipping_name: shippingDetails?.name ?? customerDetails?.name ?? null,
+        shipping_address: shippingDetails?.address ?? null,
+      })
+      .eq("id", orderId);
+
+    if (storeErr) {
+      console.error("[StripeWebhook] store_orders update failed:", storeErr);
+      throw storeErr;
+    }
+    console.log(`[StripeWebhook] Store order ${orderId} marked paid.`);
   } else if (type === "creator_print_for_me") {
     // Mark creator's payment as paid
     const { error: creatorError } = await supabase

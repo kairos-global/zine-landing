@@ -15,7 +15,7 @@ export type PaymentMetadata = {
   distributorId?: string;
   orderItemId?: string;  // per-order-item creator print payment (new model)
   quantity?: number;     // copies ordered in that item
-  type: "distributor_shipping" | "creator_print_for_me";
+  type: "distributor_shipping" | "creator_print_for_me" | "store_order";
 };
 
 export async function createCheckoutSession(
