@@ -59,8 +59,12 @@ export async function checkAndFinalizeOrder(
 
   if (!allItems || allItems.length === 0) return;
 
+  // Cast through unknown: Supabase infers the joined field as an array type
+  // without schema types, but at runtime it's always a single object or null.
+  const items = allItems as unknown as OrderItemRow[];
+
   // Check if every item is resolved
-  for (const item of allItems) {
+  for (const item of items) {
     const status = item.creator_approval_status;
 
     if (status === "rejected") continue; // resolved — creator said no
@@ -68,7 +72,7 @@ export async function checkAndFinalizeOrder(
     if (status === "pending_approval") return; // still waiting
 
     // approved or auto_approved
-    const isPrintForMe = (item.issue as IssueRef)?.print_for_me === true;
+    const isPrintForMe = item.issue?.print_for_me === true;
 
     if (isPrintForMe) {
       // Need creator to have paid before we bill the distributor
@@ -85,10 +89,10 @@ export async function checkAndFinalizeOrder(
   }
 
   // All items are resolved. Calculate final approved print_for_me quantity.
-  const approvedPrintItems = (allItems as OrderItemRow[]).filter(
+  const approvedPrintItems = items.filter(
     (i) =>
       i.creator_approval_status !== "rejected" &&
-      (i.issue as IssueRef)?.print_for_me === true
+      i.issue?.print_for_me === true
   );
   const totalQty = approvedPrintItems.reduce(
     (s: number, i: { quantity: number }) => s + i.quantity,
