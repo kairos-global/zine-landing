@@ -20,6 +20,14 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { stripe } from "./stripe";
 import { calculateShippingCost, DISTRIBUTOR_SERVICE_FEE } from "./shipping";
 
+type IssueRef = { print_for_me: boolean } | null;
+type OrderItemRow = {
+  id: string;
+  quantity: number;
+  creator_approval_status: string;
+  issue: IssueRef;
+};
+
 export async function checkAndFinalizeOrder(
   orderItemId: string,
   supabase: SupabaseClient
@@ -60,8 +68,7 @@ export async function checkAndFinalizeOrder(
     if (status === "pending_approval") return; // still waiting
 
     // approved or auto_approved
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const isPrintForMe = (item.issue as any)?.print_for_me === true;
+    const isPrintForMe = (item.issue as IssueRef)?.print_for_me === true;
 
     if (isPrintForMe) {
       // Need creator to have paid before we bill the distributor
@@ -78,11 +85,10 @@ export async function checkAndFinalizeOrder(
   }
 
   // All items are resolved. Calculate final approved print_for_me quantity.
-  const approvedPrintItems = allItems.filter(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const approvedPrintItems = (allItems as OrderItemRow[]).filter(
     (i) =>
       i.creator_approval_status !== "rejected" &&
-      (i.issue as any)?.print_for_me === true
+      (i.issue as IssueRef)?.print_for_me === true
   );
   const totalQty = approvedPrintItems.reduce(
     (s: number, i: { quantity: number }) => s + i.quantity,
