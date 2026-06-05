@@ -563,36 +563,61 @@ function BrowseZines({
                         )}
                       </div>
                       <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
-                        <label htmlFor={`cart-qty-${item.issue_id}`} className="sr-only">
-                          Quantity for {issue?.title || "item"}
-                        </label>
-                        <input
-                          id={`cart-qty-${item.issue_id}`}
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={3}
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const v = e.target.value.replace(/\D/g, "");
-                            if (v === "") return;
-                            const n = parseInt(v, 10);
-                            const maxQty = issue?.max_copies_per_order ?? 500;
-                            if (!isNaN(n) && n >= 0 && n <= maxQty) {
-                              onUpdateQuantity(item.issue_id, n);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            const v = e.target.value.replace(/\D/g, "").trim();
-                            const maxQty = issue?.max_copies_per_order ?? 500;
-                            if (v === "") { onUpdateQuantity(item.issue_id, 1); return; }
-                            const n = parseInt(v, 10);
-                            if (isNaN(n) || n < 1) onUpdateQuantity(item.issue_id, 1);
-                            else if (n > maxQty) onUpdateQuantity(item.issue_id, maxQty);
-                          }}
-                          className="w-14 h-11 rounded border border-gray-300 text-center text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                        />
+                        <div className="flex items-center gap-1">
+                          {/* Decrement — removes item when quantity reaches 0 */}
+                          <button
+                            type="button"
+                            onClick={() => onUpdateQuantity(item.issue_id, item.quantity - 1)}
+                            className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-100 active:bg-gray-200 text-lg leading-none select-none"
+                            aria-label="Decrease quantity"
+                          >
+                            −
+                          </button>
+                          <label htmlFor={`cart-qty-${item.issue_id}`} className="sr-only">
+                            Quantity for {issue?.title || "item"}
+                          </label>
+                          <input
+                            id={`cart-qty-${item.issue_id}`}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={3}
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, "");
+                              if (v === "") return;
+                              const n = parseInt(v, 10);
+                              const maxQty = issue?.max_copies_per_order ?? 500;
+                              if (!isNaN(n) && n >= 0 && n <= maxQty) {
+                                onUpdateQuantity(item.issue_id, n);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const v = e.target.value.replace(/\D/g, "").trim();
+                              const maxQty = issue?.max_copies_per_order ?? 500;
+                              if (v === "" || parseInt(v, 10) < 1) {
+                                onUpdateQuantity(item.issue_id, 1);
+                                return;
+                              }
+                              const n = parseInt(v, 10);
+                              if (n > maxQty) onUpdateQuantity(item.issue_id, maxQty);
+                            }}
+                            className="w-12 h-8 rounded border border-gray-300 text-center text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                          />
+                          {/* Increment — capped at max_copies_per_order */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const maxQty = issue?.max_copies_per_order ?? 500;
+                              onUpdateQuantity(item.issue_id, Math.min(item.quantity + 1, maxQty));
+                            }}
+                            className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-100 active:bg-gray-200 text-lg leading-none select-none"
+                            aria-label="Increase quantity"
+                          >
+                            +
+                          </button>
+                        </div>
                         {issue?.max_copies_per_order && (
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-gray-400 text-right">
                             max {issue.max_copies_per_order}
                           </span>
                         )}
