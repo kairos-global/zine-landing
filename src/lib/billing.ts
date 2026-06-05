@@ -20,6 +20,55 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { stripe } from "./stripe";
 import { calculateShippingCost, DISTRIBUTOR_SERVICE_FEE } from "./shipping";
 
+/**
+ * processCreatorPayment
+ *
+ * Called when a creator returns from Stripe Checkout (success URL) or when
+ * the admin force-finalizes. Retrieves the session from Stripe directly —
+ * no webhook required. Marks the payment row paid and triggers billing.
+ */
+export async function processCreatorPayment(
+  sessionId: string,
+  supabase: SupabaseClient
+): Promise<void> {
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (session.payment_status !== "paid") {
+    console.log(`[processCreatorPayment] Session ${sessionId} not yet paid (status: ${session.payment_status})`);
+    return;
+  }
+
+  const { data: row } = await supabase
+    .from("creator_print_payments")
+    .select("id, payment_status, distributor_order_item_id")
+    .eq("stripe_checkout_session_id", sessionId)
+    .maybeSingle();
+
+  if (!row) {
+    console.error(`[processCreatorPayment] No payment row found for session ${sessionId}`);
+    return;
+  }
+
+  if (row.payment_status !== "paid") {
+    const { error } = await supabase
+      .from("creator_print_payments")
+      .update({
+        payment_status: "paid",
+        stripe_payment_intent_id: session.payment_intent as string,
+      })
+      .eq("id", row.id);
+
+    if (error) {
+      console.error("[processCreatorPayment] Failed to mark payment paid:", error);
+      throw error;
+    }
+
+    console.log(`[processCreatorPayment] Marked paid. rowId=${row.id} sessionId=${sessionId}`);
+  }
+
+  await checkAndFinalizeOrder(String(row.distributor_order_item_id), supabase);
+}
+
 type IssueRef = { print_for_me: boolean } | null;
 type OrderItemRow = {
   id: string;

@@ -124,7 +124,7 @@ export async function POST(req: Request) {
         quantity: item.quantity,
         type: "creator_print_for_me",
       },
-      `${appOrigin}/dashboard/creator?tab=zine-orders&payment=success`,
+      `${appOrigin}/dashboard/creator?tab=zine-orders&payment=success&session_id={CHECKOUT_SESSION_ID}`,
       `${appOrigin}/dashboard/creator?tab=zine-orders&payment=cancelled`
     );
 

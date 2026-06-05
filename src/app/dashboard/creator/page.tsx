@@ -76,6 +76,23 @@ function CreatorPortalContent() {
     if (tab === "market-orders") setActiveTab("market-orders");
   }, [searchParams]);
 
+  // When creator returns from Stripe Checkout success, verify the payment
+  // directly with Stripe — no webhook dependency.
+  useEffect(() => {
+    const payment = searchParams.get("payment");
+    const sessionId = searchParams.get("session_id");
+    if (payment !== "success" || !sessionId) return;
+
+    fetch("/api/payments/creator-checkout/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    })
+      .then(() => fetchApprovals())
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (activeTab === "zine-orders") {
       setLoading(true);
