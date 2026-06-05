@@ -53,12 +53,14 @@ type CreatorOrder = {
 function CreatorPortalContent() {
   const searchParams = useSearchParams();
   const { isSignedIn, isLoaded } = useUser();
-  const [activeTab, setActiveTab] = useState<"zine-orders" | "market-orders">("zine-orders");
+  const [activeTab, setActiveTab] = useState<"zine-orders" | "market-orders" | "store-orders">("zine-orders");
   const [orders, setOrders] = useState<CreatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [marketMe, setMarketMe] = useState<MarketMeProfile | null>(null);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [storeOrders, setStoreOrders] = useState<StoreOrder[]>([]);
+  const [storeOrdersLoading, setStoreOrdersLoading] = useState(false);
 
   const fetchApprovals = useCallback(() => {
     setApprovalsLoading(true);
@@ -92,6 +94,17 @@ function CreatorPortalContent() {
         .then((res) => res.json())
         .then((data) => setMarketMe(data))
         .catch(() => setMarketMe(null));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "store-orders") {
+      setStoreOrdersLoading(true);
+      fetch("/api/store/my-orders")
+        .then((res) => (res.ok ? res.json() : { orders: [] }))
+        .then((data) => setStoreOrders(data.orders || []))
+        .catch(() => setStoreOrders([]))
+        .finally(() => setStoreOrdersLoading(false));
     }
   }, [activeTab]);
 
@@ -149,10 +162,20 @@ function CreatorPortalContent() {
             >
               Market orders
             </button>
+            <button
+              onClick={() => setActiveTab("store-orders")}
+              className={`pb-3 px-1 font-medium transition ${
+                activeTab === "store-orders"
+                  ? "text-blue-600 border-b-2 border-blue-600"
+                  : "text-gray-600 hover:text-black"
+              }`}
+            >
+              Store orders
+            </button>
           </div>
         </div>
 
-        {activeTab === "zine-orders" ? (
+        {activeTab === "zine-orders" && (
           <div className="space-y-8">
             <OrderApprovalsView
               items={approvals}
@@ -161,7 +184,9 @@ function CreatorPortalContent() {
             />
             <ZineOrdersView orders={orders} loading={loading} />
           </div>
-        ) : (
+        )}
+
+        {activeTab === "market-orders" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="min-w-0">
               <MarketOrdersView />
@@ -174,6 +199,10 @@ function CreatorPortalContent() {
               />
             </div>
           </div>
+        )}
+
+        {activeTab === "store-orders" && (
+          <StoreOrdersView orders={storeOrders} loading={storeOrdersLoading} />
         )}
       </div>
     </div>
@@ -475,6 +504,127 @@ function OrderApprovalsView({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ========== STORE ORDERS TYPES + VIEW ==========
+
+type StoreOrderItem = {
+  id: string;
+  product_name: string;
+  price_cents: number;
+  quantity: number;
+};
+
+type StoreOrder = {
+  id: string;
+  status: "pending" | "paid" | "fulfilled" | "cancelled";
+  total_cents: number | null;
+  shipping_name: string | null;
+  shipping_address: Record<string, string> | null;
+  tracking_number?: string | null;
+  shipped_at?: string | null;
+  fulfillment_notes?: string | null;
+  created_at: string;
+  items: StoreOrderItem[];
+};
+
+function StoreOrdersView({ orders, loading }: { orders: StoreOrder[]; loading: boolean }) {
+  if (loading) {
+    return <div className="text-center py-12 text-gray-600">Loading store orders…</div>;
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+        <p className="text-gray-600">No store orders yet</p>
+        <p className="text-sm text-gray-500 mt-2">
+          Orders from the{" "}
+          <a href="/products" className="text-blue-600 hover:underline">
+            Store
+          </a>{" "}
+          will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  const statusStyles: Record<string, string> = {
+    pending:   "bg-gray-100 text-gray-600",
+    paid:      "bg-amber-100 text-amber-700",
+    fulfilled: "bg-green-100 text-green-700",
+    cancelled: "bg-red-100 text-red-600",
+  };
+
+  function formatAddress(addr: Record<string, string> | null) {
+    if (!addr) return null;
+    return [addr.line1, addr.line2, `${addr.city ?? ""} ${addr.state ?? ""} ${addr.postal_code ?? ""}`.trim(), addr.country]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return (
+    <div className="space-y-4">
+      {orders.map((order) => (
+        <div key={order.id} className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm text-gray-500">
+                {new Date(order.created_at).toLocaleDateString()}
+              </span>
+              <span className={`px-2 py-1 text-xs font-medium rounded ${statusStyles[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                {order.status}
+              </span>
+              <span className="text-xs text-gray-400 font-mono">{order.id.slice(0, 8)}</span>
+            </div>
+            {order.total_cents != null && (
+              <span className="font-semibold text-sm">
+                ${(order.total_cents / 100).toFixed(2)}
+              </span>
+            )}
+          </div>
+
+          {/* Items */}
+          <ul className="space-y-1 mb-4">
+            {order.items.map((item) => (
+              <li key={item.id} className="flex justify-between text-sm">
+                <span className="text-gray-700">{item.quantity}× {item.product_name}</span>
+                <span className="text-gray-500">${((item.price_cents * item.quantity) / 100).toFixed(2)}</span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Shipping address (visible after payment) */}
+          {(order.shipping_name || order.shipping_address) && (
+            <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
+              <span className="font-medium text-gray-700">Ship to: </span>
+              {order.shipping_name && <span>{order.shipping_name} — </span>}
+              {formatAddress(order.shipping_address)}
+            </div>
+          )}
+
+          {/* Fulfillment details */}
+          {order.status === "fulfilled" && order.tracking_number && (
+            <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
+              <span className="font-semibold">Tracking: {order.tracking_number}</span>
+              {order.shipped_at && (
+                <span className="ml-2">· Shipped {new Date(order.shipped_at).toLocaleDateString()}</span>
+              )}
+              {order.fulfillment_notes && (
+                <span className="ml-2">· {order.fulfillment_notes}</span>
+              )}
+            </div>
+          )}
+
+          {order.status === "pending" && (
+            <p className="text-xs text-gray-400 mt-3">Awaiting payment confirmation.</p>
+          )}
+          {order.status === "paid" && (
+            <p className="text-xs text-gray-500 mt-3">Payment confirmed — your order is being prepared.</p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

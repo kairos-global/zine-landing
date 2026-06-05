@@ -25,6 +25,16 @@ export async function createCheckoutSession(
   successUrl: string,
   cancelUrl: string
 ) {
+  const stripeMetadata = {
+    orderId: metadata.orderId || "",
+    issueId: metadata.issueId || "",
+    profileId: metadata.profileId || "",
+    distributorId: metadata.distributorId || "",
+    orderItemId: String(metadata.orderItemId ?? ""),
+    quantity: String(metadata.quantity ?? ""),
+    type: metadata.type,
+  };
+
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
     line_items: [
@@ -49,15 +59,10 @@ export async function createCheckoutSession(
     mode: "payment",
     success_url: successUrl,
     cancel_url: cancelUrl,
-    metadata: {
-      orderId: metadata.orderId || "",
-      issueId: metadata.issueId || "",
-      profileId: metadata.profileId || "",
-      distributorId: metadata.distributorId || "",
-      orderItemId: metadata.orderItemId || "",
-      quantity: String(metadata.quantity ?? ""),
-      type: metadata.type,
-    },
+    metadata: stripeMetadata,
+    // Mirror metadata onto the PaymentIntent so payment_intent.succeeded
+    // events carry the same fields and can act as a backup handler.
+    payment_intent_data: { metadata: stripeMetadata },
   });
 
   return session;

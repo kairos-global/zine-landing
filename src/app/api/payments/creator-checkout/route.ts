@@ -98,25 +98,43 @@ export async function POST(req: Request) {
       );
     }
 
-    // Block if already paid or a checkout session is already in flight
-    const { data: existingPayment } = await supabase
+    // Block if already paid; allow retry if an old "pending" row exists but its
+    // Stripe session has expired (sessions expire after 24 h). Expired rows are
+    // marked "failed" so the lookup below starts clean.
+    const STRIPE_SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
+    const { data: existingPayments } = await supabase
       .from("creator_print_payments")
-      .select("id, payment_status")
+      .select("id, payment_status, created_at")
       .eq("distributor_order_item_id", orderItemId)
       .in("payment_status", ["paid", "pending"])
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    if (existingPayment?.payment_status === "paid") {
+    // Check for a paid row first (most recent at top due to ordering)
+    const paidRow = (existingPayments || []).find((r) => r.payment_status === "paid");
+    if (paidRow) {
       return NextResponse.json(
         { error: "Payment already completed for this order item" },
         { status: 400 }
       );
     }
-    if (existingPayment?.payment_status === "pending") {
-      return NextResponse.json(
-        { error: "A checkout session is already open for this order item. Complete or cancel it first." },
-        { status: 400 }
-      );
+
+    // Check for a live pending row
+    const pendingRow = (existingPayments || []).find((r) => r.payment_status === "pending");
+    if (pendingRow) {
+      const ageMs = Date.now() - new Date(pendingRow.created_at).getTime();
+      if (ageMs < STRIPE_SESSION_EXPIRY_MS) {
+        return NextResponse.json(
+          { error: "A checkout session is already open for this order item. Complete or cancel it first." },
+          { status: 400 }
+        );
+      }
+      // Session is definitely expired — mark all stuck pending rows failed so
+      // a fresh session can be created below.
+      await supabase
+        .from("creator_print_payments")
+        .update({ payment_status: "failed" })
+        .eq("distributor_order_item_id", orderItemId)
+        .eq("payment_status", "pending");
     }
 
     // Calculate cost: $0.10 per copy + $0.30 flat fee, minimum $0.50 for Stripe

@@ -189,24 +189,31 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.log(`[StripeWebhook] creator_print_for_me: sessionId=${session.id} orderItemId=${orderItemId}`);
 
     // ── Step 1: Find the row to update ────────────────────────────────────────
-    // Try by distributor_order_item_id first (most reliable — always in metadata).
-    // Fall back to stripe_checkout_session_id if that fails.
+    // Fetch ALL rows for this order item (avoids maybeSingle() erroring on
+    // multiple rows from prior stuck attempts). Prefer the row whose session ID
+    // matches exactly; fall back to the most-recent unpaid row for the item.
+    // If nothing matches by item ID, fall back to a session-ID lookup.
     let paymentRowId: string | null = null;
 
     if (orderItemId) {
-      const { data: byItemId, error: findErr1 } = await supabase
+      const { data: candidateRows, error: findErr1 } = await supabase
         .from("creator_print_payments")
         .select("id, payment_status, stripe_checkout_session_id")
         .eq("distributor_order_item_id", orderItemId)
-        .maybeSingle();
+        .order("created_at", { ascending: false });
 
-      console.log(`[StripeWebhook] Lookup by orderItemId: row=${JSON.stringify(byItemId)} err=${JSON.stringify(findErr1)}`);
+      console.log(`[StripeWebhook] Lookup by orderItemId: rows=${JSON.stringify(candidateRows)} err=${JSON.stringify(findErr1)}`);
 
-      if (byItemId && byItemId.payment_status !== "paid") {
-        paymentRowId = byItemId.id;
-      }
+      const exactMatch = (candidateRows || []).find(
+        (r) => r.stripe_checkout_session_id === session.id && r.payment_status !== "paid"
+      );
+      const fallbackMatch = (candidateRows || []).find((r) => r.payment_status !== "paid");
+      const match = exactMatch ?? fallbackMatch;
+      if (match) paymentRowId = match.id;
     }
 
+    // Session-ID fallback: handles rows where distributor_order_item_id is null
+    // or where the item-ID lookup returned nothing.
     if (!paymentRowId) {
       const { data: bySession, error: findErr2 } = await supabase
         .from("creator_print_payments")
@@ -222,25 +229,23 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
 
     if (!paymentRowId) {
-      // Nothing matched — dump the entire table so we can see what's there
       const { data: allRows } = await supabase
         .from("creator_print_payments")
         .select("id, distributor_order_item_id, stripe_checkout_session_id, payment_status");
       console.error(
         `[StripeWebhook] CRITICAL — no payment row found. sessionId=${session.id} orderItemId=${orderItemId} allRows=${JSON.stringify(allRows)}`
       );
-      // Do NOT throw — Stripe would retry endlessly without ever being able to match.
-      // Admin must investigate via Vercel logs.
+      // Do NOT throw — Stripe would retry endlessly without ever matching.
       return;
     }
 
-    // ── Step 2: Update by primary key (no guessing games) ─────────────────────
+    // ── Step 2: Update by primary key ─────────────────────────────────────────
     const { error: updateError } = await supabase
       .from("creator_print_payments")
       .update({
         payment_status: "paid",
         stripe_payment_intent_id: session.payment_intent as string,
-        stripe_checkout_session_id: session.id, // write this even if it was missing
+        stripe_checkout_session_id: session.id,
       })
       .eq("id", paymentRowId);
 
@@ -284,21 +289,38 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       }
     }
   } else if (type === "creator_print_for_me") {
+    // This fires after checkout.session.completed for the same payment.
+    // It acts as a backup: if the checkout handler already marked the row paid,
+    // these updates are no-ops. If it failed, this catches the gap.
     const orderItemId = metadata.orderItemId;
     if (orderItemId) {
-      const { error: piCreatorError } = await supabase
+      // Use find-then-update so we don't blindly update all rows for the item.
+      const { data: candidateRows } = await supabase
         .from("creator_print_payments")
-        .update({
-          payment_status: "paid",
-          stripe_payment_intent_id: paymentIntent.id,
-        })
-        .eq("distributor_order_item_id", orderItemId);
-      if (piCreatorError) {
-        console.error("[StripeWebhook] creator_print_payments update (PI) failed:", piCreatorError);
-        throw piCreatorError;
+        .select("id, payment_status")
+        .eq("distributor_order_item_id", orderItemId)
+        .order("created_at", { ascending: false });
+
+      const targetRow = (candidateRows || []).find((r) => r.payment_status !== "paid");
+      if (targetRow) {
+        const { error: piCreatorError } = await supabase
+          .from("creator_print_payments")
+          .update({
+            payment_status: "paid",
+            stripe_payment_intent_id: paymentIntent.id,
+          })
+          .eq("id", targetRow.id);
+        if (piCreatorError) {
+          console.error("[StripeWebhook] creator_print_payments update (PI) failed:", piCreatorError);
+          throw piCreatorError;
+        }
+        // Trigger auto-billing in case the checkout handler didn't get to it.
+        await checkAndFinalizeOrder(orderItemId, supabase).catch((err) => {
+          console.error("[StripeWebhook] checkAndFinalizeOrder (PI path) error:", err);
+        });
       }
     } else {
-      // Legacy fallback: match by issue_id
+      // Legacy fallback: match by issue_id (pre-per-item model)
       const issueId = metadata.issueId;
       if (issueId) {
         const { error: piLegacyError } = await supabase
