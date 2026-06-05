@@ -5,10 +5,6 @@ import { createClient } from "@supabase/supabase-js";
 import { stripe } from "@/lib/stripe";
 import { checkAndFinalizeOrder } from "@/lib/billing";
 
-if (!process.env.STRIPE_WEBHOOK_SECRET) {
-  throw new Error("STRIPE_WEBHOOK_SECRET environment variable is not set");
-}
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -25,11 +21,24 @@ export async function POST(req: Request) {
     }
 
     let event: Stripe.Event;
+    const liveSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+    const testSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST ?? null;
+
     try {
-      event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
-    } catch (err) {
-      console.error("[StripeWebhook] Signature verification failed:", err);
-      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+      event = stripe.webhooks.constructEvent(body, signature, liveSecret);
+    } catch {
+      // Live secret failed — try test/sandbox secret if configured
+      if (!testSecret) {
+        console.error("[StripeWebhook] Signature verification failed (no test secret configured)");
+        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+      }
+      try {
+        event = stripe.webhooks.constructEvent(body, signature, testSecret);
+        console.log("[StripeWebhook] Verified with test/sandbox secret");
+      } catch (testErr) {
+        console.error("[StripeWebhook] Signature verification failed (both secrets tried):", testErr);
+        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+      }
     }
 
     console.log(`[StripeWebhook] Event: ${event.type} id=${event.id}`);
