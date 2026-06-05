@@ -19,6 +19,7 @@ if (!webhookSecret) {
 const webhookSecretString: string = webhookSecret;
 
 export async function POST(req: Request) {
+  console.log("[StripeWebhook] POST received at", new Date().toISOString());
   try {
     const body = await req.text();
     const signature = (await headers()).get("stripe-signature");
@@ -195,14 +196,28 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     // If nothing matches by item ID, fall back to a session-ID lookup.
     let paymentRowId: string | null = null;
 
-    if (orderItemId) {
-      const { data: candidateRows, error: findErr1 } = await supabase
+    // Primary lookup: by stripe_checkout_session_id — unambiguous, exact match.
+    const { data: bySession, error: findErr1 } = await supabase
+      .from("creator_print_payments")
+      .select("id, payment_status, distributor_order_item_id")
+      .eq("stripe_checkout_session_id", session.id)
+      .maybeSingle();
+
+    console.log(`[StripeWebhook] Primary lookup by sessionId=${session.id}: row=${JSON.stringify(bySession)} err=${JSON.stringify(findErr1)}`);
+
+    if (bySession && bySession.payment_status !== "paid") {
+      paymentRowId = bySession.id;
+    }
+
+    // Fallback: by distributor_order_item_id (handles rows without a stored session ID).
+    if (!paymentRowId && orderItemId) {
+      const { data: candidateRows, error: findErr2 } = await supabase
         .from("creator_print_payments")
         .select("id, payment_status, stripe_checkout_session_id")
         .eq("distributor_order_item_id", orderItemId)
         .order("created_at", { ascending: false });
 
-      console.log(`[StripeWebhook] Lookup by orderItemId: rows=${JSON.stringify(candidateRows)} err=${JSON.stringify(findErr1)}`);
+      console.log(`[StripeWebhook] Fallback lookup by orderItemId=${orderItemId}: rows=${JSON.stringify(candidateRows)} err=${JSON.stringify(findErr2)}`);
 
       const exactMatch = (candidateRows || []).find(
         (r) => r.stripe_checkout_session_id === session.id && r.payment_status !== "paid"
@@ -210,22 +225,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       const fallbackMatch = (candidateRows || []).find((r) => r.payment_status !== "paid");
       const match = exactMatch ?? fallbackMatch;
       if (match) paymentRowId = match.id;
-    }
-
-    // Session-ID fallback: handles rows where distributor_order_item_id is null
-    // or where the item-ID lookup returned nothing.
-    if (!paymentRowId) {
-      const { data: bySession, error: findErr2 } = await supabase
-        .from("creator_print_payments")
-        .select("id, payment_status, distributor_order_item_id")
-        .eq("stripe_checkout_session_id", session.id)
-        .maybeSingle();
-
-      console.log(`[StripeWebhook] Lookup by sessionId: row=${JSON.stringify(bySession)} err=${JSON.stringify(findErr2)}`);
-
-      if (bySession && bySession.payment_status !== "paid") {
-        paymentRowId = bySession.id;
-      }
     }
 
     if (!paymentRowId) {
