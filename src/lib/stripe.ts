@@ -13,8 +13,8 @@ export type PaymentMetadata = {
   issueId?: string;
   profileId?: string;
   distributorId?: string;
-  orderItemId?: string;  // per-order-item creator print payment (new model)
-  quantity?: number;     // copies ordered in that item
+  orderItemId?: string | number;
+  quantity?: number;
   type: "distributor_shipping" | "creator_print_for_me" | "store_order";
 };
 
@@ -25,11 +25,11 @@ export async function createCheckoutSession(
   successUrl: string,
   cancelUrl: string
 ) {
-  const stripeMetadata = {
-    orderId: metadata.orderId || "",
-    issueId: metadata.issueId || "",
-    profileId: metadata.profileId || "",
-    distributorId: metadata.distributorId || "",
+  const stripeMetadata: Record<string, string> = {
+    orderId: metadata.orderId ?? "",
+    issueId: metadata.issueId ?? "",
+    profileId: metadata.profileId ?? "",
+    distributorId: metadata.distributorId ?? "",
     orderItemId: String(metadata.orderItemId ?? ""),
     quantity: String(metadata.quantity ?? ""),
     type: metadata.type,
@@ -41,7 +41,7 @@ export async function createCheckoutSession(
       {
         price_data: {
           currency,
-          unit_amount: Math.round(amount * 100), // Convert to cents
+          unit_amount: Math.round(amount * 100),
           product_data: {
             name:
               metadata.type === "distributor_shipping"
@@ -60,19 +60,12 @@ export async function createCheckoutSession(
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: stripeMetadata,
-    // Mirror metadata onto the PaymentIntent so payment_intent.succeeded
-    // events carry the same fields and can act as a backup handler.
     payment_intent_data: { metadata: stripeMetadata },
   });
 
   return session;
 }
 
-/**
- * Create a Stripe Checkout session in "setup" mode.
- * This saves the customer's card without charging them.
- * The card is later charged automatically via a PaymentIntent (off-session).
- */
 export async function createSetupCheckoutSession(
   stripeCustomerId: string,
   successUrl: string,
@@ -105,17 +98,16 @@ export async function createPaymentIntent(
   metadata: PaymentMetadata
 ) {
   return await stripe.paymentIntents.create({
-    amount: Math.round(amount * 100), // Convert to cents
+    amount: Math.round(amount * 100),
     currency,
     metadata: {
-      orderId: metadata.orderId || "",
-      issueId: metadata.issueId || "",
-      profileId: metadata.profileId || "",
-      distributorId: metadata.distributorId || "",
-      orderItemId: metadata.orderItemId || "",
+      orderId: metadata.orderId ?? "",
+      issueId: metadata.issueId ?? "",
+      profileId: metadata.profileId ?? "",
+      distributorId: metadata.distributorId ?? "",
+      orderItemId: String(metadata.orderItemId ?? ""),
       quantity: String(metadata.quantity ?? ""),
       type: metadata.type,
     },
   });
 }
-
