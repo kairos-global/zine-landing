@@ -185,22 +185,37 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
     console.log(`[StripeWebhook] Store order ${orderId} marked paid.`);
   } else if (type === "creator_print_for_me") {
-    // Mark creator's payment as paid
-    const { error: creatorError } = await supabase
-      .from("creator_print_payments")
-      .update({
-        payment_status: "paid",
-        stripe_payment_intent_id: session.payment_intent as string,
-      })
-      .eq("stripe_checkout_session_id", session.id);
+    const orderItemId = metadata.orderItemId;
+
+    // Mark creator's payment as paid.
+    // Primary match: distributor_order_item_id (always present in session metadata).
+    // Fallback: stripe_checkout_session_id (legacy / safety net).
+    const { error: creatorError } = orderItemId
+      ? await supabase
+          .from("creator_print_payments")
+          .update({
+            payment_status: "paid",
+            stripe_payment_intent_id: session.payment_intent as string,
+          })
+          .eq("distributor_order_item_id", orderItemId)
+          .neq("payment_status", "paid") // idempotent guard
+      : await supabase
+          .from("creator_print_payments")
+          .update({
+            payment_status: "paid",
+            stripe_payment_intent_id: session.payment_intent as string,
+          })
+          .eq("stripe_checkout_session_id", session.id)
+          .neq("payment_status", "paid");
 
     if (creatorError) {
       console.error("[StripeWebhook] creator_print_payments update failed:", creatorError);
       throw creatorError; // Stripe retries
     }
 
+    console.log(`[StripeWebhook] Creator paid for order item ${orderItemId ?? "(session " + session.id + ")"}`);
+
     // Check if all items in this order are now resolved → auto-bill distributor
-    const orderItemId = metadata.orderItemId;
     if (orderItemId) {
       await checkAndFinalizeOrder(orderItemId, supabase);
     }

@@ -148,17 +148,27 @@ export async function POST(req: Request) {
     );
 
     // Create pending payment record linked to the order item
-    await supabase.from("creator_print_payments").insert({
-      issue_id: issue.id,
-      profile_id: profile.id,
-      distributor_order_item_id: item.id,
-      quantity: item.quantity,
-      amount: costDollars,
-      currency: "usd",
-      stripe_checkout_session_id: session.id,
-      payment_status: "pending",
-      payment_type: "per_copy",
-    });
+    const { error: insertError } = await supabase
+      .from("creator_print_payments")
+      .insert({
+        issue_id: issue.id,
+        profile_id: profile.id,
+        distributor_order_item_id: item.id,
+        quantity: item.quantity,
+        amount: costDollars,
+        currency: "usd",
+        stripe_checkout_session_id: session.id,
+        payment_status: "pending",
+        payment_type: "per_copy",
+      });
+
+    if (insertError) {
+      console.error("[CreatorCheckout] Failed to insert creator_print_payments:", insertError);
+      return NextResponse.json(
+        { error: "Failed to record payment details. Please try again." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       checkoutUrl: session.url,

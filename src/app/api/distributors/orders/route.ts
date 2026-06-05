@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { stripe, createSetupCheckoutSession } from "@/lib/stripe";
 import { calculateTotalCharge } from "@/lib/shipping";
@@ -146,8 +146,14 @@ export async function POST(req: Request) {
     // ── Create/reuse Stripe Customer for this distributor ─────────────────────
     let stripeCustomerId = distributor.stripe_customer_id as string | null;
     if (!stripeCustomerId) {
+      // Use the logged-in user's actual email (from Clerk), not the business registration email
+      const clerkUser = await currentUser();
+      const userEmail =
+        clerkUser?.primaryEmailAddress?.emailAddress ??
+        clerkUser?.emailAddresses?.[0]?.emailAddress;
+
       const customer = await stripe.customers.create({
-        email: distributor.contact_email || undefined,
+        email: userEmail || undefined,
         name: distributor.business_name || distributor.contact_name || undefined,
         metadata: { distributor_id: distributor.id },
       });
