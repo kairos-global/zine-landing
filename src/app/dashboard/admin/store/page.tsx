@@ -545,7 +545,7 @@ export default function AdminStorePage() {
                   Awaiting Payment Confirmation ({pendingOrders.length})
                 </h2>
                 <p className="text-xs text-gray-400 mb-3">
-                  Payment may already be captured — use "Mark as Paid" to confirm and move to fulfillment.
+                  Payment may already be captured — use &ldquo;Mark as Paid&rdquo; to confirm and move to fulfillment.
                 </p>
                 <div className="flex flex-col gap-3">
                   {pendingOrders.map((order) => (
