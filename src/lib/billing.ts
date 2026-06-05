@@ -69,6 +69,66 @@ export async function processCreatorPayment(
   await checkAndFinalizeOrder(String(row.distributor_order_item_id), supabase);
 }
 
+/**
+ * processDistributorSetup
+ *
+ * Called when the distributor returns from Stripe Setup Checkout (success URL).
+ * Retrieves the setup session directly from Stripe, saves the payment method to
+ * the order, then attempts to finalize the order synchronously.
+ */
+export async function processDistributorSetup(
+  sessionId: string,
+  supabase: SupabaseClient
+): Promise<void> {
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (session.status !== "complete") {
+    console.log(`[processDistributorSetup] Session ${sessionId} not complete (status: ${session.status})`);
+    return;
+  }
+
+  if (!session.setup_intent) {
+    console.error(`[processDistributorSetup] Session ${sessionId} has no setup_intent`);
+    return;
+  }
+
+  const setupIntent = await stripe.setupIntents.retrieve(session.setup_intent as string);
+  const paymentMethodId = setupIntent.payment_method as string;
+
+  if (!paymentMethodId) {
+    console.error(`[processDistributorSetup] No payment method on setup intent ${session.setup_intent}`);
+    return;
+  }
+
+  const { data: order } = await supabase
+    .from("distributor_orders")
+    .select("id, distributor_order_items(id)")
+    .eq("stripe_setup_session_id", sessionId)
+    .maybeSingle();
+
+  if (!order) {
+    console.error(`[processDistributorSetup] No order found for session ${sessionId}`);
+    return;
+  }
+
+  const { error } = await supabase
+    .from("distributor_orders")
+    .update({ stripe_payment_method_id: paymentMethodId })
+    .eq("id", order.id);
+
+  if (error) {
+    console.error("[processDistributorSetup] Failed to save payment method:", error);
+    throw error;
+  }
+
+  console.log(`[processDistributorSetup] Payment method saved. orderId=${order.id} method=${paymentMethodId}`);
+
+  const items = order.distributor_order_items as Array<{ id: string }> | null;
+  if (items && items.length > 0) {
+    await checkAndFinalizeOrder(String(items[0].id), supabase);
+  }
+}
+
 type IssueRef = { print_for_me: boolean } | null;
 type OrderItemRow = {
   id: string;

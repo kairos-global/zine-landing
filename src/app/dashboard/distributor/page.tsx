@@ -204,6 +204,16 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
     const setupStatus = params.get("setup");
 
     if (setupStatus === "success") {
+      const sessionId = params.get("session_id");
+      if (sessionId) {
+        fetch("/api/payments/setup-checkout/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        })
+          .then(() => fetchOrders())
+          .catch(console.error);
+      }
       toast.success("Card saved! Your order is confirmed and waiting on creator approvals.");
       setCart([]);
       localStorage.removeItem(CART_STORAGE_KEY);

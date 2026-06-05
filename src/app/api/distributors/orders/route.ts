@@ -231,7 +231,7 @@ export async function POST(req: Request) {
 
     const setupSession = await createSetupCheckoutSession(
       stripeCustomerId,
-      `${appOrigin}/dashboard/distributor?setup=success`,
+      `${appOrigin}/dashboard/distributor?setup=success&session_id={CHECKOUT_SESSION_ID}`,
       `${appOrigin}/dashboard/distributor?setup=cancelled`,
       {
         orderId: order.id,
