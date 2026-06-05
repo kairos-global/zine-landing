@@ -186,36 +186,72 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.log(`[StripeWebhook] Store order ${orderId} marked paid.`);
   } else if (type === "creator_print_for_me") {
     const orderItemId = metadata.orderItemId;
+    console.log(`[StripeWebhook] creator_print_for_me: sessionId=${session.id} orderItemId=${orderItemId}`);
 
-    // Mark creator's payment as paid.
-    // Primary match: distributor_order_item_id (always present in session metadata).
-    // Fallback: stripe_checkout_session_id (legacy / safety net).
-    const { error: creatorError } = orderItemId
-      ? await supabase
-          .from("creator_print_payments")
-          .update({
-            payment_status: "paid",
-            stripe_payment_intent_id: session.payment_intent as string,
-          })
-          .eq("distributor_order_item_id", orderItemId)
-          .neq("payment_status", "paid") // idempotent guard
-      : await supabase
-          .from("creator_print_payments")
-          .update({
-            payment_status: "paid",
-            stripe_payment_intent_id: session.payment_intent as string,
-          })
-          .eq("stripe_checkout_session_id", session.id)
-          .neq("payment_status", "paid");
+    // ── Step 1: Find the row to update ────────────────────────────────────────
+    // Try by distributor_order_item_id first (most reliable — always in metadata).
+    // Fall back to stripe_checkout_session_id if that fails.
+    let paymentRowId: string | null = null;
 
-    if (creatorError) {
-      console.error("[StripeWebhook] creator_print_payments update failed:", creatorError);
-      throw creatorError; // Stripe retries
+    if (orderItemId) {
+      const { data: byItemId, error: findErr1 } = await supabase
+        .from("creator_print_payments")
+        .select("id, payment_status, stripe_checkout_session_id")
+        .eq("distributor_order_item_id", orderItemId)
+        .maybeSingle();
+
+      console.log(`[StripeWebhook] Lookup by orderItemId: row=${JSON.stringify(byItemId)} err=${JSON.stringify(findErr1)}`);
+
+      if (byItemId && byItemId.payment_status !== "paid") {
+        paymentRowId = byItemId.id;
+      }
     }
 
-    console.log(`[StripeWebhook] Creator paid for order item ${orderItemId ?? "(session " + session.id + ")"}`);
+    if (!paymentRowId) {
+      const { data: bySession, error: findErr2 } = await supabase
+        .from("creator_print_payments")
+        .select("id, payment_status, distributor_order_item_id")
+        .eq("stripe_checkout_session_id", session.id)
+        .maybeSingle();
 
-    // Check if all items in this order are now resolved → auto-bill distributor
+      console.log(`[StripeWebhook] Lookup by sessionId: row=${JSON.stringify(bySession)} err=${JSON.stringify(findErr2)}`);
+
+      if (bySession && bySession.payment_status !== "paid") {
+        paymentRowId = bySession.id;
+      }
+    }
+
+    if (!paymentRowId) {
+      // Nothing matched — dump the entire table so we can see what's there
+      const { data: allRows } = await supabase
+        .from("creator_print_payments")
+        .select("id, distributor_order_item_id, stripe_checkout_session_id, payment_status");
+      console.error(
+        `[StripeWebhook] CRITICAL — no payment row found. sessionId=${session.id} orderItemId=${orderItemId} allRows=${JSON.stringify(allRows)}`
+      );
+      // Do NOT throw — Stripe would retry endlessly without ever being able to match.
+      // Admin must investigate via Vercel logs.
+      return;
+    }
+
+    // ── Step 2: Update by primary key (no guessing games) ─────────────────────
+    const { error: updateError } = await supabase
+      .from("creator_print_payments")
+      .update({
+        payment_status: "paid",
+        stripe_payment_intent_id: session.payment_intent as string,
+        stripe_checkout_session_id: session.id, // write this even if it was missing
+      })
+      .eq("id", paymentRowId);
+
+    if (updateError) {
+      console.error("[StripeWebhook] creator_print_payments update failed:", updateError);
+      throw updateError; // Stripe retries
+    }
+
+    console.log(`[StripeWebhook] Marked payment row ${paymentRowId} as paid. orderItemId=${orderItemId}`);
+
+    // ── Step 3: Check if all items resolved → auto-bill distributor ────────────
     if (orderItemId) {
       await checkAndFinalizeOrder(orderItemId, supabase);
     }
