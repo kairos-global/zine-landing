@@ -744,12 +744,22 @@ function OrdersView({
   };
 
   const statusLabels: Record<string, string> = {
-    pending_creator_approval: "Awaiting creator approval",
     draft: "Pending",
     placed: "Confirmed",
     fulfilled: "Fulfilled",
     cancelled: "Cancelled",
   };
+
+  // For pending_creator_approval orders, refine the label based on per-item status:
+  // - any item still needs creator decision → "Awaiting creator approval"
+  // - all items decided (approved / auto_approved / rejected) → "Awaiting creator payment"
+  function getPendingLabel(order: DistributorOrder): string {
+    const items = order.items ?? [];
+    const anyPending = items.some(
+      (i) => i.creator_approval_status === "pending_approval"
+    );
+    return anyPending ? "Awaiting creator approval" : "Awaiting creator payment";
+  }
 
   const approvalStyles: Record<string, string> = {
     auto_approved: "text-green-600",
@@ -785,7 +795,9 @@ function OrdersView({
                     statusStyles[order.status] ?? "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {statusLabels[order.status] ?? order.status}
+                  {order.status === "pending_creator_approval"
+                    ? getPendingLabel(order)
+                    : (statusLabels[order.status] ?? order.status)}
                 </span>
                 {order.payment_status === "paid" && (
                   <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700">
@@ -825,7 +837,9 @@ function OrdersView({
               </ul>
               {order.status === "pending_creator_approval" && (
                 <p className="text-xs text-gray-400 mt-3">
-                  Your card will be charged automatically once all creators approve. The final amount depends on how many copies are approved.
+                  {getPendingLabel(order) === "Awaiting creator payment"
+                    ? "Creator approved — your card will be charged automatically once they complete their payment."
+                    : "Your card will be charged automatically once all creators approve and pay. The final amount depends on which copies are approved."}
                 </p>
               )}
             </div>
