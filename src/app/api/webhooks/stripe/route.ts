@@ -32,6 +32,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
+    console.log(`[StripeWebhook] Event: ${event.type} id=${event.id}`);
+
+    // Idempotency — Stripe guarantees at-least-once delivery.
+    // Insert the event ID; if it already exists we've processed it.
+    const { error: idempotencyError } = await supabase
+      .from("stripe_events")
+      .insert({ id: event.id });
+
+    if (idempotencyError) {
+      if (idempotencyError.code === "23505") {
+        console.log(`[StripeWebhook] Duplicate event ${event.id} — already processed, skipping`);
+        return NextResponse.json({ received: true });
+      }
+      // Non-fatal: table might not exist yet. Log and fall through to process.
+      console.warn("[StripeWebhook] Could not record event id (idempotency check skipped):", idempotencyError.message);
+    }
+
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -39,12 +56,15 @@ export async function POST(req: Request) {
           await handleSetupCompleted(session);
         } else if (session.mode === "payment") {
           const type = session.metadata?.type;
+          console.log(`[StripeWebhook] checkout.session.completed payment: type=${type} sessionId=${session.id}`);
           if (type === "creator_print_for_me") {
             await handleCreatorPayment(session);
           } else if (type === "distributor_shipping") {
             await handleDistributorShippingPayment(session);
           } else if (type === "store_order") {
             await handleStoreOrderPayment(session);
+          } else {
+            console.error(`[StripeWebhook] Unrecognized payment type "${type}" for session ${session.id} — doing nothing`);
           }
         }
         break;

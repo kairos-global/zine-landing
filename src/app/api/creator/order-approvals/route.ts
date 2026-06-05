@@ -86,10 +86,8 @@ export async function GET() {
         .eq("payment_status", "paid");
 
       paidItemIds = new Set(
-        (paidPayments || []).map(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (p: any) => p.distributor_order_item_id as string
-        )
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (paidPayments || []).map((p: any) => String(p.distributor_order_item_id))
       );
     }
 
@@ -101,7 +99,7 @@ export async function GET() {
       creator_reviewed_at: item.creator_reviewed_at,
       // Match the formula in creator-checkout: (qty × $0.10) + $0.30 flat fee, min $0.50
       cost_dollars: Math.max((item.quantity * 10 + 30) / 100, 0.50),
-      is_paid: paidItemIds.has(item.id),
+      is_paid: paidItemIds.has(String(item.id)),
       order: item.order,
       issue: item.issue,
     }));
