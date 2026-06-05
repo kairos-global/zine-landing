@@ -317,6 +317,35 @@ export default function AdminStorePage() {
     setDeletingId(null);
   }
 
+  async function markAsPaid(orderId: string) {
+    const res = await fetch(`/api/store/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "paid" }),
+    });
+    if (res.ok) {
+      toast.success("Order marked as paid.");
+      fetchOrders();
+    } else {
+      toast.error("Update failed.");
+    }
+  }
+
+  async function cancelOrder(orderId: string) {
+    if (!confirm("Cancel this order?")) return;
+    const res = await fetch(`/api/store/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    if (res.ok) {
+      toast.success("Order cancelled.");
+      fetchOrders();
+    } else {
+      toast.error("Update failed.");
+    }
+  }
+
   async function fulfillOrder(orderId: string) {
     const form = fulfillForm[orderId];
     if (!form?.tracking) {
@@ -377,9 +406,9 @@ export default function AdminStorePage() {
               }`}
             >
               {t}
-              {t === "orders" && paidOrders.length > 0 && (
+              {t === "orders" && (paidOrders.length + pendingOrders.length) > 0 && (
                 <span className="ml-2 bg-amber-400 text-black text-xs font-black rounded-full px-1.5">
-                  {paidOrders.length}
+                  {paidOrders.length + pendingOrders.length}
                 </span>
               )}
             </button>
@@ -509,15 +538,28 @@ export default function AdminStorePage() {
               </section>
             )}
 
-            {/* Pending (awaiting payment) */}
+            {/* Pending — awaiting payment confirmation */}
             {pendingOrders.length > 0 && (
               <section>
-                <h2 className="text-xs uppercase tracking-widest font-bold text-gray-500 mb-3">
-                  Pending Payment ({pendingOrders.length})
+                <h2 className="text-xs uppercase tracking-widest font-bold text-gray-500 mb-1">
+                  Awaiting Payment Confirmation ({pendingOrders.length})
                 </h2>
+                <p className="text-xs text-gray-400 mb-3">
+                  Payment may already be captured — use "Mark as Paid" to confirm and move to fulfillment.
+                </p>
                 <div className="flex flex-col gap-3">
                   {pendingOrders.map((order) => (
-                    <OrderCard key={order.id} order={order} fulfillingId={null} fulfillForm={{}} setFulfillingId={() => {}} setFulfillForm={() => {}} fulfillOrder={() => {}} />
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      fulfillingId={null}
+                      fulfillForm={{}}
+                      setFulfillingId={() => {}}
+                      setFulfillForm={() => {}}
+                      fulfillOrder={() => {}}
+                      onMarkPaid={markAsPaid}
+                      onCancel={cancelOrder}
+                    />
                   ))}
                 </div>
               </section>
@@ -582,9 +624,11 @@ type OrderCardProps = {
   setFulfillingId: (id: string | null) => void;
   setFulfillForm: React.Dispatch<React.SetStateAction<Record<string, { tracking: string; shipped_at: string; notes: string }>>>;
   fulfillOrder: (id: string) => void;
+  onMarkPaid?: (id: string) => void;
+  onCancel?: (id: string) => void;
 };
 
-function OrderCard({ order, fulfillingId, fulfillForm, setFulfillingId, setFulfillForm, fulfillOrder }: OrderCardProps) {
+function OrderCard({ order, fulfillingId, fulfillForm, setFulfillingId, setFulfillForm, fulfillOrder, onMarkPaid, onCancel }: OrderCardProps) {
   const isExpanded = fulfillingId === order.id;
   const form = fulfillForm[order.id] ?? { tracking: "", shipped_at: new Date().toISOString().slice(0, 10), notes: "" };
 
@@ -641,6 +685,22 @@ function OrderCard({ order, fulfillingId, fulfillForm, setFulfillingId, setFulfi
         <div className="flex flex-col items-end gap-2 shrink-0">
           {order.total_cents != null && (
             <span className="font-black text-base">{fmt(order.total_cents)}</span>
+          )}
+          {order.status === "pending" && (
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={() => onMarkPaid?.(order.id)}
+                className="bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-900 transition-colors"
+              >
+                Mark as Paid
+              </button>
+              <button
+                onClick={() => onCancel?.(order.id)}
+                className="border border-red-300 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           )}
           {order.status === "paid" && !isExpanded && (
             <button
