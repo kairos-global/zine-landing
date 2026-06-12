@@ -47,7 +47,6 @@ export default function StorePage() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
-  // Load cart from localStorage + check for success redirect
   useEffect(() => {
     try {
       const saved = localStorage.getItem(CART_KEY);
@@ -58,16 +57,14 @@ export default function StorePage() {
       setOrderSuccess(true);
       localStorage.removeItem(CART_KEY);
       setCart([]);
-      window.history.replaceState({}, '', '/products');
+      window.history.replaceState({}, '', '/store');
     }
   }, []);
 
-  // Persist cart to localStorage
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart]);
 
-  // Fetch products
   useEffect(() => {
     fetch('/api/store/products?in_stock=true')
       .then((r) => r.json())
@@ -161,7 +158,6 @@ export default function StorePage() {
                 key={product.id}
                 className="border-2 border-black rounded-2xl overflow-hidden bg-white flex flex-col"
               >
-                {/* Clickable image area */}
                 <button
                   onClick={() => setSelected(product)}
                   className="w-full aspect-square bg-white border-b-2 border-black flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors group overflow-hidden"
@@ -183,7 +179,6 @@ export default function StorePage() {
                   )}
                 </button>
 
-                {/* Info section */}
                 <div className="p-4 flex flex-col gap-1.5">
                   <p className="font-bold text-sm leading-snug">{product.name}</p>
                   <p className="text-sm font-semibold text-gray-500">{fmt(product.price_cents)}</p>
@@ -200,7 +195,6 @@ export default function StorePage() {
         </div>
       </main>
 
-      {/* Floating cart button */}
       {cartCount > 0 && (
         <button
           onClick={() => setCartOpen(true)}
@@ -213,7 +207,6 @@ export default function StorePage() {
         </button>
       )}
 
-      {/* Cart panel */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setCartOpen(false)} />
@@ -291,7 +284,6 @@ export default function StorePage() {
         </div>
       )}
 
-      {/* Product detail modal */}
       {selected && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-10"
@@ -301,7 +293,6 @@ export default function StorePage() {
             className="bg-white border-2 border-black rounded-2xl overflow-hidden flex w-full max-w-2xl max-h-[80vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Left: product image */}
             <div className="w-5/12 shrink-0 bg-gray-50 border-r-2 border-black flex flex-col items-center justify-center overflow-hidden">
               {selected.image_url ? (
                 <img
@@ -319,7 +310,6 @@ export default function StorePage() {
               )}
             </div>
 
-            {/* Right: details */}
             <div className="flex-1 p-8 overflow-y-auto flex flex-col min-h-[420px]">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">

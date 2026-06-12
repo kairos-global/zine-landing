@@ -558,7 +558,7 @@ function StoreOrdersView({ orders, loading }: { orders: StoreOrder[]; loading: b
         <p className="text-gray-600">No store orders yet</p>
         <p className="text-sm text-gray-500 mt-2">
           Orders from the{" "}
-          <a href="/products" className="text-blue-600 hover:underline">
+          <a href="/store" className="text-blue-600 hover:underline">
             Store
           </a>{" "}
           will appear here.

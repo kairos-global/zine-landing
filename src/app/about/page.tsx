@@ -1,42 +1,63 @@
 'use client'
 
+const intro = {
+  headline: 'Zineground is a platform for independent zine culture.',
+  body: 'We build the tools, the network, and the physical infrastructure so creators can publish, distribute, and get their work into the hands of real readers — offline and in person.',
+}
+
 const sections = [
   {
     color: '#A4A4A4',
     title: 'Browse Zines',
-    body: 'Discover self-published zines from creators in your community. From poetry and personal essays to local guides and niche obsessions — everything is independent and on the ground.',
+    body: 'Discover self-published zines from creators in your community. Poetry, personal essays, local guides, niche obsessions — all independent, all on the ground.',
   },
   {
     color: '#65CBF1',
-    title: 'Upload Zines',
-    body: 'Use ZineMat, our built-in zine toolkit, to design and publish your zine directly on Zineground. Build your layout, add interactive links, generate QR codes, and publish — all in one place.',
+    title: 'Make a Zine',
+    body: 'ZineMat is our built-in zine toolkit. Set your format, build your layout, add interactive links and QR codes, and publish — without ever leaving the platform.',
   },
   {
     color: '#F2DC6F',
     title: 'My Library',
-    body: 'All your work, always accessible. Save drafts as you go, manage your published issues, and download your PDFs whenever you need them.',
+    body: 'Everything you make lives here. Save drafts as you go, manage your published issues, download your PDFs, and see who has collected your work.',
   },
   {
     color: '#D16FF2',
     title: 'Distribution',
-    body: 'Physical zine distribution through a growing network of local shops, cafés, and venues. Apply to become a distributor or order print copies of your work to put in the hands of real readers.',
+    body: 'Print copies of your zine and get them into local shops, cafes, and venues through the Zineground distributor network. We handle print fulfillment — you set the terms.',
   },
   {
     color: '#F26565',
     title: 'The Map',
-    body: 'Find Zineground distributors near you. Every approved location is verified and pinned so readers always know where to pick up a copy.',
+    body: 'Every verified Zineground distributor is on the map. Readers can find where to pick up physical zines near them. Distributors appear once approved and address-verified.',
   },
   {
     color: '#82E385',
     title: 'The Market',
-    body: 'A space to buy and sell creative services within the Zineground community. Covers, layouts, illustrations, logos — if it belongs on a zine, it belongs here.',
+    body: 'A space to buy and sell creative services inside the Zineground community. Covers, layouts, illustrations, logos — if it belongs on a zine, it belongs here.',
+  },
+  {
+    color: '#FAB95B',
+    title: 'Store',
+    body: 'Physical tools for the zine maker. Displays for your shop or venue, creasing plates, cutting tools, and more — designed around the formats we support.',
   },
 ]
 
 export default function AboutPage() {
   return (
-    <main className="min-h-screen px-6 py-14 md:px-16 bg-[#F0EBCC] text-black">
-      <div className="max-w-3xl mx-auto flex flex-col gap-5">
+    <main className="min-h-screen bg-[#F0EBCC] text-black">
+      {/* Intro block */}
+      <div className="max-w-3xl mx-auto px-6 pt-16 pb-4 md:px-8">
+        <h1 className="text-4xl md:text-5xl font-black leading-tight mb-5">
+          {intro.headline}
+        </h1>
+        <p className="text-lg leading-relaxed text-gray-700 max-w-xl">
+          {intro.body}
+        </p>
+      </div>
+
+      {/* Feature sections */}
+      <div className="max-w-3xl mx-auto px-6 pb-20 md:px-8 flex flex-col gap-5 mt-10">
         {sections.map((section, i) => (
           <div
             key={i}
