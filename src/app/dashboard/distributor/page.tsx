@@ -113,7 +113,26 @@ function PendingView({ distributor }: { distributor: Distributor }) {
         />
         <div className="max-w-[720px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="rounded-2xl border shadow-inner bg-white/80 backdrop-blur p-6">
-            <h1 className="text-xl font-semibold mb-2">⏳ Registration Pending</h1>
+            <div
+              className="flex items-center justify-center w-14 h-14 rounded-full border-2 border-black mb-4"
+              style={{ backgroundColor: "#AAEEFF" }}
+            >
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="black"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-semibold mb-2">Registration Pending</h1>
             <p className="text-gray-700">
               Thanks for registering, {distributor.contact_name}. Our team is reviewing your
             application. You&apos;ll get access once approved.
@@ -134,7 +153,25 @@ function RejectedView() {
       />
       <div className="max-w-[720px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="rounded-2xl border shadow-inner bg-white/80 backdrop-blur p-6">
-          <h1 className="text-xl font-semibold mb-2">❌ Registration Rejected</h1>
+          <div
+            className="flex items-center justify-center w-14 h-14 rounded-full border-2 border-black mb-4"
+            style={{ backgroundColor: "#F26565" }}
+          >
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="black"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold mb-2">Registration Rejected</h1>
           <p className="text-gray-700">
             Unfortunately, your distributor application was not approved. Please
             contact support for details.
@@ -923,17 +960,36 @@ function DistributorRegistrationForm() {
         />
         <div className="max-w-[720px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="rounded-2xl border shadow-inner bg-white/80 backdrop-blur p-6">
+            <div
+              className="flex items-center justify-center w-14 h-14 rounded-full border-2 border-black mb-4"
+              style={{ backgroundColor: "#AAEEFF" }}
+            >
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="black"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
             <h1 className="text-xl sm:text-2xl font-semibold mb-4">
-              ✅ Registration Submitted
+              Registration Submitted
             </h1>
             <p className="text-gray-700 mb-6">
-              Thanks for registering! Our team will review your application and
-              approve you as a distributor. Once approved, you&apos;ll unlock access
-              to the Distributor Portal.
+              Thank you for registering! The team will review your application
+              and approve you as a distributor. Once approved, you&apos;ll unlock
+              access to the Distributor Portal.
             </p>
             <Link
               href="/dashboard"
-              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-xl transition"
+              className="inline-block border-2 border-black text-black font-medium px-6 py-2 rounded-xl transition hover:brightness-95"
+              style={{ backgroundColor: "#AAEEFF" }}
             >
               Back to Dashboard
             </Link>
