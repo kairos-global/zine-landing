@@ -5,6 +5,11 @@ import { useEffect, useState } from 'react'
 type Release = { title: string; body: string }
 type Group = { key: string; label: string; tint: string; items: Release[] }
 
+const HERO_BODY = [
+  "Zineground is designed for three aspects of zines: Creating, Reading, and Distributing. A zine creator can be anyone who's made a zine, and a zine can be anything, so really anyone can be a zine creator. A zine reader might be anyone reading, collecting, or looking for zines out in the world. Zine distributors are on Zineground distinct to what their typical nature would be, though.",
+  'Zineground offers a model of distribution where local businesses can set up a display on premise to stock physical copies of zines for creators, readers, and the general public. For creators, in that they can print and distribute their zines physically. For readers, in that they can now find that distributor on a map and know they can stop by to see the recent zines. We are making tools for the creation and distribution of zines, and we aim to empower artists, readers, businesses, and people alike with the services and work we do.',
+]
+
 const GROUPS: Group[] = [
   {
     key: 'distribute',
@@ -103,6 +108,12 @@ export default function AboutPage() {
           <p className="text-lg md:text-xl text-black/60 mt-4">
             Starting with the Mini Zine.
           </p>
+
+          <div className="mt-8 max-w-3xl flex flex-col gap-5 text-base md:text-lg leading-relaxed text-black/75">
+            {HERO_BODY.map((para, i) => (
+              <p key={i}>{para}</p>
+            ))}
+          </div>
         </header>
 
         {/* Releases — three sections side by side, each a single cycling card */}
