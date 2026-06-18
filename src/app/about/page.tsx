@@ -9,7 +9,7 @@ const GROUPS: Group[] = [
   {
     key: 'distribute',
     label: 'Distribute',
-    tint: '#F3D9FB',
+    tint: '#D16FF2',
     items: [
       {
         title: 'Browse and order zines ready for distribution',
@@ -24,7 +24,7 @@ const GROUPS: Group[] = [
   {
     key: 'create',
     label: 'Create',
-    tint: '#D6EFFA',
+    tint: '#65CBF1',
     items: [
       {
         title: 'Upload and publish your zines',
@@ -47,7 +47,7 @@ const GROUPS: Group[] = [
   {
     key: 'read',
     label: 'Read',
-    tint: '#FBF3C9',
+    tint: '#F2DC6F',
     items: [
       {
         title: 'Find zines and distributors on the map',
@@ -212,51 +212,79 @@ function SectionCard({
   const [index, setIndex] = useState(0)
   const count = group.items.length
 
-  // Auto-cycle through this section's topics
+  // Auto-cycle through this section's topics. setTimeout keyed on `index`
+  // so the full interval restarts after any manual change too.
   useEffect(() => {
     if (count <= 1) return
-    const id = setInterval(() => setIndex((i) => (i + 1) % count), 4500)
-    return () => clearInterval(id)
-  }, [count])
+    const id = setTimeout(() => setIndex((i) => (i + 1) % count), 6500)
+    return () => clearTimeout(id)
+  }, [index, count])
 
   const release = group.items[index]
+  const prev = () => setIndex((i) => (i - 1 + count) % count)
+  const next = () => setIndex((i) => (i + 1) % count)
+
+  // Bigger type for shorter titles so the text fills the box.
+  const len = release.title.length
+  const titleSize =
+    len <= 15
+      ? 'text-4xl md:text-5xl'
+      : len <= 30
+        ? 'text-3xl md:text-4xl'
+        : 'text-2xl md:text-3xl'
 
   return (
     <section className="flex flex-col">
-      <div className="border-b-2 border-black pb-3 mb-6">
+      <div className="border-b-2 pb-3 mb-6" style={{ borderColor: group.tint }}>
         <h2 className="text-2xl md:text-3xl font-black">{group.label}</h2>
       </div>
 
       <div className="border-2 border-black rounded-2xl overflow-hidden bg-white flex flex-col flex-1">
         <button
           onClick={() => onView(release)}
-          className="w-full aspect-square border-b-2 border-black flex items-center justify-center transition-colors hover:brightness-95"
+          className="w-full aspect-square border-b-2 border-black flex items-start p-6 text-left overflow-hidden transition-colors hover:brightness-95"
           style={{ backgroundColor: group.tint }}
           aria-label={`Read: ${release.title}`}
         >
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-black/40">
-            {group.label}
+          <span className={`font-black leading-[1.05] text-black ${titleSize}`}>
+            {release.title}
           </span>
         </button>
 
-        <div className="p-4 flex flex-col gap-3 flex-1">
-          <p className="font-bold text-base leading-snug flex-1 min-h-[3rem]">
-            {release.title}
-          </p>
-
+        <div className="p-4 flex flex-col gap-3">
           {count > 1 && (
-            <div className="flex gap-1.5">
-              {group.items.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setIndex(i)}
-                  aria-label={`Show topic ${i + 1}`}
-                  className={`h-2 rounded-full transition-all ${
-                    i === index ? 'w-5 bg-black' : 'w-2 bg-black/25 hover:bg-black/40'
-                  }`}
-                />
-              ))}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={prev}
+                aria-label="Previous topic"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border-2 border-black text-lg font-bold leading-none hover:bg-black hover:text-white transition-colors"
+              >
+                ‹
+              </button>
+
+              <div className="flex gap-1.5">
+                {group.items.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setIndex(i)}
+                    aria-label={`Show topic ${i + 1}`}
+                    className={`h-2 rounded-full transition-all ${
+                      i === index ? 'w-5 bg-black' : 'w-2 bg-black/25 hover:bg-black/40'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={next}
+                aria-label="Next topic"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border-2 border-black text-lg font-bold leading-none hover:bg-black hover:text-white transition-colors"
+              >
+                ›
+              </button>
             </div>
           )}
 
