@@ -10,7 +10,7 @@ const BubbleGrid = () => {
     { label: "Map", color: "F26565", href: "/map" },
     { label: "Upload Zine", color: "65CBF1", href: "/zinemat", forceRedirectUrl: "/zinemat" },
     { label: "About", color: "FFFFFF", href: "/about" },
-    { label: "Market", color: "82E385", href: "/dashboard/market", forceRedirectUrl: "/dashboard/market" },
+    { label: "Store", color: "82E385", href: "/store" },
     { label: "My Library", color: "F2DC6F", href: "/dashboard/library", forceRedirectUrl: "/dashboard/library" },
     { label: "Distribute", color: "D16FF2", href: "/dashboard/distributor", forceRedirectUrl: "/dashboard/distributor" },
     { label: "Browse Zines", color: "A4A4A4", href: "/browse-zines" },
@@ -55,7 +55,7 @@ const BubbleGrid = () => {
               <Bubble {...bubbles[1]} /> {/* Upload Zine */}
             </div>
             <div className="justify-self-end">
-              <Bubble {...bubbles[3]} /> {/* Market */}
+              <Bubble {...bubbles[3]} /> {/* Store */}
             </div>
           </div>
 
@@ -88,7 +88,7 @@ const BubbleGrid = () => {
             <Bubble {...bubbles[6]} /> {/* Browse Zines */}
           </div>
           <div className="absolute top-[200px] left-[675px]" style={rowStyle(200)}>
-            <Bubble {...bubbles[3]} /> {/* Market */}
+            <Bubble {...bubbles[3]} /> {/* Store */}
           </div>
 
           {/* Top row (top-[0px]) — last to appear, delay 400ms */}
