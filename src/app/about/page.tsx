@@ -6,8 +6,8 @@ type Release = { title: string; body: string }
 type Group = { key: string; label: string; tint: string; items: Release[] }
 
 const HERO_BODY = [
-  "Zineground is designed for three aspects of zines: Creating, Reading, and Distributing. A zine creator can be anyone who's made a zine, and a zine can be anything, so really anyone can be a zine creator. A zine reader might be anyone reading, collecting, or looking for zines out in the world. Zine distributors are on Zineground distinct to what their typical nature would be, though.",
-  'Zineground offers a model of distribution where local businesses can set up a display on premise to stock physical copies of zines for creators, readers, and the general public. For creators, in that they can print and distribute their zines physically. For readers, in that they can now find that distributor on a map and know they can stop by to see the recent zines. We are making tools for the creation and distribution of zines, and we aim to empower artists, readers, businesses, and people alike with the services and work we do.',
+  "Zineground is designed for three aspects of zines: Creating, Reading, and Distributing. A zine creator can be anyone who's made a zine, and a zine can be anything, so really anyone can be a zine creator. A zine reader might be anyone reading, collecting, or looking for zines out in the world. Zine distributors on Zineground are distinct from what their typical nature would be, though.",
+  'Zineground offers a model of distribution where local businesses can set up a display on-premise to stock physical copies of zines for creators, readers, and the general public. For creators, in that they can print and distribute their zines physically. For readers, in that they can now find that distributor on a map and know they can stop by to see the recent zines. We are making tools for the creation and distribution of zines, and we aim to empower artists, readers, businesses, and people with the services and work we do.',
 ]
 
 const GROUPS: Group[] = [
@@ -18,11 +18,15 @@ const GROUPS: Group[] = [
     items: [
       {
         title: 'Browse and order zines ready for distribution',
-        body: "Registered distributors can browse and order zines that are ready for distribution. This means the creator has approved and paid us to print and send them to you — or they'll do it themselves! When you place an order, the creator receives it in their portal and can approve or decline it. Distributors are charged for shipping once their order approvals are completed, and we print, fold, pack, and ship the zines to the distributor.",
+        body: `Registered distributors can browse and order published zines that are enabled for distribution. This means the creator has approved and intends to pay us to print and send them to you. Alternatively, to avoid the service cost, there is also an option to distribute themselves! Either way, when you place an order, the creator receives it in their portal and can then approve or decline it. Distributors are charged for shipping once their order approvals are completed, and we print, fold, pack, and ship the zines to the distributor.`,
       },
       {
-        title: 'Order displays to stock zines in',
-        body: 'Distributors can order from the different displays we offer to stock zines in.',
+        title: 'Order your display to stock zines in',
+        body: `Distributors can order from the growing range of displays we offer to stock zines in. Sizes currently fit only mini zines. Reach out to hello@zineground.com to learn more about early distributor registration and potentially get a free display.`,
+      },
+      {
+        title: 'Pricing',
+        body: `Distributor's pay for their order's shipping as well as a flat 50 cent fee per order. When checking out you can select what kind of shipping you'd like. Since creators can approve or decline a distributor's order, the distributor is only charged for the shipment once the full tally of approved zines for the order is complete. Upon payment Zineground prints, folds, packs, and ships your order.`,
       },
     ],
   },
@@ -33,19 +37,23 @@ const GROUPS: Group[] = [
     items: [
       {
         title: 'Upload and publish your zines',
-        body: 'Upload your zines and publish them to distribute physical copies. Use ZineMat, our built-in zine toolkit — and Canvas, currently in testing.',
+        body: `Upload your zines and publish them to distribute physical copies. Use the ZineMat, a modern zine toolkit and the Canvas (currently in testing), to get started.`,
       },
       {
         title: 'QR codes and links',
-        body: 'Add QR codes to your zines and control how your links work — issue QRs, collection QRs, and your own custom links, each with a downloadable QR.',
+        body: `Add all your relevant links with QR codes that the zinemat generates to programmatically track and deliver your QR scan requests. This gives you the ability to change the link on the QR, even after it's been printed. Download QR codes, paste them on your zine, and re-upload your finished file. All link and QR data is stored with each issue and scan and visit stats can be viewed in the dedicated Analytics page.`,
       },
       {
         title: 'We never take your work',
-        body: "Zineground never takes your work. We make our own zines — even for marketing purposes — and we never will use yours unless we're in communication to work together.",
+        body: `Zineground never takes your work. We make and publish our own zines and content. Unless we're directly in communication to work together, your work will never be reproduced or repurposed. We are looking for all kinds of talent interested in joining the team though! Hit us up!`,
       },
       {
-        title: 'Offline zines (proposed)',
-        body: 'A proposed concept where only zine covers are shown online. Once there are enough distributors in a city or area, that zone can go offline and only display zine covers, no longer allowing all users to see full zine files. Distributors can always see full zines, since they have exclusive access to the distributor portal.',
+        title: 'Pricing',
+        body: `Creators only pay on Zineground whenever they wish to distribute their zines using the 'distribute for me' service available when publishing a zine. It costs the creator 10 cents per mini zine copy that a distributor orders. Upon approval of a distributors order, the creator is asked to pay the respective amount to complete their side of the order.`,
+      },
+      {
+        title: 'Offline zines (proposal)',
+        body: `A proposed concept for zines to not be fully browsable. Only zine covers will be visible for offline zones. Basically once there is enough distributors in a city or area, that zone can go "offline" and only display zine covers in the Browse Zines page. Users will not be able to see full zine files online, so they'll be more incentivized to go out in search of them offline, in person. Distributors can always see full zines since they have exclusive access to the distributor portal. Voting soon.`,
       },
     ],
   },
@@ -56,15 +64,15 @@ const GROUPS: Group[] = [
     items: [
       {
         title: 'Find zines and distributors on the map',
-        body: 'Find zines and distributors on the map to see what is being made and where to pick up physical copies near you.',
+        body: `Find distributors on the map and find out what they're recently stocking.`,
       },
       {
         title: 'Your library',
-        body: 'After signing up, your library will allow you to view all your zines and collect them there.',
+        body: `After signing up, your library will allow you to view all your zines and collect them there.`,
       },
       {
         title: 'Collection QR codes',
-        body: 'Scan the collection QR printed inside a physical zine to add the digital issue to your library — a simple bridge between the copy in your hands and your account.',
+        body: `Scan the collection QR printed inside a physical zine to add the digital issue to your library. A digital keepsake for your favorite zines.`,
       },
     ],
   },
@@ -73,7 +81,7 @@ const GROUPS: Group[] = [
 const FAQS = [
   {
     q: 'Can I distribute from anywhere?',
-    a: "We're currently accepting the USA only, starting in El Paso, Texas. Businesses can be any third space — coffee shops, local bookstores, comic shops, hair salons, and more.",
+    a: "We're currently registering distributors in the USA only, starting in El Paso, Texas. Distributors can be anywhere from coffee shops, to bookstores, to art galleries and supply stores, your favorite music suite or venue, comic stores, record stores, tattoo studios, barbershops and hair salons, print shops, community centers, ceramics or pottery studios, jewelry shops, plant stores, laundromats, independent breweries, farmers markets, your local museums and libraries, fabric stores, coworking spaces, photo labs, and more.",
   },
   {
     q: 'What formats are acceptable?',
@@ -81,11 +89,11 @@ const FAQS = [
   },
   {
     q: 'What file types can I upload in the ZineMat uploads section?',
-    a: "Any file type works. If you're distributing, follow our recommended print settings. For now, your layout must be a horizontal 8.5 × 11 letter-size single document.",
+    a: "Any file type works. If you're distributing, we recommend a high quality PDF. For now, your layout must be a horizontal oriented, letter-size (8.5 × 11 inch) single document.",
   },
   {
     q: 'How do I know when my zines arrive at the distributor?',
-    a: "We notify creators and distributors when orders are placed, approved or declined, paid, processed, packed, shipped, and delivered. We always provide distributors with tracking of their order. You can enable push, email, or SMS notifications in your profile settings if you'd like to stay on top of things.",
+    a: "We notify creators and distributors when orders are placed, approved or declined, paid, processed, packed, shipped, and delivered. We always provide distributors with tracking information of their order. You can enable Email or SMS notifications too in profile settings if you'd like to stay on top of things.",
   },
   {
     q: 'What if my work is duplicated and reproduced?',
