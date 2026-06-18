@@ -24,14 +24,6 @@ const CART_KEY = 'zineground_store_cart';
 
 const NOTEPAD_BG = {
   backgroundColor: '#F0EBCC',
-  backgroundImage: `
-    repeating-linear-gradient(
-      transparent,
-      transparent 31px,
-      #d1d5db 31px,
-      #d1d5db 32px
-    )
-  `,
 } as React.CSSProperties;
 
 function fmt(cents: number) {
