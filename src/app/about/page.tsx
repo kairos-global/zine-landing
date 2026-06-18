@@ -81,7 +81,7 @@ const GROUPS: Group[] = [
 const FAQS = [
   {
     q: 'Can I distribute from anywhere?',
-    a: "We're currently registering distributors in the USA only, starting in El Paso, Texas. Distributors can be anywhere from coffee shops, to bookstores, to art galleries and supply stores, your favorite music suite or venue, comic stores, record stores, tattoo studios, barbershops and hair salons, print shops, community centers, ceramics or pottery studios, jewelry shops, plant stores, laundromats, independent breweries, farmers markets, your local museums and libraries, fabric stores, coworking spaces, photo labs, and more.",
+    a: "We're currently registering distributors in the USA only, starting in El Paso, Texas. Distributors can be anywhere from coffee shops, to bookstores, to art galleries and supply stores, your favorite music studio or venue, comic stores, record stores, tattoo studios, barbershops and hair salons, print shops, community centers, ceramics or pottery studios, jewelry shops, plant stores, laundromats, independent breweries, farmers markets, your local museums and libraries, fabric stores, coworking spaces, photo labs, and more.",
   },
   {
     q: 'What formats are acceptable?',
