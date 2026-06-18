@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type Release = { title: string; body: string }
 type Group = { key: string; label: string; tint: string; items: Release[] }
@@ -105,45 +105,17 @@ export default function AboutPage() {
           </p>
         </header>
 
-        {/* Releases — one section, divided into Distribute / Create / Read */}
+        {/* Releases — three sections side by side, each a single cycling card */}
         <div className="flex flex-col gap-14">
-          {GROUPS.map((group) => (
-            <section key={group.key}>
-              <div className="flex items-baseline gap-4 border-b-2 border-black pb-3 mb-6">
-                <h2 className="text-2xl md:text-3xl font-black">{group.label}</h2>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-                {group.items.map((release) => (
-                  <div
-                    key={release.title}
-                    className="border-2 border-black rounded-2xl overflow-hidden bg-white flex flex-col"
-                  >
-                    <button
-                      onClick={() => setSelected({ release, group })}
-                      className="w-full aspect-square border-b-2 border-black flex items-center justify-center cursor-pointer transition-colors hover:brightness-95"
-                      style={{ backgroundColor: group.tint }}
-                      aria-label={`Read: ${release.title}`}
-                    >
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-black/40">
-                        {group.label}
-                      </span>
-                    </button>
-
-                    <div className="p-4 flex flex-col gap-3 flex-1">
-                      <p className="font-bold text-sm leading-snug flex-1">{release.title}</p>
-                      <button
-                        onClick={() => setSelected({ release, group })}
-                        className="w-full border-2 border-black rounded-lg py-1.5 text-sm font-semibold hover:bg-black hover:text-white transition-colors"
-                      >
-                        View
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {GROUPS.map((group) => (
+              <SectionCard
+                key={group.key}
+                group={group}
+                onView={(release) => setSelected({ release, group })}
+              />
+            ))}
+          </div>
 
           {/* FAQ */}
           <section>
@@ -227,5 +199,75 @@ export default function AboutPage() {
         </div>
       )}
     </main>
+  )
+}
+
+function SectionCard({
+  group,
+  onView,
+}: {
+  group: Group
+  onView: (release: Release) => void
+}) {
+  const [index, setIndex] = useState(0)
+  const count = group.items.length
+
+  // Auto-cycle through this section's topics
+  useEffect(() => {
+    if (count <= 1) return
+    const id = setInterval(() => setIndex((i) => (i + 1) % count), 4500)
+    return () => clearInterval(id)
+  }, [count])
+
+  const release = group.items[index]
+
+  return (
+    <section className="flex flex-col">
+      <div className="border-b-2 border-black pb-3 mb-6">
+        <h2 className="text-2xl md:text-3xl font-black">{group.label}</h2>
+      </div>
+
+      <div className="border-2 border-black rounded-2xl overflow-hidden bg-white flex flex-col flex-1">
+        <button
+          onClick={() => onView(release)}
+          className="w-full aspect-square border-b-2 border-black flex items-center justify-center transition-colors hover:brightness-95"
+          style={{ backgroundColor: group.tint }}
+          aria-label={`Read: ${release.title}`}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-black/40">
+            {group.label}
+          </span>
+        </button>
+
+        <div className="p-4 flex flex-col gap-3 flex-1">
+          <p className="font-bold text-base leading-snug flex-1 min-h-[3rem]">
+            {release.title}
+          </p>
+
+          {count > 1 && (
+            <div className="flex gap-1.5">
+              {group.items.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setIndex(i)}
+                  aria-label={`Show topic ${i + 1}`}
+                  className={`h-2 rounded-full transition-all ${
+                    i === index ? 'w-5 bg-black' : 'w-2 bg-black/25 hover:bg-black/40'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => onView(release)}
+            className="w-full border-2 border-black rounded-lg py-1.5 text-sm font-semibold hover:bg-black hover:text-white transition-colors"
+          >
+            View
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
