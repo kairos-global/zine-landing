@@ -28,11 +28,20 @@ type Distributor = {
   address_verified_at?: string | null;
 };
 
+type StructuredAddress = {
+  street1: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+};
+
 type GeoSuggestion = {
   id: string;
   label: string;
   lat: number | null;
   lng: number | null;
+  structured?: StructuredAddress | null;
 };
 
 type TabType = "pending" | "approved" | "rejected";
@@ -622,6 +631,7 @@ function VerifyAddressModal({
           lat: selected.lat,
           lng: selected.lng,
           verified_address: selected.label,
+          structured: selected.structured ?? null,
         }),
       });
 

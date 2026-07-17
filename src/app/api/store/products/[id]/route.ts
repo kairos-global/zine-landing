@@ -20,7 +20,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { name, description, price_cents, category, image_url, in_stock, sort_order } = body;
+  const { name, description, price_cents, category, image_url, in_stock, sort_order, weight_oz, length_in, width_in, height_in } = body;
 
   const { data: existing } = await supabase
     .from("store_products")
@@ -69,6 +69,10 @@ export async function PATCH(
   if (image_url !== undefined) updateData.image_url = image_url;
   if (in_stock !== undefined) updateData.in_stock = in_stock;
   if (sort_order !== undefined) updateData.sort_order = sort_order;
+  if (weight_oz !== undefined) updateData.weight_oz = weight_oz;
+  if (length_in !== undefined) updateData.length_in = length_in;
+  if (width_in !== undefined) updateData.width_in = width_in;
+  if (height_in !== undefined) updateData.height_in = height_in;
 
   const { data, error } = await supabase
     .from("store_products")

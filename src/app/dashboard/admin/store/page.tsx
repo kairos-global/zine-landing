@@ -17,6 +17,10 @@ type StoreProduct = {
   image_url: string | null;
   in_stock: boolean;
   sort_order: number;
+  weight_oz: number | null;
+  length_in: number | null;
+  width_in: number | null;
+  height_in: number | null;
   stripe_product_id: string | null;
   stripe_price_id: string | null;
   created_at: string;
@@ -47,6 +51,9 @@ type StoreOrder = {
   shipping_address: ShippingAddress | null;
   stripe_payment_intent_id: string | null;
   tracking_number?: string | null;
+  shippo_label_url?: string | null;
+  shipping_carrier?: string | null;
+  shipping_service?: string | null;
   shipped_at?: string | null;
   fulfillment_notes?: string | null;
   created_at: string;
@@ -89,7 +96,17 @@ function ProductForm({ initial, onSave, onClose }: ProductFormProps) {
   );
   const [category, setCategory] = useState(initial?.category ?? "");
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
+  const [weightOz, setWeightOz] = useState(initial?.weight_oz != null ? String(initial.weight_oz) : "");
+  const [lengthIn, setLengthIn] = useState(initial?.length_in != null ? String(initial.length_in) : "");
+  const [widthIn, setWidthIn] = useState(initial?.width_in != null ? String(initial.width_in) : "");
+  const [heightIn, setHeightIn] = useState(initial?.height_in != null ? String(initial.height_in) : "");
   const [saving, setSaving] = useState(false);
+
+  // Parse a numeric input to a number, or null when blank/invalid.
+  const num = (v: string) => {
+    const n = parseFloat(v);
+    return v.trim() !== "" && !isNaN(n) && n >= 0 ? n : null;
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -107,6 +124,10 @@ function ProductForm({ initial, onSave, onClose }: ProductFormProps) {
         price_cents,
         category: category.trim() || null,
         image_url: imageUrl.trim() || null,
+        weight_oz: num(weightOz),
+        length_in: num(lengthIn),
+        width_in: num(widthIn),
+        height_in: num(heightIn),
       };
 
       let res: Response;
@@ -215,6 +236,52 @@ function ProductForm({ initial, onSave, onClose }: ProductFormProps) {
             />
             <p className="text-xs text-gray-400 mt-1">
               Paste a public image URL. Image upload coming soon.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">
+              Shipping size &amp; weight
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={weightOz}
+                onChange={(e) => setWeightOz(e.target.value)}
+                className="w-full border-2 border-black rounded-lg px-2 py-2 text-sm"
+                placeholder="oz"
+              />
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={lengthIn}
+                onChange={(e) => setLengthIn(e.target.value)}
+                className="w-full border-2 border-black rounded-lg px-2 py-2 text-sm"
+                placeholder="L in"
+              />
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={widthIn}
+                onChange={(e) => setWidthIn(e.target.value)}
+                className="w-full border-2 border-black rounded-lg px-2 py-2 text-sm"
+                placeholder="W in"
+              />
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={heightIn}
+                onChange={(e) => setHeightIn(e.target.value)}
+                className="w-full border-2 border-black rounded-lg px-2 py-2 text-sm"
+                placeholder="H in"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Weight (oz) and dimensions (in) for live shipping rates. Left blank, a default parcel is used.
             </p>
           </div>
           {initial && (
@@ -669,6 +736,25 @@ function OrderCard({ order, fulfillingId, fulfillForm, setFulfillingId, setFulfi
             <p className="text-xs text-gray-500 mt-2">
               Ship to: <strong>{order.shipping_name}</strong> — {formatAddress(order.shipping_address)}
             </p>
+          )}
+
+          {/* Shipping label — auto-purchased from Shippo once payment confirms */}
+          {order.shippo_label_url && (
+            <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+              <p className="font-semibold mb-1">Shipping label (auto-purchased)</p>
+              {(order.shipping_carrier || order.shipping_service) && (
+                <p>Carrier: {order.shipping_carrier} {order.shipping_service}</p>
+              )}
+              {order.tracking_number && <p>Tracking: {order.tracking_number}</p>}
+              <a
+                href={order.shippo_label_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-2 px-3 py-1.5 border-2 border-black bg-white text-black rounded-lg font-bold hover:bg-gray-50 transition-colors"
+              >
+                Download label
+              </a>
+            </div>
           )}
 
           {/* Fulfillment details */}

@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   if (!userIsAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
-  const { name, description, price_cents, category, image_url } = body;
+  const { name, description, price_cents, category, image_url, weight_oz, length_in, width_in, height_in } = body;
 
   if (!name || !price_cents || typeof price_cents !== "number") {
     return NextResponse.json({ error: "name and price_cents required" }, { status: 400 });
@@ -64,6 +64,10 @@ export async function POST(req: Request) {
       category: category ?? null,
       image_url: image_url ?? null,
       in_stock: true,
+      weight_oz: weight_oz ?? null,
+      length_in: length_in ?? null,
+      width_in: width_in ?? null,
+      height_in: height_in ?? null,
       stripe_product_id: stripeProduct.id,
       stripe_price_id: stripePrice.id,
     })

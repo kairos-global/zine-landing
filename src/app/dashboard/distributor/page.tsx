@@ -202,6 +202,16 @@ type DistributorOrder = {
 
 const CART_STORAGE_KEY = "zineground_distributor_cart";
 
+type RateOption = {
+  rateId: string;
+  amount: string;
+  currency: string;
+  provider: string;
+  service: string;
+  serviceToken: string;
+  estimatedDays: number | null;
+};
+
 // ========== APPROVED PORTAL ==========
 function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   const [activeTab, setActiveTab] = useState<"browse" | "stock" | "orders">("browse");
@@ -211,6 +221,11 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
+  // Live shipping rate the distributor picked in the cart (carrier/service is
+  // remembered; the exact amount is re-quoted at fulfillment for approved copies).
+  const [selectedRate, setSelectedRate] = useState<RateOption | null>(null);
+  // Delivery method: paid shipping or (El Paso only) free local delivery.
+  const [deliveryMethod, setDeliveryMethod] = useState<"shipping" | "local">("shipping");
 
   // Cart — initialised from localStorage so it persists across page visits
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -357,7 +372,20 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
       const orderRes = await fetch("/api/distributors/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: cart }),
+        body: JSON.stringify({
+          items: cart,
+          deliveryMethod,
+          // Carrier/service the distributor picked. Re-quoted at fulfillment.
+          selectedRate:
+            deliveryMethod === "local" || !selectedRate
+              ? null
+              : {
+                  rateId: selectedRate.rateId,
+                  provider: selectedRate.provider,
+                  serviceToken: selectedRate.serviceToken,
+                  amount: selectedRate.amount,
+                },
+        }),
       });
 
       if (!orderRes.ok) {
@@ -371,7 +399,14 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
 
       const orderData = await orderRes.json();
 
-      if (orderData.setupCheckoutUrl) {
+      if (orderData.localDelivery) {
+        // Free local delivery — no card step. Confirm and show the order.
+        toast.success("Local delivery order placed. Waiting on creator approvals.");
+        setCart([]);
+        localStorage.removeItem(CART_STORAGE_KEY);
+        setActiveTab("orders");
+        fetchOrders();
+      } else if (orderData.setupCheckoutUrl) {
         window.location.href = orderData.setupCheckoutUrl;
       } else {
         toast.error("Failed to get card setup URL");
@@ -450,6 +485,10 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
             onUpdateQuantity={updateCartQuantity}
             onPlaceOrder={placeOrder}
             placing={placing}
+            selectedRate={selectedRate}
+            onSelectRate={setSelectedRate}
+            deliveryMethod={deliveryMethod}
+            onSelectDeliveryMethod={setDeliveryMethod}
           />
         ) : activeTab === "stock" ? (
           <StockView stock={stock} />
@@ -508,6 +547,10 @@ function BrowseZines({
   onUpdateQuantity,
   onPlaceOrder,
   placing,
+  selectedRate,
+  onSelectRate,
+  deliveryMethod,
+  onSelectDeliveryMethod,
 }: {
   issues: Issue[];
   cart: CartItem[];
@@ -516,8 +559,76 @@ function BrowseZines({
   onUpdateQuantity: (id: string, qty: number) => void;
   onPlaceOrder: () => void;
   placing: boolean;
+  selectedRate: RateOption | null;
+  onSelectRate: (rate: RateOption | null) => void;
+  deliveryMethod: "shipping" | "local";
+  onSelectDeliveryMethod: (m: "shipping" | "local") => void;
 }) {
   const [pdfModalIssue, setPdfModalIssue] = useState<Issue | null>(null);
+
+  // Live shipping rates from Shippo, sized to the cart.
+  const [rates, setRates] = useState<RateOption[]>([]);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [ratesAvailable, setRatesAvailable] = useState(true);
+  const [localDeliveryAvailable, setLocalDeliveryAvailable] = useState(false);
+
+  const totalQty = cart.reduce((s, i) => s + i.quantity, 0);
+
+  // Re-quote whenever the total copy count changes (parcel weight scales with it).
+  useEffect(() => {
+    if (totalQty <= 0) {
+      setRates([]);
+      onSelectRate(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      setRatesLoading(true);
+      try {
+        const res = await fetch("/api/distributors/shipping-rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: cart }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        const localOk = !!data.localDeliveryAvailable;
+        setLocalDeliveryAvailable(localOk);
+        // If local delivery isn't offered, never leave the cart stuck on it.
+        if (!localOk && deliveryMethod === "local") onSelectDeliveryMethod("shipping");
+        if (data.available && Array.isArray(data.rates) && data.rates.length) {
+          setRatesAvailable(true);
+          setRates(data.rates as RateOption[]);
+          // Default to the cheapest (rates come sorted cheapest-first), unless the
+          // distributor already picked a service that's still offered.
+          const opts = data.rates as RateOption[];
+          const keep = selectedRate
+            ? opts.find((r) => r.serviceToken === selectedRate.serviceToken)
+            : null;
+          onSelectRate(keep ?? opts[0]);
+        } else {
+          setRatesAvailable(false);
+          setRates([]);
+          onSelectRate(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setRatesAvailable(false);
+          setRates([]);
+          onSelectRate(null);
+        }
+      } finally {
+        if (!cancelled) setRatesLoading(false);
+      }
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+    // Re-run when the copy count changes. selectedRate intentionally excluded to
+    // avoid a refetch loop (onSelectRate is called inside this effect).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalQty]);
 
   if (loading) {
     return <div className="text-center py-12 text-gray-600">Loading zines...</div>;
@@ -674,35 +785,129 @@ function BrowseZines({
                 })}
               </div>
 
+              {/* Delivery — live carrier rates, or free local delivery (El Paso) */}
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-900 mb-2">Delivery</p>
+                {localDeliveryAvailable && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => onSelectDeliveryMethod("local")}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        deliveryMethod === "local"
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
+                          : "border-gray-200 text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      Local delivery
+                      <span className="block text-xs font-normal text-gray-500">Free · El Paso</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectDeliveryMethod("shipping")}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                        deliveryMethod === "shipping"
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
+                          : "border-gray-200 text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      Ship it
+                      <span className="block text-xs font-normal text-gray-500">Carrier rates</span>
+                    </button>
+                  </div>
+                )}
+                {deliveryMethod === "local" ? (
+                  <p className="text-sm text-gray-700">
+                    Free local delivery in El Paso. No shipping charge.
+                  </p>
+                ) : ratesLoading ? (
+                  <p className="text-xs text-gray-500">Calculating live shipping rates…</p>
+                ) : ratesAvailable && rates.length > 0 ? (
+                  <div className="space-y-2">
+                    {rates.map((rate) => {
+                      const isSelected = selectedRate?.rateId === rate.rateId;
+                      return (
+                        <label
+                          key={rate.rateId}
+                          className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 cursor-pointer transition ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <input
+                              type="radio"
+                              name="shipping-rate"
+                              checked={isSelected}
+                              onChange={() => onSelectRate(rate)}
+                              className="shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {rate.provider} {rate.service}
+                              </p>
+                              {rate.estimatedDays != null && (
+                                <p className="text-xs text-gray-500">
+                                  Est. {rate.estimatedDays} day{rate.estimatedDays === 1 ? "" : "s"}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900 shrink-0">
+                            ${Number(rate.amount).toFixed(2)}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  (() => {
+                    const shipping =
+                      totalQty <= 10 ? 5 :
+                      totalQty <= 25 ? 8 :
+                      totalQty <= 50 ? 12 :
+                      totalQty <= 100 ? 18 :
+                      totalQty <= 200 ? 25 :
+                      totalQty <= 500 ? 40 : 60;
+                    const total = (shipping + 0.5).toFixed(2);
+                    return (
+                      <p className="text-xs text-gray-500">
+                        Est. shipping: <strong>${total}</strong> for {totalQty} copies
+                        <span className="text-gray-400"> (shipping + $0.50 fee)</span>
+                      </p>
+                    );
+                  })()
+                )}
+              </div>
+
               <button
                 onClick={onPlaceOrder}
                 disabled={placing}
                 className="w-full px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium"
               >
-                {placing ? "Processing..." : "Place Order & Save Card"}
+                {placing
+                  ? "Processing..."
+                  : deliveryMethod === "local"
+                  ? "Place Local Delivery Order"
+                  : "Place Order & Save Card"}
               </button>
-              {(() => {
-                const totalQty = cart.reduce((s, i) => s + i.quantity, 0);
-                const shipping =
-                  totalQty <= 10 ? 5 :
-                  totalQty <= 25 ? 8 :
-                  totalQty <= 50 ? 12 :
-                  totalQty <= 100 ? 18 :
-                  totalQty <= 200 ? 25 :
-                  totalQty <= 500 ? 40 : 60;
-                const total = (shipping + 0.50).toFixed(2);
-                return (
-                  <div className="mt-3 text-xs text-gray-500 text-center space-y-1">
+              <div className="mt-3 text-xs text-gray-400 text-center space-y-1">
+                {deliveryMethod === "local" ? (
+                  <p>
+                    Free local delivery — nothing to charge. Your order is confirmed once creators approve.
+                  </p>
+                ) : (
+                  <>
                     <p>
-                      Est. max charge: <strong>${total}</strong> for {totalQty} copies
-                    </p>
-                    <p className="text-gray-400">(shipping + $0.50 fee, if all approved)</p>
-                    <p className="text-gray-400 pt-1">
                       Your card is saved now — you are only charged once creators approve their copies.
                     </p>
-                  </div>
-                );
-              })()}
+                    <p>
+                      Final shipping is re-quoted at fulfillment for the copies that are approved.
+                    </p>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>

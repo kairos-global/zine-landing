@@ -42,3 +42,8 @@ next-env.d.ts
 
 # cowork
 COWORK_CONTEXT.md
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/

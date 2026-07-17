@@ -36,10 +36,18 @@ export async function PATCH(
 
     // ── Address verification path ──────────────────────────────────────────────
     if ("lat" in body || "lng" in body || "verified_address" in body) {
-      const { lat, lng, verified_address } = body as {
+      const { lat, lng, verified_address, structured } = body as {
         lat: number;
         lng: number;
         verified_address: string;
+        structured?: {
+          street1?: string;
+          street2?: string;
+          city?: string;
+          state?: string;
+          zip?: string;
+          country?: string;
+        } | null;
       };
 
       if (
@@ -53,15 +61,28 @@ export async function PATCH(
         );
       }
 
+      const updatePayload: Record<string, unknown> = {
+        lat,
+        lng,
+        verified_address,
+        address_verified_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Structured shipping address (from the geocode result) — used by Shippo
+      // for live rates and label generation. Only write fields we actually have.
+      if (structured) {
+        if (structured.street1 != null) updatePayload.ship_street1 = structured.street1;
+        if (structured.street2 != null) updatePayload.ship_street2 = structured.street2;
+        if (structured.city != null) updatePayload.ship_city = structured.city;
+        if (structured.state != null) updatePayload.ship_state = structured.state;
+        if (structured.zip != null) updatePayload.ship_zip = structured.zip;
+        if (structured.country != null) updatePayload.ship_country = structured.country;
+      }
+
       const { data, error } = await supabase
         .from("distributors")
-        .update({
-          lat,
-          lng,
-          verified_address,
-          address_verified_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("id", id)
         .select()
         .single();

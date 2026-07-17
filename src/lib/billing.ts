@@ -19,6 +19,36 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { stripe } from "./stripe";
 import { calculateShippingCost, DISTRIBUTOR_SERVICE_FEE } from "./shipping";
+import { getRates, pickRate, buyLabel, type ShippoAddress, type ShippoRate } from "./shippo";
+
+/** Distributor row fields needed to build a Shippo destination address. */
+type DistributorShipFields = {
+  business_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  ship_street1?: string | null;
+  ship_street2?: string | null;
+  ship_city?: string | null;
+  ship_state?: string | null;
+  ship_zip?: string | null;
+  ship_country?: string | null;
+};
+
+/** Build a Shippo destination address from a distributor, or null if not verified. */
+function buildToAddress(d: DistributorShipFields): ShippoAddress | null {
+  if (!d.ship_street1 || !d.ship_city || !d.ship_country) return null;
+  return {
+    name: d.business_name || undefined,
+    street1: d.ship_street1,
+    street2: d.ship_street2 || undefined,
+    city: d.ship_city,
+    state: d.ship_state || "",
+    zip: d.ship_zip || "",
+    country: d.ship_country,
+    email: d.contact_email || undefined,
+    phone: d.contact_phone || undefined,
+  };
+}
 
 /**
  * processCreatorPayment
@@ -129,6 +159,72 @@ export async function processDistributorSetup(
   }
 }
 
+/**
+ * processStoreOrder
+ *
+ * Called on store checkout return (verify-on-return) and as a webhook backup.
+ * Marks the store order paid (idempotent) and buys the shipping label for the
+ * rate the customer already paid for. Buying the label is also idempotent —
+ * it's skipped if a transaction already exists.
+ */
+export async function processStoreOrder(
+  sessionId: string,
+  supabase: SupabaseClient
+): Promise<void> {
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (session.payment_status !== "paid") {
+    console.log(`[processStoreOrder] Session ${sessionId} not paid (${session.payment_status})`);
+    return;
+  }
+
+  const { data: order } = await supabase
+    .from("store_orders")
+    .select("id, status, shippo_rate_id, shippo_transaction_id")
+    .eq("stripe_session_id", sessionId)
+    .maybeSingle();
+
+  if (!order) {
+    console.error(`[processStoreOrder] No store order for session ${sessionId}`);
+    return;
+  }
+
+  if (order.status !== "paid" && order.status !== "fulfilled") {
+    const { error } = await supabase
+      .from("store_orders")
+      .update({
+        status: "paid",
+        stripe_payment_intent_id: session.payment_intent as string,
+        total_cents: session.amount_total ?? undefined,
+      })
+      .eq("id", order.id);
+    if (error) {
+      console.error("[processStoreOrder] Failed to mark paid:", error);
+      throw error;
+    }
+    console.log(`[processStoreOrder] Order ${order.id} marked paid.`);
+  }
+
+  // Buy the label once. Non-fatal on failure — the order is paid; admin can
+  // buy a label manually from the Shippo dashboard or re-trigger.
+  if (order.shippo_rate_id && !order.shippo_transaction_id) {
+    try {
+      const label = await buyLabel(order.shippo_rate_id);
+      await supabase
+        .from("store_orders")
+        .update({
+          shippo_transaction_id: label.transactionId,
+          shippo_label_url: label.labelUrl,
+          tracking_number: label.trackingNumber || null,
+        })
+        .eq("id", order.id);
+      console.log(`[processStoreOrder] Order ${order.id}: label purchased, tracking ${label.trackingNumber}`);
+    } catch (labelErr) {
+      console.error(`[processStoreOrder] Order ${order.id}: label purchase failed:`, labelErr);
+    }
+  }
+}
+
 type IssueRef = { print_for_me: boolean } | null;
 type OrderItemRow = {
   id: string;
@@ -154,7 +250,7 @@ export async function checkAndFinalizeOrder(
   // Get the order — only act on orders waiting for creator approvals
   const { data: order } = await supabase
     .from("distributor_orders")
-    .select("id, status, stripe_payment_method_id, distributor_id")
+    .select("id, status, stripe_payment_method_id, distributor_id, shipping_carrier, shipping_service, delivery_method")
     .eq("id", orderId)
     .single();
 
@@ -218,10 +314,22 @@ export async function checkAndFinalizeOrder(
     return;
   }
 
-  // Get the distributor's Stripe customer ID
+  // Local delivery: free. No card, no charge, no label — just confirm the order.
+  if (order.delivery_method === "local") {
+    console.log(`[AutoBill] Order ${orderId}: local delivery, confirming free.`);
+    await supabase
+      .from("distributor_orders")
+      .update({ status: "placed", payment_status: "paid", shipping_cost: 0 })
+      .eq("id", orderId);
+    return;
+  }
+
+  // Get the distributor's Stripe customer ID + structured shipping address
   const { data: distributor } = await supabase
     .from("distributors")
-    .select("stripe_customer_id")
+    .select(
+      "stripe_customer_id, business_name, contact_email, contact_phone, ship_street1, ship_street2, ship_city, ship_state, ship_zip, ship_country"
+    )
     .eq("id", order.distributor_id)
     .single();
 
@@ -237,7 +345,28 @@ export async function checkAndFinalizeOrder(
     return;
   }
 
-  const shippingCost = calculateShippingCost(totalQty);
+  // Determine shipping cost. Prefer a live Shippo re-quote for the actually-
+  // approved copies (rate timing = re-fetch at finalize); fall back to the
+  // tiered estimate if the distributor has no verified address or Shippo errors.
+  let shippingCost = calculateShippingCost(totalQty);
+  let chosenRate: ShippoRate | null = null;
+  const toAddress = buildToAddress(distributor);
+  if (toAddress) {
+    try {
+      const { rates } = await getRates(toAddress, totalQty);
+      const rate = pickRate(rates, order.shipping_carrier, order.shipping_service);
+      if (rate) {
+        shippingCost = parseFloat(rate.amount);
+        chosenRate = rate;
+      }
+    } catch (rateErr) {
+      console.error(
+        `[AutoBill] Order ${orderId}: Shippo re-quote failed, using tier fallback:`,
+        rateErr
+      );
+    }
+  }
+
   const totalCharge = shippingCost + DISTRIBUTOR_SERVICE_FEE;
 
   console.log(
@@ -272,6 +401,34 @@ export async function checkAndFinalizeOrder(
         })
         .eq("id", orderId);
       console.log(`[AutoBill] Order ${orderId}: charged successfully.`);
+
+      // Buy the actual shipping label now that payment succeeded. The label/
+      // tracking auto-populate the order (tracking_number stays an admin
+      // override). A label failure is non-fatal — the charge already went
+      // through, so we log it and leave the label for manual admin purchase.
+      if (chosenRate) {
+        try {
+          const label = await buyLabel(chosenRate.object_id);
+          await supabase
+            .from("distributor_orders")
+            .update({
+              shippo_transaction_id: label.transactionId,
+              shippo_label_url: label.labelUrl,
+              tracking_number: label.trackingNumber || null,
+              shipping_carrier: chosenRate.provider,
+              shipping_service: chosenRate.servicelevel.token,
+            })
+            .eq("id", orderId);
+          console.log(
+            `[AutoBill] Order ${orderId}: label purchased, tracking ${label.trackingNumber}`
+          );
+        } catch (labelErr) {
+          console.error(
+            `[AutoBill] Order ${orderId}: label purchase failed (charge succeeded). Admin can buy manually:`,
+            labelErr
+          );
+        }
+      }
     } else {
       await supabase
         .from("distributor_orders")

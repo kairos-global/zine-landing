@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { stripe, createSetupCheckoutSession } from "@/lib/stripe";
-import { calculateTotalCharge } from "@/lib/shipping";
+import { calculateTotalCharge, DISTRIBUTOR_SERVICE_FEE, isLocalDeliveryEligible } from "@/lib/shipping";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -80,9 +80,18 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { items } = body as {
+    const { items, selectedRate, deliveryMethod } = body as {
       items: Array<{ issue_id: string; quantity: number }>;
+      selectedRate?: {
+        rateId: string;
+        provider: string;
+        serviceToken: string;
+        amount: string;
+      } | null;
+      deliveryMethod?: "shipping" | "local";
     };
+
+    const isLocal = deliveryMethod === "local";
 
     if (!items || items.length === 0) {
       return NextResponse.json(
@@ -94,7 +103,7 @@ export async function POST(req: Request) {
     // Get distributor with all fields needed for Stripe customer creation
     const { data: distributor, error: distError } = await supabase
       .from("distributors")
-      .select("id, status, business_address, business_name, contact_email, contact_name, stripe_customer_id")
+      .select("id, status, business_address, business_name, contact_email, contact_name, stripe_customer_id, ship_city, ship_country")
       .eq("user_id", userId)
       .single();
 
@@ -106,6 +115,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Must be an approved distributor" },
         { status: 403 }
+      );
+    }
+
+    // Local delivery is only valid for El Paso distributors (server-side guard).
+    if (isLocal && !isLocalDeliveryEligible(distributor.ship_city, distributor.ship_country)) {
+      return NextResponse.json(
+        { error: "Local delivery is only available for distributors in El Paso." },
+        { status: 422 }
       );
     }
 
@@ -144,8 +161,9 @@ export async function POST(req: Request) {
     }
 
     // ── Create/reuse Stripe Customer for this distributor ─────────────────────
+    // Skipped for local delivery — it's free, so no card is saved or charged.
     let stripeCustomerId = distributor.stripe_customer_id as string | null;
-    if (!stripeCustomerId) {
+    if (!isLocal && !stripeCustomerId) {
       // Use the logged-in user's actual email (from Clerk), not the business registration email
       const clerkUser = await currentUser();
       const userEmail =
@@ -175,6 +193,12 @@ export async function POST(req: Request) {
           distributor_id: distributor.id,
           status: "pending_creator_approval",
           ship_to_address: shipToAddress,
+          delivery_method: isLocal ? "local" : "shipping",
+          // Remember the carrier/service the distributor picked. The exact rate
+          // is re-quoted against approved copies at fulfillment (billing.ts).
+          shipping_carrier: isLocal ? null : selectedRate?.provider ?? null,
+          shipping_service: isLocal ? null : selectedRate?.serviceToken ?? null,
+          shippo_rate_id: isLocal ? null : selectedRate?.rateId ?? null,
         },
       ])
       .select()
@@ -219,6 +243,22 @@ export async function POST(req: Request) {
       );
     }
 
+    const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
+
+    // ── Local delivery: free, no card, no Stripe setup ────────────────────────
+    // The order waits on creator approvals like any other; at finalize it's
+    // marked placed/paid with $0 shipping and no label (billing.ts).
+    if (isLocal) {
+      return NextResponse.json({
+        success: true,
+        order,
+        localDelivery: true,
+        estimatedTotal: 0,
+        totalQuantity,
+        message: "Local delivery order created. Waiting on creator approvals.",
+      });
+    }
+
     // ── Create Stripe Setup Checkout ──────────────────────────────────────────
     const appOrigin =
       typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
@@ -226,8 +266,18 @@ export async function POST(req: Request) {
         ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
         : "http://localhost:3000";
 
-    const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
-    const estimatedTotal = calculateTotalCharge(totalQuantity);
+    // Use the live rate the distributor picked when available; otherwise the
+    // tiered estimate. Either way the real charge is computed at fulfillment.
+    const estimatedTotal = selectedRate
+      ? Number(selectedRate.amount) + DISTRIBUTOR_SERVICE_FEE
+      : calculateTotalCharge(totalQuantity);
+
+    if (!stripeCustomerId) {
+      return NextResponse.json(
+        { error: "Could not set up payment for this order" },
+        { status: 500 }
+      );
+    }
 
     const setupSession = await createSetupCheckoutSession(
       stripeCustomerId,

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { stripe } from "@/lib/stripe";
-import { checkAndFinalizeOrder } from "@/lib/billing";
+import { checkAndFinalizeOrder, processStoreOrder } from "@/lib/billing";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -227,31 +227,10 @@ async function handleDistributorShippingPayment(session: Stripe.Checkout.Session
 // ─── Store order checkout ─────────────────────────────────────────────────────
 
 async function handleStoreOrderPayment(session: Stripe.Checkout.Session) {
-  const orderId = session.metadata?.orderId;
-  if (!orderId) return;
-
-  type SessionExt = typeof session & {
-    shipping_details?: { name?: string; address?: Record<string, string> | null } | null;
-  };
-  const sess = session as SessionExt;
-
-  const { error } = await supabase
-    .from("store_orders")
-    .update({
-      status: "paid",
-      stripe_payment_intent_id: session.payment_intent as string,
-      total_cents: session.amount_total,
-      shipping_name: sess.shipping_details?.name ?? session.customer_details?.name ?? null,
-      shipping_address: sess.shipping_details?.address ?? null,
-    })
-    .eq("id", orderId);
-
-  if (error) {
-    console.error("[StripeWebhook] store_orders update failed:", error);
-    throw error;
-  }
-
-  console.log(`[StripeWebhook] Store order ${orderId} marked paid.`);
+  // Backup path — the primary flow is verify-on-return. processStoreOrder marks
+  // the order paid and buys the label (both idempotent). The shipping address is
+  // collected + stored at checkout, so we don't overwrite it from Stripe here.
+  await processStoreOrder(session.id, supabase);
 }
 
 // ─── PaymentIntent succeeded (backup / auto-billing PI events) ────────────────

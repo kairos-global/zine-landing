@@ -20,7 +20,38 @@ type CartItem = {
   image_url: string | null;
 };
 
+type ShipAddress = {
+  name: string;
+  street1: string;
+  street2: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+};
+
+type RateOption = {
+  rateId: string;
+  amount: string;
+  currency: string;
+  provider: string;
+  service: string;
+  serviceToken: string;
+  estimatedDays: number | null;
+};
+
 const CART_KEY = 'zineground_store_cart';
+const ADDRESS_KEY = 'zineground_store_address';
+
+const EMPTY_ADDRESS: ShipAddress = {
+  name: '',
+  street1: '',
+  street2: '',
+  city: '',
+  state: '',
+  zip: '',
+  country: 'US',
+};
 
 const NOTEPAD_BG = {
   backgroundColor: '#F0EBCC',
@@ -39,19 +70,104 @@ export default function StorePage() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
+  const [address, setAddress] = useState<ShipAddress>(EMPTY_ADDRESS);
+  const [rates, setRates] = useState<RateOption[]>([]);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [ratesAvailable, setRatesAvailable] = useState(false);
+  const [selectedRate, setSelectedRate] = useState<RateOption | null>(null);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(CART_KEY);
       if (saved) setCart(JSON.parse(saved));
+      const savedAddr = localStorage.getItem(ADDRESS_KEY);
+      if (savedAddr) setAddress({ ...EMPTY_ADDRESS, ...JSON.parse(savedAddr) });
     } catch {}
 
-    if (window.location.search.includes('order=success')) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('order') === 'success') {
+      const sessionId = params.get('session_id');
+      // Verify-on-return: confirm payment + buy the shipping label synchronously.
+      if (sessionId) {
+        fetch('/api/payments/store-checkout/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+        }).catch(() => {});
+      }
       setOrderSuccess(true);
       localStorage.removeItem(CART_KEY);
       setCart([]);
       window.history.replaceState({}, '', '/store');
     }
   }, []);
+
+  // Persist the address so customers don't retype it.
+  useEffect(() => {
+    try {
+      localStorage.setItem(ADDRESS_KEY, JSON.stringify(address));
+    } catch {}
+  }, [address]);
+
+  const cartKey = cart.map((i) => `${i.productId}:${i.quantity}`).join(',');
+  const addressComplete =
+    !!address.street1 &&
+    !!address.city &&
+    !!address.zip &&
+    !!address.country &&
+    (address.country.toUpperCase() !== 'US' || !!address.state);
+
+  // Fetch live rates whenever the cart or a complete address changes.
+  useEffect(() => {
+    if (!cart.length || !addressComplete) {
+      setRates([]);
+      setRatesAvailable(false);
+      setSelectedRate(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      setRatesLoading(true);
+      try {
+        const res = await fetch('/api/store/shipping-rates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+            address,
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.available && Array.isArray(data.rates) && data.rates.length) {
+          const opts = data.rates as RateOption[];
+          setRatesAvailable(true);
+          setRates(opts);
+          setSelectedRate((prev) => {
+            const keep = prev ? opts.find((r) => r.serviceToken === prev.serviceToken) : null;
+            return keep ?? opts[0];
+          });
+        } else {
+          setRatesAvailable(false);
+          setRates([]);
+          setSelectedRate(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setRatesAvailable(false);
+          setRates([]);
+          setSelectedRate(null);
+        }
+      } finally {
+        if (!cancelled) setRatesLoading(false);
+      }
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartKey, address.street1, address.street2, address.city, address.state, address.zip, address.country]);
 
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
@@ -102,6 +218,14 @@ export default function StorePage() {
 
   async function handleCheckout() {
     if (cart.length === 0 || checkingOut) return;
+    if (!addressComplete) {
+      alert('Please enter your shipping address.');
+      return;
+    }
+    if (!selectedRate) {
+      alert('Please select a shipping option.');
+      return;
+    }
     setCheckingOut(true);
     try {
       const res = await fetch('/api/payments/store-checkout', {
@@ -109,6 +233,14 @@ export default function StorePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          address,
+          selectedRate: {
+            rateId: selectedRate.rateId,
+            amount: selectedRate.amount,
+            provider: selectedRate.provider,
+            service: selectedRate.service,
+            serviceToken: selectedRate.serviceToken,
+          },
         }),
       });
       const data = await res.json();
@@ -256,21 +388,141 @@ export default function StorePage() {
                   </div>
                 ))
               )}
+
+              {/* Shipping address */}
+              {cart.length > 0 && (
+                <div className="border-t-2 border-black pt-4 mt-2 flex flex-col gap-2">
+                  <p className="text-sm font-bold">Shipping address</p>
+                  <input
+                    value={address.name}
+                    onChange={(e) => setAddress({ ...address, name: e.target.value })}
+                    placeholder="Full name"
+                    className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={address.street1}
+                    onChange={(e) => setAddress({ ...address, street1: e.target.value })}
+                    placeholder="Street address"
+                    className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={address.street2}
+                    onChange={(e) => setAddress({ ...address, street2: e.target.value })}
+                    placeholder="Apt, suite (optional)"
+                    className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      value={address.city}
+                      onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                      placeholder="City"
+                      className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={address.state}
+                      onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                      placeholder="State / region"
+                      className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      value={address.zip}
+                      onChange={(e) => setAddress({ ...address, zip: e.target.value })}
+                      placeholder="ZIP / postal"
+                      className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={address.country}
+                      onChange={(e) => setAddress({ ...address, country: e.target.value.toUpperCase() })}
+                      placeholder="Country (US)"
+                      maxLength={2}
+                      className="w-full border-2 border-black rounded-lg px-3 py-2 text-sm uppercase"
+                    />
+                  </div>
+
+                  {/* Live shipping rates */}
+                  <div className="mt-1">
+                    {!addressComplete ? (
+                      <p className="text-xs text-gray-400">Enter your address to see shipping options.</p>
+                    ) : ratesLoading ? (
+                      <p className="text-xs text-gray-500">Calculating shipping…</p>
+                    ) : ratesAvailable && rates.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {rates.map((rate) => {
+                          const isSelected = selectedRate?.rateId === rate.rateId;
+                          return (
+                            <label
+                              key={rate.rateId}
+                              className={`flex items-center justify-between gap-2 rounded-lg border-2 px-3 py-2 cursor-pointer transition ${
+                                isSelected ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-400'
+                              }`}
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="radio"
+                                  name="store-shipping-rate"
+                                  checked={isSelected}
+                                  onChange={() => setSelectedRate(rate)}
+                                  className="shrink-0"
+                                />
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-semibold truncate">
+                                    {rate.provider} {rate.service}
+                                  </span>
+                                  {rate.estimatedDays != null && (
+                                    <span className="block text-xs text-gray-500">
+                                      Est. {rate.estimatedDays} day{rate.estimatedDays === 1 ? '' : 's'}
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                              <span className="text-sm font-bold shrink-0">
+                                ${Number(rate.amount).toFixed(2)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-red-500">
+                        No shipping options for this address. Check the address and try again.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-6 border-t-2 border-black">
-              <div className="flex justify-between items-center mb-4">
-                <span className="font-semibold text-sm">Subtotal</span>
-                <span className="font-black text-lg">{fmt(cartTotal)}</span>
+              <div className="flex justify-between items-center text-sm mb-1">
+                <span className="font-semibold">Subtotal</span>
+                <span className="font-bold">{fmt(cartTotal)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm mb-3">
+                <span className="font-semibold">Shipping</span>
+                <span className="font-bold">
+                  {selectedRate ? `$${Number(selectedRate.amount).toFixed(2)}` : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mb-4 border-t border-gray-200 pt-2">
+                <span className="font-semibold text-sm">Total</span>
+                <span className="font-black text-lg">
+                  {selectedRate
+                    ? fmt(cartTotal + Math.round(Number(selectedRate.amount) * 100))
+                    : fmt(cartTotal)}
+                </span>
               </div>
               <button
                 onClick={handleCheckout}
-                disabled={cart.length === 0 || checkingOut}
+                disabled={cart.length === 0 || checkingOut || !selectedRate}
                 className="w-full bg-black text-white py-3 rounded-xl text-sm font-bold hover:bg-gray-900 transition-colors disabled:opacity-50"
               >
                 {checkingOut ? 'Redirecting...' : 'Checkout'}
               </button>
-              <p className="text-xs text-gray-400 text-center mt-2">Shipping & address collected at checkout</p>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Shipping calculated live. Payment on the next step.
+              </p>
             </div>
           </div>
         </div>

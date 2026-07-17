@@ -12,6 +12,20 @@
 export const DISTRIBUTOR_SERVICE_FEE = 0.5;
 
 /**
+ * Local delivery (free) is offered to distributors based in El Paso. Detection
+ * uses the structured shipping city captured at the admin map-verify step.
+ */
+export function isLocalDeliveryEligible(
+  city?: string | null,
+  country?: string | null
+): boolean {
+  return (
+    (country || "US").toUpperCase() === "US" &&
+    (city || "").trim().toLowerCase() === "el paso"
+  );
+}
+
+/**
  * Tiered shipping rate based on total approved copies.
  * Only counts print_for_me copies — self-distribute items are shipped by the creator.
  */

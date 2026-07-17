@@ -9,6 +9,22 @@ const supabase = createClient(
 );
 
 type CartItem = { productId: string; quantity: number };
+type ShipAddress = {
+  name?: string;
+  street1?: string;
+  street2?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+};
+type SelectedRate = {
+  rateId: string;
+  amount: string;
+  provider: string;
+  service: string;
+  serviceToken: string;
+};
 
 export async function POST(req: Request) {
   try {
@@ -16,9 +32,19 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const items: CartItem[] = body.items;
+    const address: ShipAddress = body.address ?? {};
+    const selectedRate: SelectedRate | null = body.selectedRate ?? null;
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
+    }
+
+    if (!address.street1 || !address.city || !address.zip || !address.country) {
+      return NextResponse.json({ error: "Shipping address is incomplete" }, { status: 400 });
+    }
+
+    if (!selectedRate) {
+      return NextResponse.json({ error: "A shipping option is required" }, { status: 400 });
     }
 
     // Validate quantities
@@ -65,10 +91,22 @@ export async function POST(req: Request) {
       };
     });
 
-    const totalCents = items.reduce((sum, item) => {
+    const productCents = items.reduce((sum, item) => {
       const p = products.find((p) => p.id === item.productId)!;
       return sum + p.price_cents * item.quantity;
     }, 0);
+    const shippingCents = Math.round(Number(selectedRate.amount) * 100);
+    const totalCents = productCents + shippingCents;
+
+    // Store the address in the shape the admin orders page already renders.
+    const shippingAddress = {
+      line1: address.street1,
+      line2: address.street2 || null,
+      city: address.city,
+      state: address.state || null,
+      postal_code: address.zip,
+      country: address.country,
+    };
 
     // Create pending order record
     const { data: order, error: orderError } = await supabase
@@ -77,6 +115,12 @@ export async function POST(req: Request) {
         clerk_user_id: userId ?? null,
         status: "pending",
         total_cents: totalCents,
+        shipping_name: address.name || null,
+        shipping_address: shippingAddress,
+        shippo_rate_id: selectedRate.rateId,
+        shipping_carrier: selectedRate.provider,
+        shipping_service: selectedRate.serviceToken,
+        shipping_cost_cents: shippingCents,
       })
       .select("id")
       .single();
@@ -99,16 +143,28 @@ export async function POST(req: Request) {
       })
     );
 
+    // Add the live shipping rate the customer picked as its own line item, so
+    // the amount charged matches the real carrier rate.
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        unit_amount: shippingCents,
+        product_data: { name: `Shipping — ${selectedRate.provider} ${selectedRate.service}` },
+      },
+      quantity: 1,
+    });
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://zineground.com";
 
-    // Create Stripe Checkout session — Stripe collects shipping address
+    // We already collected + quoted the shipping address ourselves, so we don't
+    // let Stripe re-collect it (that would let the destination drift from the
+    // address we rated). success_url carries the session id for verify-on-return.
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: lineItems,
       mode: "payment",
-      shipping_address_collection: { allowed_countries: ["US"] },
-      success_url: `${baseUrl}/products?order=success`,
-      cancel_url: `${baseUrl}/products?order=cancelled`,
+      success_url: `${baseUrl}/store?order=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/store?order=cancelled`,
       metadata: { orderId: order.id, type: "store_order" },
     });
 

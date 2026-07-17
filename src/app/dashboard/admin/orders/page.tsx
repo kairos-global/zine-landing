@@ -16,6 +16,10 @@ type Order = {
   tracking_number?: string;
   shipped_at?: string;
   fulfillment_notes?: string;
+  shippo_label_url?: string;
+  shipping_carrier?: string;
+  shipping_service?: string;
+  delivery_method?: string;
   created_at: string;
   updated_at?: string;
   distributor: {
@@ -107,6 +111,28 @@ export default function AdminOrdersPage() {
     }
   }
 
+  async function handleMarkDelivered(orderId: string) {
+    setProcessingId(orderId);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "fulfilled", shipped_at: new Date().toISOString().slice(0, 10) }),
+      });
+      if (res.ok) {
+        toast.success("Marked delivered");
+        fetchOrders();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to update order");
+      }
+    } catch {
+      toast.error("Failed to update order");
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
   async function handleCancel(orderId: string) {
     setProcessingId(orderId);
     try {
@@ -160,13 +186,17 @@ export default function AdminOrdersPage() {
 
   if (!userIsAdmin) return null;
 
+  const isLocal = (o: Order) => o.delivery_method === "local";
   const awaitingPaymentOrders = orders.filter(
     (o) => o.status === "pending_creator_approval"
   );
-  const readyToFulfillOrders = orders.filter((o) => o.status === "placed");
+  // Local-delivery orders get their own section, so keep them out of the shipping lists.
+  const readyToFulfillOrders = orders.filter((o) => o.status === "placed" && !isLocal(o));
   const draftOrders = orders.filter((o) => o.status === "draft");
-  const fulfilledOrders = orders.filter((o) => o.status === "fulfilled");
+  const fulfilledOrders = orders.filter((o) => o.status === "fulfilled" && !isLocal(o));
   const cancelledOrders = orders.filter((o) => o.status === "cancelled");
+  const localToDeliver = orders.filter((o) => isLocal(o) && o.status === "placed");
+  const localDelivered = orders.filter((o) => isLocal(o) && o.status === "fulfilled");
 
   const totalPending = awaitingPaymentOrders.length + readyToFulfillOrders.length + draftOrders.length;
 
@@ -253,6 +283,32 @@ export default function AdminOrdersPage() {
               </section>
             )}
 
+            {/* Local deliveries (El Paso) — free, no label, hand-delivered */}
+            {(localToDeliver.length > 0 || localDelivered.length > 0) && (
+              <section>
+                <h2 className="text-lg font-semibold mb-3 text-blue-700">
+                  Local deliveries — El Paso ({localToDeliver.length})
+                </h2>
+                <p className="text-sm text-gray-500 mb-3">
+                  Free local delivery. No shipping label — hand-deliver and mark delivered.
+                </p>
+                <div className="space-y-3">
+                  {localToDeliver.map((order) => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      onMarkDelivered={() => handleMarkDelivered(order.id)}
+                      onCancel={() => handleCancel(order.id)}
+                      processing={processingId === order.id}
+                    />
+                  ))}
+                  {localDelivered.map((order) => (
+                    <OrderCard key={order.id} order={order} processing={false} />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Draft (pre-payment, legacy) */}
             {draftOrders.length > 0 && (
               <section>
@@ -300,9 +356,13 @@ export default function AdminOrdersPage() {
               </section>
             )}
 
-            {totalPending === 0 && fulfilledOrders.length === 0 && cancelledOrders.length === 0 && (
-              <div className="text-center py-12 text-gray-500">No orders to show</div>
-            )}
+            {totalPending === 0 &&
+              fulfilledOrders.length === 0 &&
+              cancelledOrders.length === 0 &&
+              localToDeliver.length === 0 &&
+              localDelivered.length === 0 && (
+                <div className="text-center py-12 text-gray-500">No orders to show</div>
+              )}
           </div>
         )}
       </div>
@@ -319,14 +379,17 @@ function OrderCard({
   onFulfill,
   onCancel,
   onForceFinalize,
+  onMarkDelivered,
   processing,
 }: {
   order: Order;
   onFulfill?: (orderId: string, trackingNumber: string, shippedAt: string, fulfillmentNotes: string) => void;
   onCancel?: () => void;
   onForceFinalize?: () => void;
+  onMarkDelivered?: () => void;
   processing: boolean;
 }) {
+  const isLocalDelivery = order.delivery_method === "local";
   const [showFulfillForm, setShowFulfillForm] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [shippedAt, setShippedAt] = useState(todayString());
@@ -373,6 +436,11 @@ function OrderCard({
             <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[order.status] ?? "bg-gray-100 text-gray-600"}`}>
               {statusLabels[order.status] ?? order.status}
             </span>
+            {isLocalDelivery && (
+              <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-700 border border-blue-200">
+                Local delivery
+              </span>
+            )}
             {isPaid && (
               <span className="px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
                 Payment confirmed
@@ -446,6 +514,31 @@ function OrderCard({
         </div>
       </div>
 
+      {/* Shipping label — auto-purchased from Shippo once payment is confirmed */}
+      {order.shippo_label_url && (
+        <div className="border-t border-gray-100 pt-4 mb-4 bg-blue-50 rounded-lg p-4">
+          <p className="text-xs font-semibold text-blue-800 mb-2">Shipping label (auto-purchased)</p>
+          {(order.shipping_carrier || order.shipping_service) && (
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Carrier:</span> {order.shipping_carrier} {order.shipping_service}
+            </p>
+          )}
+          {order.tracking_number && (
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Tracking:</span> {order.tracking_number}
+            </p>
+          )}
+          <a
+            href={order.shippo_label_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-2 px-4 py-2 border-2 border-black bg-white text-black rounded-lg font-semibold text-sm hover:bg-gray-50 transition"
+          >
+            Download label
+          </a>
+        </div>
+      )}
+
       {/* Fulfillment details (fulfilled orders) */}
       {isFulfilled && (order.tracking_number || order.shipped_at || order.fulfillment_notes) && (
         <div className="border-t border-gray-100 pt-4 mb-4 bg-green-50 rounded-lg p-4">
@@ -509,6 +602,28 @@ function OrderCard({
           >
             Cancel
           </button>
+        </div>
+      )}
+
+      {/* Actions for placed local-delivery orders */}
+      {isPlaced && isLocalDelivery && onMarkDelivered && (
+        <div className="flex gap-3 border-t border-gray-100 pt-4">
+          <button
+            onClick={onMarkDelivered}
+            disabled={processing}
+            className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium text-sm"
+          >
+            {processing ? "Processing..." : "Mark Delivered"}
+          </button>
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              disabled={processing}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition disabled:opacity-50 text-sm"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       )}
 
