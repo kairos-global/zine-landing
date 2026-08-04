@@ -1,59 +1,45 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import clsx from "clsx";
+import { InteractivityView } from "./interactivity";
 
-import { InteractivityView } from "./interactivity"; // named export from interactivity/index.ts
-import { CanvasView } from "./canvas"; // named export from canvas/index.ts
+export default function Tabs() {
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
-type TabKey = "INTERACTIVITY" | "CANVAS";
-
-interface TabsProps {
-  defaultTab?: TabKey;
-  onChange?: (tab: TabKey) => void;
-}
-
-const TABS: Record<TabKey, string> = {
-  INTERACTIVITY: "Interactivity",
-  CANVAS: "Canvas",
-};
-
-export default function Tabs({ defaultTab = "INTERACTIVITY", onChange }: TabsProps) {
-  const [active, setActive] = useState<TabKey>(defaultTab);
-
-  const handleTabClick = (tab: TabKey) => {
-    setActive(tab);
-    if (onChange) onChange(tab);
-  };
+  async function createCanvas() {
+    setCreating(true);
+    setError("");
+    try {
+      const response = await fetch("/api/canvas", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not create canvas");
+      router.push(`/canvas?id=${data.issueId}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not create canvas");
+      setCreating(false);
+    }
+  }
 
   return (
-    <div className="mb-6">
-      {/* Tab header buttons */}
-      <div className="flex gap-2 border-b border-gray-300">
-        {Object.entries(TABS).map(([key, label]) => {
-          const tabKey = key as TabKey;
-          const isActive = active === tabKey;
-          return (
-            <button
-              key={tabKey}
-              onClick={() => handleTabClick(tabKey)}
-              className={clsx(
-                "px-4 py-2 text-sm font-medium rounded-t-lg border",
-                isActive
-                  ? "bg-white border-gray-300 border-b-transparent"
-                  : "bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200"
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab content */}
-      <div className="mt-4">
-        {active === "INTERACTIVITY" && <InteractivityView />}
-        {active === "CANVAS" && <CanvasView />}
+    <div className="space-y-6">
+      <section className="flex flex-col gap-3 rounded-2xl border-2 border-black bg-[#AAEEFF] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Build 8 page mini zine</h2>
+          {error && <p className="mt-2 text-sm font-semibold text-red-700">{error}</p>}
+        </div>
+        <button onClick={createCanvas} disabled={creating} className="shrink-0 rounded-xl border-2 border-black bg-[#FFEA69] px-5 py-2.5 font-bold shadow-[3px_3px_0_#000] transition hover:-translate-y-0.5 disabled:opacity-60">
+          {creating ? "Creating file…" : "Go to Canvas"}
+        </button>
+      </section>
+      <div>
+        <div className="mb-4 border-b-2 border-black pb-3">
+          <h2 className="text-lg font-bold">Upload & file settings</h2>
+          <p className="text-sm text-gray-600">Manage an existing PDF zine and its interactive links.</p>
+        </div>
+        <InteractivityView />
       </div>
     </div>
   );

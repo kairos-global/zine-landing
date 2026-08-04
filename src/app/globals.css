@@ -24,3 +24,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-space-grotesk), sans-serif;
 }
+@layer components {
+  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[.16em] text-gray-500; }
+  .editor-button { @apply rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-30; }
+}
