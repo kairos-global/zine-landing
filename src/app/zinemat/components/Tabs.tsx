@@ -25,13 +25,15 @@ export default function Tabs() {
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-3 rounded-2xl border-2 border-black bg-[#AAEEFF] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="flex flex-col gap-5 rounded-2xl border-2 border-black bg-[#AAEEFF] p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold">Build 8 page mini zine</h2>
+          <p className="mb-1 text-xs font-bold uppercase tracking-[.2em]">Zineground canvas</p>
+          <h2 className="text-2xl font-bold">Build an 8-page mini zine</h2>
+          <p className="mt-2 max-w-xl text-sm">Choose images, frame every page, set the color, then add type across the complete sheet.</p>
           {error && <p className="mt-2 text-sm font-semibold text-red-700">{error}</p>}
         </div>
-        <button onClick={createCanvas} disabled={creating} className="shrink-0 rounded-xl border-2 border-black bg-[#FFEA69] px-5 py-2.5 font-bold shadow-[3px_3px_0_#000] transition hover:-translate-y-0.5 disabled:opacity-60">
-          {creating ? "Creating file…" : "Go to Canvas"}
+        <button onClick={createCanvas} disabled={creating} className="shrink-0 rounded-xl border-2 border-black bg-[#FFEA69] px-6 py-3 font-bold shadow-[4px_4px_0_#000] transition hover:-translate-y-0.5 disabled:opacity-60">
+          {creating ? "Creating file…" : "+ New Canvas"}
         </button>
       </section>
       <div>
