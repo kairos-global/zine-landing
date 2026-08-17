@@ -2,14 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
+import { GRID_ORDER, GUIDES, PANEL_ASPECT, SHEET, pageLabel } from "@/lib/zine-imposition";
+import { freshState, sheetPdf, SHEET_FONT, type CanvasState, type Frame, type Page } from "@/lib/zine-sheet";
 
-type Frame = "full" | "inset" | "portrait" | "split";
-type Page = { image: string; frame: Frame; frameSet: boolean };
-type TextLayer = { id: string; text: string; x: number; y: number; size: number };
-type CanvasState = { pages: Page[]; background: string; backgroundSet: boolean; texts: TextLayer[] };
 type SaveState = "loading" | "saved" | "saving" | "error";
-
-const freshState = (): CanvasState => ({ pages: Array.from({ length: 8 }, () => ({ image: "", frame: "full" as Frame, frameSet: false })), background: "#FFF7D6", backgroundSet: false, texts: [] });
 const frames: { id: Frame; label: string; hint: string }[] = [
   { id: "full", label: "Full bleed", hint: "Edge to edge" }, { id: "inset", label: "Gallery", hint: "Wide margin" },
   { id: "portrait", label: "Portrait", hint: "Tall crop" }, { id: "split", label: "Offset", hint: "Editorial crop" },
@@ -25,6 +21,9 @@ export default function ZineCanvas({ issueId }: { issueId: string }) {
   const [title, setTitle] = useState("Untitled canvas");
   const [textDraft, setTextDraft] = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [sheetWidth, setSheetWidth] = useState(0);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   useEffect(() => { fetch(`/api/canvas/${issueId}`).then(async response => {
     const data = await response.json(); if (!response.ok) throw new Error(data.error);
@@ -41,6 +40,33 @@ export default function ZineCanvas({ issueId }: { issueId: string }) {
 
   useEffect(() => { if (!loaded) return; setSaveState("saving"); if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(() => save(state), 700); return () => { if (saveTimer.current) clearTimeout(saveTimer.current); }; }, [state, loaded, save]);
   const update = (fn: (value: CanvasState) => CanvasState) => setState(current => fn(current));
+
+  // Type is stored in points so the preview and the PDF agree. That means the
+  // preview has to know how wide it is being drawn, which only the DOM knows.
+  useEffect(() => {
+    const element = sheetRef.current;
+    if (!element) { setSheetWidth(0); return; }
+    const observer = new ResizeObserver(entries => setSheetWidth(entries[0].contentRect.width));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [mode]);
+  const typeScale = sheetWidth ? sheetWidth / SHEET.width : 0;
+
+  async function downloadSheet() {
+    setExporting("Building the sheet…");
+    try {
+      const blob = await sheetPdf(state, { guides: true, title });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${(title || "zine").replace(/\s+/g, "-").toLowerCase()}-sheet.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      setExporting(null);
+    } catch (error) {
+      setExporting(error instanceof Error ? error.message : "Could not build the sheet.");
+      setTimeout(() => setExporting(null), 4000);
+    }
+  }
 
   async function chooseImages(files: FileList | null) {
     if (!files) return;
@@ -77,19 +103,39 @@ export default function ZineCanvas({ issueId }: { issueId: string }) {
 
       <section className="min-w-0">
         {mode === "page" ? <>
-          <div className="mb-3 flex items-center justify-between"><button onClick={() => movePage(page, -1)} disabled={page === 0} className="editor-button">← Move</button><b>Page {page + 1} of 8</b><button onClick={() => movePage(page, 1)} disabled={page === 7} className="editor-button">Move →</button></div>
-          <div className="mx-auto aspect-[3/4] max-h-[680px] overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}><PageImage item={state.pages[page]} /></div>
-          <div className="mt-5 grid grid-cols-8 gap-2">{state.pages.map((item, index) => <button key={index} onClick={() => setPage(index)} className={clsx("aspect-[3/4] overflow-hidden border-2", page === index ? "border-black ring-2 ring-[#65CBF1]" : "border-gray-400")} style={{ background: state.background }}><PageImage item={item} /><span className="sr-only">Page {index + 1}</span></button>)}</div>
+          <div className="mb-3 flex items-center justify-between"><button onClick={() => movePage(page, -1)} disabled={page === 0} className="editor-button">← Move</button><b>{pageLabel(page + 1)} · {page + 1} of {SHEET.pages}</b><button onClick={() => movePage(page, 1)} disabled={page === 7} className="editor-button">Move →</button></div>
+          <div className="mx-auto max-h-[680px] overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ aspectRatio: PANEL_ASPECT, background: state.background }}><PageImage item={state.pages[page]} /></div>
+          <div className="mt-5 grid grid-cols-8 gap-2">{state.pages.map((item, index) => <button key={index} onClick={() => setPage(index)} className={clsx("overflow-hidden border-2", page === index ? "border-black ring-2 ring-[#65CBF1]" : "border-gray-400")} style={{ aspectRatio: PANEL_ASPECT, background: state.background }}><PageImage item={item} /><span className="sr-only">Page {index + 1}</span></button>)}</div>
         </> : <>
-          <div className="mb-3"><b>Top view · complete print sheet</b><p className="text-xs text-gray-600">Add and position type across the whole layout. Images and frames are locked in this view.</p></div>
-          <div className="relative grid aspect-[11/8.5] grid-cols-4 grid-rows-2 overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}>{state.pages.map((item, index) => <div key={index} className="relative overflow-hidden border border-black/20"><PageImage item={item}/><span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] text-white">{index + 1}</span></div>)}{state.texts.map(text => <div key={text.id} className="absolute cursor-move border border-dashed border-black/40 bg-white/30 px-1 font-bold leading-none" style={{ left: `${text.x}%`, top: `${text.y}%`, fontSize: `${Math.max(10, text.size / 2)}px` }}>{text.text}</div>)}</div>
+          <div className="mb-3"><b>Top view · the printed sheet</b><p className="text-xs text-gray-600">This is the paper, not the reading order. Pages 4–7 sit upside down because that is what the fold requires — print it, fold it, and it reads 1 to 8.</p></div>
+          <div ref={sheetRef} className="relative grid grid-cols-4 grid-rows-2 overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ aspectRatio: `${SHEET.width} / ${SHEET.height}`, background: state.background }}>
+            {GRID_ORDER.map(cell => (
+              <div key={cell.page} className="relative overflow-hidden">
+                <div className={clsx("h-full w-full", cell.flipped && "rotate-180")}><PageImage item={state.pages[cell.page - 1]} /></div>
+                <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] font-bold text-white">{cell.page}{cell.flipped ? " \u2191\u2193" : ""}</span>
+              </div>
+            ))}
+
+            {/* Creases, and the one cut. The cut is solid and heavier because it
+                is the only line on the sheet that a knife goes near. */}
+            {GUIDES.folds.vertical.map(fraction => (
+              <div key={fraction} className="pointer-events-none absolute top-0 bottom-0 border-l border-dashed border-black/40" style={{ left: `${fraction * 100}%` }} />
+            ))}
+            {GUIDES.folds.horizontalSegments.map(segment => (
+              <div key={segment.from} className="pointer-events-none absolute border-t border-dashed border-black/40" style={{ top: "50%", left: `${segment.from * 100}%`, width: `${(segment.to - segment.from) * 100}%` }} />
+            ))}
+            <div className="pointer-events-none absolute bg-black" style={{ top: "50%", height: 2, marginTop: -1, left: `${GUIDES.cut.from * 100}%`, width: `${(GUIDES.cut.to - GUIDES.cut.from) * 100}%` }} />
+
+            {state.texts.map(text => <div key={text.id} className="absolute cursor-move border border-dashed border-black/40 bg-white/30 px-1 font-bold leading-none" style={{ left: `${text.x}%`, top: `${text.y}%`, fontSize: `${Math.max(6, text.size * typeScale)}px`, fontFamily: SHEET_FONT }}>{text.text}</div>)}
+          </div>
+          <p className="mt-2 text-xs text-gray-600"><b>Heavy line = cut.</b> Dashed = fold. Type sits on the sheet, so it does not turn with the pages.</p>
         </>}
       </section>
 
       <aside className="rounded-2xl border-2 border-black bg-[#FFFDF5] p-4"><p className="eyebrow">4 · Type layer</p>{mode === "top" ? <><textarea value={textDraft} onChange={event => setTextDraft(event.target.value)} placeholder="Write something…" className="mt-2 w-full rounded-lg border-2 border-black p-3 text-sm"/><button onClick={addText} className="mt-2 w-full rounded-lg border-2 border-black bg-[#AAEEFF] py-2 text-sm font-bold">+ Add to sheet</button><div className="mt-4 space-y-4">{state.texts.map(text => <div key={text.id} className="rounded-lg border bg-white p-2"><div className="flex justify-between text-xs font-bold"><span className="truncate">{text.text}</span><button onClick={() => update(current => ({ ...current, texts: current.texts.filter(item => item.id !== text.id) }))}>×</button></div><label className="mt-2 block text-[10px]">Horizontal<input type="range" min="0" max="85" value={text.x} onChange={e => positionText(text.id, "x", +e.target.value)} className="w-full"/></label><label className="block text-[10px]">Vertical<input type="range" min="0" max="85" value={text.y} onChange={e => positionText(text.id, "y", +e.target.value)} className="w-full"/></label></div>)}</div></> : <div className="mt-2 rounded-xl bg-gray-100 p-4 text-sm">Type is edited only in <b>Top view</b>, so it can move freely across page boundaries.<button onClick={() => setMode("top")} className="mt-3 block font-bold underline">Open top view →</button></div>}</aside>
     </div>
 
-    <footer className="sticky bottom-0 z-20 border-t-2 border-black bg-[#171717] px-4 py-3 text-white"><div className="mx-auto flex max-w-[1450px] flex-wrap items-center gap-2"><b className="mr-2 text-sm">Canvas checklist</b>{steps.map((step, index) => <span key={step.label} className={clsx("rounded-full border px-3 py-1 text-xs", step.done ? "border-green-400 bg-green-400/20" : "border-white/30 text-white/60")}>{step.done ? "✓" : index + 1} {step.label} {step.detail}</span>)}<button disabled={!readyToName} onClick={() => setNaming(true)} className="ml-auto rounded-lg bg-[#FFEA69] px-4 py-2 text-sm font-bold text-black disabled:bg-gray-600 disabled:text-gray-300">Finish & name →</button></div></footer>
+    <footer className="sticky bottom-0 z-20 border-t-2 border-black bg-[#171717] px-4 py-3 text-white"><div className="mx-auto flex max-w-[1450px] flex-wrap items-center gap-2"><b className="mr-2 text-sm">Canvas checklist</b>{steps.map((step, index) => <span key={step.label} className={clsx("rounded-full border px-3 py-1 text-xs", step.done ? "border-green-400 bg-green-400/20" : "border-white/30 text-white/60")}>{step.done ? "✓" : index + 1} {step.label} {step.detail}</span>)}<button disabled={imageCount === 0 || exporting !== null} onClick={downloadSheet} className="ml-auto rounded-lg border-2 border-white/40 px-4 py-2 text-sm font-bold text-white disabled:border-white/10 disabled:text-white/30">{exporting ?? "Download print sheet (PDF)"}</button><button disabled={!readyToName} onClick={() => setNaming(true)} className="rounded-lg bg-[#FFEA69] px-4 py-2 text-sm font-bold text-black disabled:bg-gray-600 disabled:text-gray-300">Finish & name →</button></div></footer>
     {naming && <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"><div className="w-full max-w-md rounded-2xl border-2 border-black bg-[#FFFDF5] p-6 shadow-[8px_8px_0_#AAEEFF]"><p className="eyebrow">Final step</p><h2 className="mt-1 text-2xl font-bold">Name your mini zine</h2><p className="mt-2 text-sm text-gray-600">Your canvas already exists and is saved. This name will identify it in your library.</p><input autoFocus value={title === "Untitled canvas" ? "" : title} onChange={e => setTitle(e.target.value)} placeholder="My brilliant zine" className="mt-5 w-full rounded-lg border-2 border-black p-3"/><div className="mt-4 flex justify-end gap-2"><button onClick={() => setNaming(false)} className="px-4 py-2">Not yet</button><button disabled={!title.trim() || title === "Untitled canvas"} onClick={() => { save(state, title); setNaming(false); }} className="rounded-lg border-2 border-black bg-[#FFEA69] px-4 py-2 font-bold disabled:opacity-40">Name & finish</button></div></div></div>}
   </main>;
 }
