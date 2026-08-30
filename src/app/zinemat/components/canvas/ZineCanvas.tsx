@@ -10,6 +10,28 @@ type CanvasState = { pages: Page[]; background: string; backgroundSet: boolean; 
 type SaveState = "loading" | "saved" | "saving" | "error";
 
 const freshState = (): CanvasState => ({ pages: Array.from({ length: 8 }, () => ({ image: "", frame: "full" as Frame, frameSet: false })), background: "#FFF7D6", backgroundSet: false, texts: [] });
+/**
+ * Where each page lands on the printed sheet.
+ *
+ * Fold a sheet in eight and the pages do not sit in reading order. The bottom
+ * row runs back cover, front cover, 2, 3; the top row carries pages 7 down to 4
+ * and prints upside down. Getting this wrong is the single most common way a
+ * hand-made mini zine is ruined, so it is written out as a table rather than
+ * computed — a formula would be shorter and would hide the thing worth
+ * checking.
+ *
+ *     7 ↑↓   6 ↑↓   5 ↑↓   4 ↑↓
+ *      8      1      2      3
+ *             ^ front cover
+ *
+ * Listed in the order the CSS grid fills its cells: left to right, top row
+ * first.
+ */
+const sheetCells: { page: number; flipped: boolean }[] = [
+  { page: 7, flipped: true }, { page: 6, flipped: true }, { page: 5, flipped: true }, { page: 4, flipped: true },
+  { page: 8, flipped: false }, { page: 1, flipped: false }, { page: 2, flipped: false }, { page: 3, flipped: false },
+];
+
 const frames: { id: Frame; label: string; hint: string }[] = [
   { id: "full", label: "Full bleed", hint: "Edge to edge" }, { id: "inset", label: "Gallery", hint: "Wide margin" },
   { id: "portrait", label: "Portrait", hint: "Tall crop" }, { id: "split", label: "Offset", hint: "Editorial crop" },
@@ -44,7 +66,11 @@ export default function ZineCanvas({ issueId }: { issueId: string }) {
 
   async function chooseImages(files: FileList | null) {
     if (!files) return;
-    const selected = Array.from(files).slice(0, 8);
+    // A file picker hands files over in no guaranteed order, so sort by name:
+    // a set called 1.jpg to 8.jpg has already said which page each one is.
+    const selected = Array.from(files)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
+      .slice(0, 8);
     const urls = await Promise.all(selected.map(file => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); })));
     update(current => ({ ...current, pages: current.pages.map((item, index) => urls[index] ? { ...item, image: urls[index] } : item) }));
   }
@@ -70,7 +96,7 @@ export default function ZineCanvas({ issueId }: { issueId: string }) {
 
     <div className="mx-auto grid max-w-[1500px] gap-5 p-4 lg:grid-cols-[260px_1fr_280px] lg:p-6">
       <aside className="space-y-5 rounded-2xl border-2 border-black bg-[#FFFDF5] p-4">
-        <div><p className="eyebrow">1 · Images</p><label className="mt-2 block cursor-pointer rounded-xl border-2 border-dashed border-black bg-white p-4 text-center text-sm font-bold hover:bg-[#AAEEFF]">Choose up to 8 images<input type="file" accept="image/*" multiple className="sr-only" onChange={event => chooseImages(event.target.files)} /></label><p className="mt-2 text-xs text-gray-500">Images fill pages 1–8 in selection order.</p></div>
+        <div><p className="eyebrow">1 · Images</p><label className="mt-2 block cursor-pointer rounded-xl border-2 border-dashed border-black bg-white p-4 text-center text-sm font-bold hover:bg-[#AAEEFF]">Choose up to 8 images<input type="file" accept="image/*" multiple className="sr-only" onChange={event => chooseImages(event.target.files)} /></label><p className="mt-2 text-xs text-gray-500">Images fill pages 1–8 in filename order.</p></div>
         {mode === "page" ? <div><p className="eyebrow">2 · Frame</p><div className="mt-2 grid grid-cols-2 gap-2">{frames.map(frame => <button key={frame.id} onClick={() => update(current => ({ ...current, pages: current.pages.map((item, index) => index === page ? { ...item, frame: frame.id, frameSet: true } : item) }))} className={clsx("rounded-lg border-2 p-2 text-left", state.pages[page].frameSet && state.pages[page].frame === frame.id ? "border-black bg-[#FFEA69]" : "border-gray-300 bg-white")}><span className="block text-xs font-bold">{frame.label}</span><span className="text-[10px] text-gray-500">{frame.hint}</span></button>)}</div></div> : <div className="rounded-xl bg-[#AAEEFF] p-3 text-sm"><b>Top view is for type.</b><br />Switch to Page view to crop and frame individual images.</div>}
         <div><p className="eyebrow">3 · Global background</p><div className="mt-2 flex items-center gap-3"><input type="color" value={state.background} onChange={event => update(current => ({ ...current, background: event.target.value, backgroundSet: true }))} className="h-11 w-14 cursor-pointer rounded border"/><p className="text-xs text-gray-500">Applies consistently to all 8 pages.</p></div></div>
       </aside>
@@ -81,8 +107,8 @@ export default function ZineCanvas({ issueId }: { issueId: string }) {
           <div className="mx-auto aspect-[3/4] max-h-[680px] overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}><PageImage item={state.pages[page]} /></div>
           <div className="mt-5 grid grid-cols-8 gap-2">{state.pages.map((item, index) => <button key={index} onClick={() => setPage(index)} className={clsx("aspect-[3/4] overflow-hidden border-2", page === index ? "border-black ring-2 ring-[#65CBF1]" : "border-gray-400")} style={{ background: state.background }}><PageImage item={item} /><span className="sr-only">Page {index + 1}</span></button>)}</div>
         </> : <>
-          <div className="mb-3"><b>Top view · complete print sheet</b><p className="text-xs text-gray-600">Add and position type across the whole layout. Images and frames are locked in this view.</p></div>
-          <div className="relative grid aspect-[11/8.5] grid-cols-4 grid-rows-2 overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}>{state.pages.map((item, index) => <div key={index} className="relative overflow-hidden border border-black/20"><PageImage item={item}/><span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] text-white">{index + 1}</span></div>)}{state.texts.map(text => <div key={text.id} className="absolute cursor-move border border-dashed border-black/40 bg-white/30 px-1 font-bold leading-none" style={{ left: `${text.x}%`, top: `${text.y}%`, fontSize: `${Math.max(10, text.size / 2)}px` }}>{text.text}</div>)}</div>
+          <div className="mb-3"><b>Top view · complete print sheet</b><p className="text-xs text-gray-600">This is the sheet as it prints, already imposed: the top row is pages 7 to 4 upside down, and the bottom row is the back cover, the front cover, 2 and 3. Add and position type across the whole layout — images and frames are locked in this view.</p></div>
+          <div className="relative grid aspect-[11/8.5] grid-cols-4 grid-rows-2 overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}>{sheetCells.map(cell => <div key={cell.page} className="relative overflow-hidden border border-black/20"><div className={clsx("h-full w-full", cell.flipped && "rotate-180")}><PageImage item={state.pages[cell.page - 1]}/></div><span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] text-white">{cell.page}</span></div>)}{state.texts.map(text => <div key={text.id} className="absolute cursor-move border border-dashed border-black/40 bg-white/30 px-1 font-bold leading-none" style={{ left: `${text.x}%`, top: `${text.y}%`, fontSize: `${Math.max(10, text.size / 2)}px` }}>{text.text}</div>)}</div>
         </>}
       </section>
 
