@@ -1,0 +1,49 @@
+.preview { position: fixed; inset: 0; z-index: 90; overflow-y: auto; background: #dedfd6; color: #203e34; }
+.shell { position: relative; min-height: 100dvh; max-width: 480px; margin: auto; background: #f7f5ea; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+.prototype { display: flex; justify-content: space-between; padding: max(12px, env(safe-area-inset-top)) 24px 12px; font-size: 9px; letter-spacing: 1.5px; background: #e6edda; }
+.prototype a { letter-spacing: 0; text-decoration: underline; }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 22px 24px 28px; }
+.logo { font-size: 26px; font-weight: 700; letter-spacing: -1.5px; }
+.logo span { display: block; font-size: 7px; letter-spacing: 1.2px; margin-top: 3px; font-weight: 500; }
+.avatar { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid #214b3f40; border-radius: 50%; font-size: 25px; }
+.content { padding: 0 24px; }
+.eyebrow { font-size: 9px; letter-spacing: 1.8px; margin: 5px 0 14px; font-weight: 600; }
+.content h1 { font-size: clamp(36px, 10vw, 47px); font-weight: 600; line-height: 1.06; letter-spacing: -2.8px; }
+.content h1 > span { color: #738267; }
+.intro { font-size: 12px; margin-top: 15px; color: #677360; line-height: 1.6; }
+.scanCard { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-radius: 23px; background: #214b3f; color: #f7f5ea; padding: 24px; margin: 26px 0 30px; overflow: hidden; }
+.kicker { display: block; font-size: 7px; letter-spacing: 1.3px; color: #d9f786; }
+.scanCard h2 { font-size: 33px; line-height: 1.08; font-weight: 500; letter-spacing: -1px; margin: 12px 0 18px; }
+.pill { display: inline-flex; align-items: center; gap: 15px; font-size: 10px; background: #ddf99c; color: #214b3f; padding: 11px 14px; border-radius: 99px; font-weight: 600; }
+.scanArt { display: flex; flex-direction: column; align-items: center; color: #ddf99c; transform: rotate(7deg); }
+.scanArt span { font-size: 6px; letter-spacing: 1px; margin-top: 15px; }
+.sectionHeading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 15px; }
+.sectionHeading h2 { font-size: 16px; font-weight: 600; letter-spacing: -.5px; }
+.sectionHeading a { font-size: 10px; white-space: nowrap; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tiles > a { min-width: 0; }
+.tiles strong { display: block; font-size: 12px; margin-top: 12px; font-weight: 600; }
+.tiles p { font-size: 9px; margin-top: 4px; color: #677360; }
+.mapArt, .paperArt { position: relative; height: 155px; border-radius: 16px; overflow: hidden; }
+.mapArt { display: grid; place-items: center; background-color: #d8e8c7; background-image: linear-gradient(30deg, transparent 44%, #f7f5ea 45%, #f7f5ea 50%, transparent 51%), linear-gradient(110deg, transparent 39%, #f7f5ea 40%, #f7f5ea 46%, transparent 47%), linear-gradient(0deg, transparent 63%, #bacdd6 64%, #bacdd6 75%, transparent 76%); }
+.mapArt > span { display: grid; place-items: center; width: 50px; height: 50px; font-size: 36px; color: #ddf99c; background: #214b3f; border-radius: 50% 50% 50% 3px; transform: rotate(-15deg); }
+.mapArt i { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #214b3f; top: 25%; left: 20%; }
+.mapArt i:last-child { top: 75%; left: 80%; }
+.paperArt { background: #f3b59f; display: grid; place-items: center; }
+.paperArt > span { background: #f9f2ca; padding: 18px 22px; font-size: 21px; font-weight: 700; line-height: .95; letter-spacing: -1px; transform: rotate(-12deg); box-shadow: 5px 5px 0 #214b3f; }
+.paperArt i { position: absolute; font-size: 52px; bottom: -3px; right: 8px; font-style: normal; color: #214b3f; }
+.libraryStrip { display: flex; align-items: center; gap: 14px; border-top: 1px solid #d8decd; border-bottom: 1px solid #d8decd; margin-top: 28px; padding: 18px 0; }
+.libraryStrip > span { font-size: 27px; }.libraryStrip > span:last-child { margin-left: auto; font-size: 18px; }
+.libraryStrip strong { font-size: 12px; font-weight: 600; }.libraryStrip p { font-size: 10px; color: #677360; margin-top: 3px; }
+.previewNote { font-size: 9px; color: #677360; line-height: 1.6; margin-top: 20px; }
+.nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; padding: 12px 12px max(18px, env(safe-area-inset-bottom)); border-top: 1px solid #d8decd; background: #f7f5eaf5; backdrop-filter: blur(12px); }
+.nav button, .nav a { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 9px; color: #74826c; cursor: pointer; min-height: 44px; }
+.nav button[aria-current="page"] { color: #214b3f; font-weight: 700; }
+.nav .scanNav { color: #214b3f; font-weight: 600; margin-top: -28px; }
+.scanNav > span { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 20px; border: 5px solid #f7f5ea; background: #214b3f; color: #ddf99c; }
+.linkList { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.linkList > a { display: flex; align-items: center; gap: 14px; padding: 20px 16px; background: #e9eddf; border-radius: 18px; }
+.linkList > a > span { font-size: 25px; }.linkList > a > span:last-child { margin-left: auto; font-size: 18px; }
+.linkList h2 { font-size: 14px; font-weight: 600; }.linkList p { font-size: 11px; color: #677360; margin-top: 4px; }
+.preview a:focus-visible, .preview button:focus-visible { outline: 3px solid #214b3f; outline-offset: 4px; }
+:global(body):has(.preview) > :global(nav) { display: none; }

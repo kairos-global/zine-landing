@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:scanner": "node --test tests/qr-scan.test.mjs",
     "check": "npm run typecheck && npm run lint"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
+    "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "nanoid": "^5.1.5",
     "next": "^15.5.7",
