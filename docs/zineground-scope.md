@@ -1,5 +1,9 @@
 # Zineground: product scope and next steps
 
+**Current direction — November 14, 2026:** Preserve the established landing page. Remove the promotional mobile prototype and its Dashboard link. Use a compact black Scanner button and a minimal black camera interface. The former `/dashboard/mobile-preview` now redirects to Dashboard. Earlier prototype notes below describe the superseded October release.
+
+Scanner modes: QR code scanner; PDF/Zine Scanner (capture/import, review, reorder, remove, export); Pattern Scanner (capture/import horizontal strips, save JPG); ARground (planned distributor/partner AR world); ARgraf (planned human-art overlays and user-submitted creative-work referrals through Kairos Market). The AR modes are explicitly marked in development. No AI-origin detection, AR anchoring, referral submission, or marketplace transactions are implemented. PDF crop/perspective correction and continuous handheld pattern stitching remain future work. Captures stay in memory across mode switches and must be exported before leaving.
+
 Code inventory reviewed October 8, 2026. “Implemented” below means a page and supporting code exist; it does not mean every production payment, permission, or fulfillment path was exercised during this scanner release.
 
 Zineground connects **making**, **discovering**, **collecting**, and **physically distributing** independent zines. QR codes are the bridge from a printed object to a creator’s digital destination. The repository contains a Next.js web app, not a separate iOS or Android app.
@@ -88,3 +92,37 @@ On a signed-in phone at the production HTTPS site:
 A browser test harness can exercise the new components with generated codes and simulated camera input. This does not substitute for actual iPhone/Android hardware or prove production Clerk, database writes, and analytics delivery end to end.
 
 Release-specific browser checks passed in an isolated harness mounting the actual scanner/prototype components: photo decoding, native navigation, external-link confirmation, unsafe text, Wi-Fi payloads, corrupt-image recovery, prototype tab interactions, live QR detection under React StrictMode, camera-switch cleanup, background/foreground stop-and-resume, page-exit cleanup, and narrow-screen overflow. Generated QR images and canvas video streams were used; no physical camera or production account was involved.
+
+## Return to development — November 13, 2026
+
+### Agreed order
+
+1. Superseded November 14: remove the mobile prototype; make the Dashboard scanner entry compact and black; simplify the scanner into five modes. Preserve the established landing page.
+2. Slim down the Dashboard after Alex supplies the new organization.
+3. Make ZineMat easier to use after the workflow is discussed.
+
+### Separate operations workspaces (planned, not implemented)
+
+Create dedicated Zineground and Zinefast operations pages reachable through Tailscale and Mugetsu. Keep Zineground's existing Clerk/role-protected field admin. The new access path must authenticate the operator through the private operations boundary; it must not make existing admin APIs public or remove their authorization checks. Reuse domain operations behind separately authorized server handlers, keeping service credentials on the server.
+
+Mugetsu's current README confirms that Zineground Admin opens the public `/dashboard/admin`; Kairos Admin and Manager instead use configurable tailnet origins. Add distinct Zineground and Zinefast operations destinations following that model once their services exist. Inspect each project's current deployment and data model before implementation.
+
+Each operations workspace should include:
+
+- Existing product operations relevant to that business, with a shared overview of pending work.
+- Planned development and update schedules: owner, planned date, status, release notes, and actual release date. Dates remain proposals until scheduled.
+- Featured weekly zine voting: nominations, eligible voters, voting window, results, tie handling, and a deliberate feature/publish decision.
+- Distributor bundle voting: proposed contents, eligibility/availability, voting window, results, and a separate release decision. A winning vote alone must not place orders or release a bundle.
+
+Decisions to resolve with Alex: who votes (operators, creators, distributors, public), vote visibility and limits, how weekly selection works, and which Zinefast operations belong in its own workspace.
+
+### Scanner expansion (planned, not implemented)
+
+- QR: preserve native destination redirects and external result preview cards.
+- Zine images → PDF: capture/import multiple pages, review, crop/rotate, reorder, remove, then export a PDF. Decide supported formats and whether output goes directly into ZineMat.
+- Printer-bar scanning experience: a deliberate moving scan-bar interaction for Alex's additional use case; that use case is still to be specified. Do not confuse animation with completed capture or document processing.
+- AR: show assets preconfigured in Zineground over the camera. Define the image/QR trigger, anchoring behavior, asset types, creator setup, loading/fallback behavior, and device support before choosing the implementation.
+
+### Kairos idea to revisit
+
+Reusable Voting Boards that people can create for their projects. Zineground's weekly features and distributor bundles are potential first use cases, not a commitment to a generic platform feature yet.

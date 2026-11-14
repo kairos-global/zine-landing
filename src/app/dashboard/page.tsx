@@ -62,19 +62,9 @@ export default function DashboardPage() {
         </SignOutButton>
       </div>
 
-      <Link
-        href="/dashboard/scan"
-        className="mb-5 flex items-center gap-5 rounded-2xl border border-[#214b3f] bg-[#214b3f] p-6 text-white transition-colors hover:bg-[#173b30]"
-      >
-        <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[#ddf99c] text-[#214b3f]">
-          <ScanIcon className="h-8 w-8" />
-        </span>
-        <span className="flex-1">
-          <span className="block text-xs tracking-widest text-[#ddf99c]">OUT IN THE WORLD</span>
-          <span className="mt-1 block text-2xl font-semibold">Scan a QR code</span>
-          <span className="mt-1 block text-sm text-white/75">Open a zine. Follow a link. Find your next story.</span>
-        </span>
-        <span className="text-2xl" aria-hidden="true">↗</span>
+      <Link href="/dashboard/scan" className="mb-6 inline-flex min-h-11 items-center gap-3 rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-black">
+        <ScanIcon className="h-5 w-5" />
+        Scanner
       </Link>
 
       {/* Cards grid */}
@@ -185,9 +175,7 @@ export default function DashboardPage() {
         )}
 
       </div>
-      <Link href="/dashboard/mobile-preview" className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm text-gray-600 underline underline-offset-4 hover:text-black">
-        Try the mobile app prototype <span aria-hidden="true">↗</span>
-      </Link>
+
     </div>
   );
 }

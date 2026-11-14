@@ -1,8 +1,8 @@
 import QRScanner from "./QRScanner";
 
 export const metadata = {
-  title: "Scan a QR code · Zineground",
-  description: "Open a zine, follow a story, or discover what is behind a QR code.",
+  title: "Scanner · Zineground",
+  description: "Scan QR codes, capture zine pages, and collect patterns.",
 };
 
 export default function ScanPage() {

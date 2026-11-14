@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import ScanIcon from "@/components/ScanIcon";
+import CaptureTools from "./CaptureTools";
 import { classifyQRCode, type ScanResult } from "@/lib/qr-scan";
 import { getSiteBaseUrl } from "@/lib/site-url";
 import styles from "./scanner.module.css";
+
+const modes = ["QR code scanner", "PDF/Zine Scanner", "Pattern Scanner", "ARground", "ARgraf"] as const;
+type Mode = typeof modes[number];
 
 type CameraState = "starting" | "ready" | "error" | "paused";
 type TorchConstraint = MediaTrackConstraintSet & { torch: boolean };
 
 function cameraError(error: unknown) {
   const name = error instanceof DOMException ? error.name : "";
-  if (name === "NotAllowedError" || name === "SecurityError") return "Camera access is off. Allow camera access in your browser’s site settings, then try again. You can also choose a photo.";
-  if (name === "NotFoundError" || name === "OverconstrainedError") return "No camera found. Try another camera or choose a photo with a QR code.";
-  if (name === "NotReadableError") return "Your camera is being used by another app. Close it and try again, or choose a photo.";
-  return "We couldn’t start the camera. Try again, or choose a photo with a QR code.";
+  if (name === "NotAllowedError" || name === "SecurityError") return "Allow camera access in browser settings, or import a photo.";
+  if (name === "NotFoundError" || name === "OverconstrainedError") return "No camera found. Import a photo instead.";
+  if (name === "NotReadableError") return "Camera in use. Close the other app and retry.";
+  return "Camera unavailable. Retry or import a photo.";
 }
 
 export default function QRScanner() {
@@ -28,7 +31,8 @@ export default function QRScanner() {
   const [camera, setCamera] = useState<CameraState>("starting");
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
-  const [facing, setFacing] = useState<"environment" | "user">("environment");
+  const [mode, setMode] = useState<Mode>(modes[0]);
+  const modeRef = useRef<Mode>(modes[0]);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [torchAvailable, setTorchAvailable] = useState(false);
@@ -44,7 +48,7 @@ export default function QRScanner() {
   }, []);
 
   const acceptCode = useCallback((value: string) => {
-    if (!mountedRef.current || resultRef.current || !value.trim()) return;
+    if (!mountedRef.current || modeRef.current !== modes[0] || resultRef.current || !value.trim()) return;
     const next = classifyQRCode(value, getSiteBaseUrl());
     resultRef.current = next;
     setResult(next);
@@ -99,7 +103,7 @@ export default function QRScanner() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         });
         if (stale()) { stream.getTracks().forEach((track) => track.stop()); return; }
         streamRef.current = stream;
@@ -116,7 +120,7 @@ export default function QRScanner() {
         setCamera("ready");
         function scan() {
           if (stale()) return;
-          if (!resultRef.current && !photoJobRef.current && context && video && video.readyState >= 2 && video.videoWidth) {
+          if (modeRef.current === modes[0] && !resultRef.current && !photoJobRef.current && context && video && video.readyState >= 2 && video.videoWidth) {
             const scale = Math.min(1, 800 / Math.max(video.videoWidth, video.videoHeight));
             canvas.width = Math.round(video.videoWidth * scale);
             canvas.height = Math.round(video.videoHeight * scale);
@@ -162,7 +166,7 @@ export default function QRScanner() {
       window.removeEventListener("pagehide", suspend);
       window.removeEventListener("pageshow", pageRestored);
     };
-  }, [facing, attempt, acceptCode, stopCamera]);
+  }, [attempt, acceptCode, stopCamera]);
 
   function scanAgain() {
     resultRef.current = null;
@@ -197,7 +201,7 @@ export default function QRScanner() {
       img.src = objectUrl;
       await img.decode();
       const { default: decode } = await import("jsqr");
-      if (!mountedRef.current || photoJobRef.current !== job) return;
+      if (!mountedRef.current || photoJobRef.current !== job || modeRef.current !== modes[0]) return;
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d", { willReadFrequently: true });
       if (!context) throw new Error("Canvas unavailable");
@@ -229,50 +233,58 @@ export default function QRScanner() {
     catch { setNotice("Copy isn’t available. Press and hold the content to select it."); }
   }
 
+  function changeMode(next: Mode) {
+    modeRef.current = next;
+    photoJobRef.current = 0;
+    setReadingPhoto(false);
+    setMode(next);
+    resultRef.current = null;
+    setResult(null);
+    setNotice("");
+  }
+
   return (
-    <main className={styles.scanner} aria-label="QR code scanner">
+    <main className={styles.scanner} aria-label="Zineground scanner">
       <video ref={videoRef} className={styles.video} autoPlay muted playsInline aria-hidden="true" />
-      <div className={styles.shade} />
       <header className={styles.header}>
         <Link href="/dashboard" className={styles.iconButton} aria-label="Close scanner">✕</Link>
-        <div className={styles.brand}>zineground<span>OUT IN THE WORLD</span></div>
-        <button className={styles.iconButton} onClick={() => setFacing((value) => value === "environment" ? "user" : "environment")} aria-label="Switch camera" disabled={camera === "starting" || readingPhoto}>↻</button>
+        <select className={styles.modeSelect} aria-label="Scanner mode" value={mode} onChange={event => changeMode(event.target.value as Mode)}>
+          {modes.map(item => <option key={item}>{item}</option>)}
+        </select>
+        <button className={styles.iconButton} onClick={() => changeMode(modes[(modes.indexOf(mode) + 1) % modes.length])} aria-label="Next scanner mode">↻</button>
       </header>
-
       <div className={styles.viewfinder}>
-        <div className={styles.status} role="status"><span className={camera === "ready" ? styles.liveDot : styles.idleDot} />{result ? "CODE FOUND" : camera === "ready" ? "SCANNER IS READY" : camera === "starting" ? "STARTING CAMERA" : camera === "paused" ? "CAMERA PAUSED" : "SCAN FROM A PHOTO"}</div>
-        <div className={styles.frame} aria-hidden="true"><i /><i /><i /><i /><ScanIcon className={styles.frameIcon} />{camera === "ready" && !result && <div className={styles.scanLine} />}</div>
-        {!result && <div className={styles.hint}><h1>There’s more to the story.</h1><p>Point at a QR code to see where it takes you.</p></div>}
+        <div className={`${styles.frame} ${mode === "PDF/Zine Scanner" ? styles.documentFrame : mode === "Pattern Scanner" ? styles.patternFrame : ""}`} aria-hidden="true"><i /><i /><i /><i /></div>
+        {camera === "starting" && <p className={styles.status} role="status">Opening camera…</p>}
+        {camera === "paused" && <p className={styles.status} role="status">Camera paused</p>}
       </div>
-
       <div className={styles.bottom}>
         {notice && <p className={styles.notice} role="status">{notice}</p>}
-        {result ? (
+        {mode === modes[0] && result ? (
           <section className={styles.result} aria-label="Scan result" aria-live="polite">
-            <div className={styles.handle} />
-            <div className={styles.resultTop}><span className={styles.resultType}>{result.kind === "native" ? "ZINEGROUND" : result.kind === "website" ? "WEBSITE FOUND" : `${result.kind.toUpperCase()} FOUND`}</span><button onClick={scanAgain} className={styles.dismiss} aria-label="Dismiss result and scan again">✕</button></div>
-            <h2>{result.title}</h2>
+            <div className={styles.resultTop}><h2>{result.title}</h2><button onClick={scanAgain} className={styles.iconButton} aria-label="Dismiss result">✕</button></div>
             <p className={`${styles.payload} ${expanded ? styles.expanded : ""}`} dir="auto">{result.value}</p>
             {result.value.length > 160 && <button className={styles.textButton} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Show full content"}</button>}
-            <p className={styles.resultNote}>{result.kind === "native" ? "Opening the creator’s destination…" : result.kind === "website" ? "Check the address before opening. This link is outside the Zineground QR network." : "You can copy these details. Nothing has been opened or saved."}</p>
             <div className={styles.actions}>
-              {result.url ? <a className={styles.primary} href={result.url} onClick={stopCamera}>Open link <span aria-hidden="true">↗</span></a> : <button className={styles.primary} onClick={copyResult}>{copied ? "Copied!" : "Copy content"}</button>}
+              {result.url ? <a className={styles.primary} href={result.url} onClick={stopCamera}>Open link</a> : <button className={styles.primary} onClick={copyResult}>{copied ? "Copied" : "Copy"}</button>}
               <button className={styles.secondary} onClick={scanAgain}>Scan again</button>
-              {result.url && <button className={styles.copyButton} onClick={copyResult} aria-label="Copy link">{copied ? "Copied!" : "Copy"}</button>}
+              {result.url && <button className={styles.secondary} onClick={copyResult}>{copied ? "Copied" : "Copy"}</button>}
             </div>
           </section>
-        ) : camera === "error" ? (
-          <section className={styles.permission} role="status"><h2>Let’s get you scanning.</h2><p>{message}</p><button className={styles.primary} onClick={() => setAttempt((value) => value + 1)}>Try camera again</button></section>
-        ) : (
-          <p className={styles.explainer}>Zineground codes open straight away.<br />Other codes give you a preview first.</p>
-        )}
-        <div className={styles.toolbar}>
-          <button className={styles.tool} onClick={toggleTorch} disabled={!torchAvailable || torchBusy} aria-pressed={torch}><span aria-hidden="true">ϟ</span>{torch ? "Light off" : "Flashlight"}</button>
-          <div className={styles.scanBadge}><ScanIcon className="h-7 w-7" /><span>SCAN</span></div>
-          <button className={styles.tool} onClick={() => fileRef.current?.click()} disabled={readingPhoto}><span aria-hidden="true">▧</span>{readingPhoto ? "Reading…" : "Photos"}</button>
-        </div>
-        <input ref={fileRef} type="file" accept="image/*" className={styles.fileInput} aria-label="Choose a QR code photo" onChange={(event) => { void readPhoto(event.target.files?.[0]); event.target.value = ""; }} />
-        <p className={styles.privacy}>Your camera and photos stay on your device.</p>
+        ) : null}
+        {camera === "error" && !result && <div className={styles.permission} role="status"><p>{message}</p><button className={styles.textButton} onClick={() => setAttempt(value => value + 1)}>Retry camera</button></div>}
+        {mode === modes[0] ? <>
+          <div className={styles.toolbar}>
+            <button className={styles.secondary} onClick={toggleTorch} disabled={!torchAvailable || torchBusy} aria-pressed={torch}>{torch ? "Light off" : "Light"}</button>
+            <button className={styles.primary} onClick={() => fileRef.current?.click()} disabled={readingPhoto}>{readingPhoto ? "Reading…" : "Import photo"}</button>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className={styles.fileInput} aria-label="Choose a QR code photo" onChange={event => { void readPhoto(event.target.files?.[0]); event.target.value = ""; }} />
+        </> : mode === "ARground" || mode === "ARgraf" ? <section className={styles.setup}>
+          <h2>{mode}</h2>
+          <p>{mode === "ARground" ? "Partner AR experiences will appear here." : "Place your art over a flyer. Refer creative work through Kairos Market."}</p>
+          <span>In development</span>
+        </section> : null}
+        <div hidden={mode !== "PDF/Zine Scanner" && mode !== "Pattern Scanner"}><CaptureTools kind={mode === "Pattern Scanner" ? "pattern" : "pdf"} videoRef={videoRef} ready={camera === "ready"} /></div>
       </div>
     </main>
   );
