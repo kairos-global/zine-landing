@@ -1,16 +1,16 @@
 .scanner { position: fixed; inset: 0; z-index: 100; height: 100dvh; overflow-y: auto; display: flex; flex-direction: column; background: #111; color: #fff; isolation: isolate; color-scheme: dark; }
 .video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: -1; pointer-events: none; }
-.header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 8px; padding: max(12px, env(safe-area-inset-top)) 16px 12px; background: #111e; }
+.header { position: sticky; top: 0; z-index: 2; display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 8px; padding: max(12px, env(safe-area-inset-top)) 16px 12px; background: #111e; }
 .iconButton { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid #555; border-radius: 50%; background: #111; color: #fff; font-size: 22px; cursor: pointer; }
 .modeSelect { min-width: 0; max-width: 230px; padding: 12px 4px; color: #fff; background: #111; font: inherit; font-size: 14px; font-weight: 600; border: 0; cursor: pointer; }
-.viewfinder { position: relative; flex: 1; min-height: 220px; display: grid; place-items: center; padding: 24px; }
+.viewfinder { position: relative; flex: 1 0 auto; min-height: 220px; display: grid; place-items: center; padding: 24px; }
 .frame { position: relative; width: min(64vw, 280px); aspect-ratio: 1; opacity: .8; }
 .frame i { position: absolute; width: 26px; height: 26px; border: 2px solid #fff; }
 .frame i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; }
 .frame i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
 .frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; }
 .frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
-.documentFrame { aspect-ratio: 3 / 4; max-height: 40dvh; width: auto; height: 40dvh; }
+.documentFrame { aspect-ratio: 3 / 4; width: auto; height: min(30dvh, 240px); }
 .patternFrame { width: min(84vw, 480px); aspect-ratio: 3; }
 .status { position: absolute; bottom: 8px; font-size: 12px; background: #111; padding: 6px 10px; border-radius: 6px; }
 .bottom { width: 100%; max-width: 560px; margin: 0 auto; flex-shrink: 0; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); background: #111e; border-radius: 16px 16px 0 0; }
