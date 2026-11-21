@@ -10,7 +10,7 @@ export const metadata = {
   title: 'Zineground',
   description: 'Zineground is a zine distribution network.',
   icons: {
-    icon: "/zineground.ico",
+    icon: "/zineground.ico?v=2",
   },
 };
 
