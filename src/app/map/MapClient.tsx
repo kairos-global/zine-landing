@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Coordinates, MapIssue, MapLocation } from "@/lib/map-directory";
 
 const DirectoryMap = dynamic(() => import("./DirectoryMap"), {
@@ -32,7 +32,8 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
   const [position, setPosition] = useState<Coordinates | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [inView, setInView] = useState(false);
-  const [mapVisible, setMapVisible] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(Boolean(initialLocation));
+  const selectedRow = useRef<HTMLLIElement>(null);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -52,7 +53,12 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
         setCamera((prev) => ({ type: target ? "location" : "all", target, sequence: prev.sequence + 1 }));
         setLoadStatus("ready");
       })
-      .catch(() => { if (!controller.signal.aborted) setLoadStatus("error"); });
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setLoadStatus("error");
+          setPanelOpen(true);
+        }
+      });
     return () => controller.abort();
   }, [attempt, initialLocation]);
 
@@ -81,8 +87,12 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
     }).sort((a, b) => position ? distance(position, a) - distance(position, b) : a.name.localeCompare(b.name));
   }, [locations, issueFilter, query, position]);
 
-  const shown = inView && bounds && mapVisible ? matches.filter((location) => inBounds(location, bounds)) : matches;
+  const shown = inView && bounds ? matches.filter((location) => inBounds(location, bounds)) : matches;
   const selected = shown.find(({ id }) => id === selectedId);
+
+  useEffect(() => {
+    if (panelOpen && selected) selectedRow.current?.scrollIntoView({ block: "nearest" });
+  }, [panelOpen, selected]);
 
   function select(id: string, pan: boolean) {
     const target = matches.find((match) => match.id === id);
@@ -111,82 +121,95 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
   }
 
   return (
-    <main className="zg-page px-4 py-6 sm:px-8 sm:py-9">
-      <div className="mx-auto max-w-[1480px]">
-        <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="zg-title">Zine Map</h1>
-            <p className="mt-2 text-sm sm:text-base">Find zines on shelves at verified distributors.</p>
-          </div>
-          <Link href="/contact?topic=map" className="zg-button">Suggest a location ↗</Link>
-        </header>
-
-        <div className="zg-panel mb-3 grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-          <label className="grid gap-1 text-xs font-bold">Search the directory
-            <input className="zg-input" type="search" placeholder="Shop, city, address or zine" value={query} onChange={(event) => { setQuery(event.target.value); setInView(false); }} />
-          </label>
-          <label className="grid gap-1 text-xs font-bold">Stocked issue
-            <select className="zg-input" value={activeIssue?.slug ?? issueFilter} onChange={(event) => { setIssueFilter(event.target.value); setInView(false); }}>
-              <option value="">All issues</option>
-              {issueFilter && !activeIssue && <option value={issueFilter}>Linked issue</option>}
-              {issues.map(({ id, slug, title }) => <option key={id} value={slug}>{title}</option>)}
-            </select>
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="zg-button" type="button" disabled={locating} onClick={locate}>{locating ? "Locating…" : "◎ Near me"}</button>
-            <button className="zg-button" type="button" aria-pressed={!mapVisible} onClick={() => { setMapVisible(!mapVisible); setInView(false); }}>{mapVisible ? "List only" : "Show map"}</button>
-          </div>
-        </div>
-        {locationError && <p role="status" className="mb-3 text-sm">{locationError}</p>}
-
-        <div className={mapVisible ? "grid items-start gap-3 lg:grid-cols-[minmax(290px,350px)_minmax(0,1fr)]" : ""}>
-          <section aria-label="Distributor directory" className={`zg-panel overflow-hidden ${mapVisible ? "order-2 lg:order-1" : ""}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-[#AAEEFF] px-4 py-3">
-              <h2 className="font-black" aria-live="polite">{loadStatus === "ready" ? `${shown.length} ${shown.length === 1 ? "location" : "locations"}` : "Locations"}</h2>
-              {mapVisible && <label className="flex items-center gap-1.5 text-xs font-bold"><input type="checkbox" checked={inView} onChange={(event) => setInView(event.target.checked)} /> This map area</label>}
-            </div>
-            {loadStatus === "loading" && <p className="p-4 text-sm" role="status">Loading distributor listings…</p>}
-            {loadStatus === "error" && <div className="p-4"><p role="alert" className="mb-2 text-sm">The directory couldn’t load.</p><button className="zg-button" onClick={() => { setLoadStatus("loading"); setAttempt(attempt + 1); }}>Try again</button></div>}
-            {loadStatus === "ready" && !shown.length && (
-              <div className="space-y-2 p-4 text-sm">
-                <p>{inView ? "No matching distributors in this map area." : issueFilter ? "No matching distributors stock this issue." : "No matching distributors."}</p>
-                {(query || issueFilter || inView) && <button className="font-bold underline" onClick={() => { setQuery(""); setIssueFilter(""); setInView(false); }}>Clear filters</button>}
-              </div>
-            )}
-            <ul className={mapVisible ? "max-h-[32rem] divide-y divide-black/15 overflow-y-auto" : "grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3"}>
-              {shown.map((location) => (
-                <li id={`location-${location.id}`} key={location.id} className={`${!mapVisible ? "zg-panel overflow-hidden" : ""} ${selected?.id === location.id ? "bg-[#e9faff]" : ""}`}>
-                  <button type="button" className="block w-full px-4 py-3 text-left hover:bg-[#e9faff]" aria-expanded={selected?.id === location.id} onClick={() => selected?.id === location.id ? setSelectedId(null) : select(location.id, true)}>
-                    <span className="block font-black">{location.name}</span>
-                    <span className="block text-sm text-black/70">{location.address}</span>
-                    <span className="mt-1 block text-xs font-bold">{location.issues.length} stocked {location.issues.length === 1 ? "issue" : "issues"}{position ? ` · ${distance(position, location).toFixed(1)} mi` : ""}</span>
-                  </button>
-                  {selected?.id === location.id && (
-                    <div className="px-4 pb-4 text-sm">
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        <a className="zg-button" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location.address)}`} target="_blank" rel="noreferrer">Directions ↗</a>
-                        {location.email && <a className="zg-button" href={`mailto:${location.email}`}>Email shop</a>}
-                      </div>
-                      {location.issues.map((issue) => <Link key={issue.id} className="block py-0.5 font-bold underline" href={`/issues/${encodeURIComponent(issue.slug)}`}>{issue.title} ↗</Link>)}
-                      <Link className="mt-2 inline-block text-xs underline" href={`/contact?topic=map&reference=${encodeURIComponent(location.name)}`}>Report a listing update</Link>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {mapVisible && <section aria-label="Distributor map" className="zg-panel order-1 overflow-hidden lg:order-2">
-            <div className="relative h-[45svh] min-h-64 lg:h-[min(65vh,680px)]">
-              <DirectoryMap locations={matches} selectedId={selectedId} position={position} command={camera} onBounds={setBounds} onSelect={(id) => {
-                select(id, false);
-                document.getElementById(`location-${id}`)?.scrollIntoView({ block: "nearest" });
-              }} />
-              <button className="zg-button absolute bottom-6 left-3 z-[450]" type="button" disabled={!matches.length} onClick={() => { setInView(false); setCamera((prev) => ({ type: "all", sequence: prev.sequence + 1 })); }}>Fit results</button>
-            </div>
-          </section>}
-        </div>
+    <main className="relative isolate h-dvh w-full overflow-hidden bg-[#e6e3dc] text-black">
+      <h1 className="sr-only">Zine Map</h1>
+      <div className="absolute inset-x-3 top-3 z-20 flex max-w-md gap-2 md:left-4 md:top-4">
+        <Link href="/" aria-label="Zineground home" className="zg-button shrink-0 shadow-md">
+          <span aria-hidden="true">←</span>
+        </Link>
+        <input
+          aria-label="Search distributors"
+          className="zg-input min-w-0 !text-base shadow-md"
+          type="search"
+          placeholder="Shop, city, address or zine"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setInView(false);
+            setPanelOpen(true);
+          }}
+        />
+        <button
+          className="zg-button shrink-0 shadow-md"
+          type="button"
+          aria-controls="map-results"
+          aria-expanded={panelOpen}
+          onClick={() => setPanelOpen((open) => !open)}
+        >
+          Results
+        </button>
       </div>
+
+      <section
+        id="map-results"
+        aria-labelledby="map-results-title"
+        hidden={!panelOpen}
+        className="zg-panel absolute inset-x-3 bottom-7 z-10 max-h-[48dvh] overflow-y-auto overscroll-contain shadow-lg md:inset-x-auto md:bottom-auto md:left-4 md:top-[4.5rem] md:max-h-[calc(100dvh-6.25rem)] md:w-[22rem]"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-[#AAEEFF] px-4 py-2.5">
+          <h2 id="map-results-title" className="font-black" aria-live="polite">{loadStatus === "ready" ? `${shown.length} ${shown.length === 1 ? "location" : "locations"}` : "Locations"}</h2>
+          <Link href="/contact?topic=map" className="text-sm font-bold underline">Suggest a distributor</Link>
+        </div>
+        <div className="space-y-2.5 border-b border-black/15 p-3">
+          <select aria-label="Stocked issue" className="zg-input !text-base" value={activeIssue?.slug ?? issueFilter} onChange={(event) => { setIssueFilter(event.target.value); setInView(false); }}>
+            <option value="">All issues</option>
+            {issueFilter && !activeIssue && <option value={issueFilter}>Linked issue</option>}
+            {issues.map(({ id, slug, title }) => <option key={id} value={slug}>{title}</option>)}
+          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="zg-button" type="button" disabled={locating} onClick={locate}>{locating ? "Locating…" : "Near me"}</button>
+            <button className="zg-button" type="button" disabled={!matches.length} onClick={() => { setInView(false); setCamera((prev) => ({ type: "all", sequence: prev.sequence + 1 })); }}>Fit results</button>
+            <label className="flex items-center gap-1.5 text-sm font-bold"><input type="checkbox" className="accent-black" checked={inView} onChange={(event) => setInView(event.target.checked)} /> This map area</label>
+          </div>
+          {locationError && <p role="status" className="text-sm">{locationError}</p>}
+        </div>
+        {loadStatus === "loading" && <p className="p-4 text-sm" role="status">Loading distributor listings…</p>}
+        {loadStatus === "error" && <div className="p-4"><p role="alert" className="mb-2 text-sm">The directory couldn’t load.</p><button className="zg-button" onClick={() => { setLoadStatus("loading"); setAttempt(attempt + 1); }}>Try again</button></div>}
+        {loadStatus === "ready" && !shown.length && (
+          <div className="space-y-2 p-4 text-sm">
+            <p>{inView ? "No matching distributors in this map area." : issueFilter ? "No matching distributors stock this issue." : "No matching distributors."}</p>
+            {(query || issueFilter || inView) && <button className="font-bold underline" onClick={() => { setQuery(""); setIssueFilter(""); setInView(false); }}>Clear filters</button>}
+          </div>
+        )}
+        <ul className="divide-y divide-black/15">
+          {shown.map((location) => (
+            <li ref={selected?.id === location.id ? selectedRow : undefined} key={location.id} className={selected?.id === location.id ? "bg-[#e9faff]" : ""}>
+              <button type="button" className="block w-full px-4 py-3 text-left hover:bg-[#e9faff]" aria-expanded={selected?.id === location.id} onClick={() => selected?.id === location.id ? setSelectedId(null) : select(location.id, true)}>
+                <span className="block font-black">{location.name}</span>
+                <span className="block text-sm text-black/70">{location.address}</span>
+                <span className="mt-1 block text-xs font-bold">{location.issues.length} stocked {location.issues.length === 1 ? "issue" : "issues"}{position ? ` · ${distance(position, location).toFixed(1)} mi` : ""}</span>
+              </button>
+              {selected?.id === location.id && (
+                <div className="px-4 pb-4 text-sm">
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <a className="zg-button" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location.address)}`} target="_blank" rel="noreferrer">Directions ↗</a>
+                    {location.email && <a className="zg-button" href={`mailto:${location.email}`}>Email shop</a>}
+                  </div>
+                  {location.issues.map((issue) => <Link key={issue.id} className="block py-0.5 font-bold underline" href={`/issues/${encodeURIComponent(issue.slug)}`}>{issue.title} ↗</Link>)}
+                  <Link className="mt-2 inline-block text-xs underline" href={`/contact?topic=map&reference=${encodeURIComponent(location.name)}`}>Report a listing update</Link>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-label="Distributor map" className="absolute inset-0">
+        <DirectoryMap locations={matches} selectedId={selectedId} position={position} command={camera} onBounds={setBounds} onSelect={(id) => {
+          select(id, false);
+          setPanelOpen(true);
+        }} />
+      </section>
     </main>
   );
 }

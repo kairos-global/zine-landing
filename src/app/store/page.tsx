@@ -43,7 +43,7 @@ function PackPreview() {
       </div>
       <div className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-          <h2 className="text-2xl font-black leading-tight sm:text-3xl">Featured Zine Pack No. 1</h2>
+          <h2 className="text-lg font-bold leading-tight sm:text-xl">Featured Zine Pack No. 1</h2>
           <span className="rounded-full border border-black bg-[#F0EBCC] px-2.5 py-1 text-xs font-black">Coming soon</span>
         </div>
         <p className="mt-2 text-sm">Featuring shdwmtn and salamanderprint.</p>
@@ -163,10 +163,10 @@ export default function StorePage() {
   }
 
   return (
-    <main className="zg-page px-4 py-8 sm:px-8 sm:py-12">
+    <main className="zg-page px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div><h1 className="zg-title">Store</h1><p className="mt-3">Zines and displays for your shelf.</p></div>
+        <header className="mb-4 flex items-center justify-between gap-3">
+          <h1 className="text-xl font-bold">Store</h1>
           <button className="zg-button zg-button-dark px-5" onClick={() => setCartOpen(true)}>Cart · {cartCount}</button>
         </header>
         {notice && <p role="status" className="zg-panel mb-4 break-words p-4 text-sm font-bold">{notice} <Link href="/contact?topic=order" className="ml-1 underline">Order help ↗</Link></p>}
@@ -176,7 +176,7 @@ export default function StorePage() {
             <div className="border-b-2 border-black"><DisplayPreview /></div>
             <div className="p-5 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-                <h2 className="text-2xl font-black leading-tight sm:text-3xl">{display?.name ?? "Mini Zine Display"}</h2>
+                <h2 className="text-lg font-bold leading-tight sm:text-xl">{display?.name ?? "Mini Zine Display"}</h2>
                 {display?.in_stock && <span className="text-lg font-black">{money(display.price_cents)}</span>}
                 {catalog === "ready" && !display?.in_stock && <span className="rounded-full border border-black bg-[#F0EBCC] px-2.5 py-1 text-xs font-black">Unavailable</span>}
               </div>

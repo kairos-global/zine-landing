@@ -65,16 +65,16 @@ function Camera({ locations, command, onBounds }: Pick<Props, "locations" | "com
 function ZoomControls() {
   const map = useMap();
   return (
-    <div className="pointer-events-none absolute right-3 top-3 z-[450] grid gap-1.5">
-      <button type="button" className="zg-button pointer-events-auto !px-3 !text-lg" onClick={() => map.zoomIn()} aria-label="Zoom in">+</button>
-      <button type="button" className="zg-button pointer-events-auto !px-3 !text-lg" onClick={() => map.zoomOut()} aria-label="Zoom out">−</button>
+    <div className="pointer-events-none absolute right-3 top-16 z-[450] grid gap-1.5 md:right-4 md:top-4">
+      <button type="button" className="zg-button pointer-events-auto !px-3 !text-lg shadow-md" onClick={() => map.zoomIn()} aria-label="Zoom in">+</button>
+      <button type="button" className="zg-button pointer-events-auto !px-3 !text-lg shadow-md" onClick={() => map.zoomOut()} aria-label="Zoom out">−</button>
     </div>
   );
 }
 
 export default function DirectoryMap({ locations, selectedId, onSelect, position, command, onBounds }: Props) {
   return (
-    <MapContainer center={center} zoom={11} minZoom={2} scrollWheelZoom={false} zoomControl={false} className="relative isolate h-full w-full bg-[#e6e3dc]">
+    <MapContainer center={center} zoom={11} minZoom={2} zoomControl={false} className="relative isolate h-full w-full bg-[#e6e3dc]">
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <Camera locations={locations} command={command} onBounds={onBounds} />
       <ZoomControls />
