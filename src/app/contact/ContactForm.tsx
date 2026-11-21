@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CONTACT_EMAIL, CONTACT_TOPICS, type ContactTopic } from "@/lib/contact";
 
 const topics = Object.entries(CONTACT_TOPICS) as [ContactTopic, (typeof CONTACT_TOPICS)[ContactTopic]][];
@@ -10,11 +10,14 @@ export default function ContactForm({ initialTopic, initialReference }: { initia
   const [topic, setTopic] = useState(initialTopic);
   const [message, setMessage] = useState("");
   const [reference, setReference] = useState(initialReference);
+  const [ready, setReady] = useState(false);
   const [sending, setSending] = useState(false);
   const [receipt, setReceipt] = useState("");
   const [error, setError] = useState("");
   const pending = useRef<{ id: string; fingerprint: string } | null>(null);
   const active = CONTACT_TOPICS[topic];
+
+  useEffect(() => { setReady(true); }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,13 +77,13 @@ export default function ContactForm({ initialTopic, initialReference }: { initia
               <button type="button" className="zg-button mt-5" onClick={() => { setReceipt(""); setMessage(""); setReference(""); }}>Start another request</button>
             </section>
           ) : (
-            <form onSubmit={submit} className="zg-panel p-5 sm:p-7">
+            <form method="post" onSubmit={submit} className="zg-panel p-5 sm:p-7">
               <div className="mb-5 border-b border-black/15 pb-4">
                 <h2 className="text-2xl font-black">{active.label}</h2>
                 <p className="mt-1 text-sm text-black/75">{active.prompt}</p>
                 {active.link && <Link className="mt-2 inline-block text-sm font-bold underline" href={active.link.href}>{active.link.label} ↗</Link>}
               </div>
-              <fieldset disabled={sending} className="grid gap-4">
+              <fieldset disabled={!ready || sending} className="grid gap-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="grid gap-1 text-sm font-bold">Name<input name="name" autoComplete="name" className="zg-input" required minLength={2} maxLength={100} /></label>
                   <label className="grid gap-1 text-sm font-bold">Reply email<input name="email" type="email" autoComplete="email" className="zg-input" required maxLength={254} /></label>
