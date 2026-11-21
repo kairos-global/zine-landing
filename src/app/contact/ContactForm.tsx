@@ -91,9 +91,10 @@ export default function ContactForm({ initialTopic, initialReference }: { initia
                 <label className="grid gap-1 text-sm font-bold">{active.reference} <span className="sr-only">(optional)</span>
                   <input name="reference" value={reference} onChange={(event) => setReference(event.target.value)} className="zg-input" maxLength={250} placeholder="Optional" />
                 </label>
-                <label className="grid gap-1 text-sm font-bold">Message
-                  <textarea name="message" value={message} onChange={(event) => setMessage(event.target.value)} className="zg-input min-h-32 resize-y" required minLength={10} maxLength={4000} />
-                </label>
+                <div className="grid gap-1">
+                  <label htmlFor="contact-message" className="text-sm font-bold">Message</label>
+                  <textarea id="contact-message" name="message" value={message} onChange={(event) => setMessage(event.target.value)} className="zg-input min-h-32 resize-y" required minLength={10} maxLength={4000} />
+                </div>
                 <div aria-hidden="true" className="hidden"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
                 {error && <p role="alert" className="rounded-lg border border-red-700 bg-red-50 p-3 text-sm text-red-900">{error}</p>}
                 <button className="zg-button zg-button-dark justify-self-start px-5" type="submit">{sending ? "Sending…" : "Send request"}</button>
