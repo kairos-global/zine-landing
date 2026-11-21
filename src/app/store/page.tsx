@@ -1,351 +1,237 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { isMiniDisplay, MAX_CART_LINES, MAX_LINE_QUANTITY, type StoreCartEntry, type StoreProduct } from "@/lib/store";
+import DisplayPreview from "./DisplayPreview";
 
-type StoreProduct = {
-  id: string;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  category: string | null;
-  image_url: string | null;
-  in_stock: boolean;
-};
+const CART_KEY = "zineground_store_cart";
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (cents: number) => usd.format(cents / 100);
 
-type CartItem = {
-  productId: string;
-  name: string;
-  price_cents: number;
-  quantity: number;
-  image_url: string | null;
-};
+function readCart(raw: string | null): StoreCartEntry[] {
+  if (!raw) return [];
+  const entries: unknown = JSON.parse(raw);
+  if (!Array.isArray(entries)) return [];
+  const cart = new Map<string, StoreCartEntry>();
+  for (const entry of entries) {
+    if (typeof entry?.productId !== "string" || !Number.isInteger(entry.quantity) || entry.quantity < 1) continue;
+    cart.set(entry.productId, { productId: entry.productId, quantity: Math.min(entry.quantity, MAX_LINE_QUANTITY) });
+  }
+  return [...cart.values()].slice(0, MAX_CART_LINES);
+}
 
-const CART_KEY = 'zineground_store_cart';
-
-const NOTEPAD_BG = {
-  backgroundColor: '#F0EBCC',
-} as React.CSSProperties;
-
-function fmt(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
+function PackPreview() {
+  return (
+    <section className="zg-panel flex flex-col overflow-hidden">
+      <div className="flex min-h-[270px] flex-1 items-center justify-center border-b-2 border-black bg-[#AAEEFF] p-5 sm:min-h-[340px] sm:p-8">
+        <div className="grid w-full max-w-[365px] grid-cols-4 items-center gap-2">
+          <div className="relative aspect-[2/3] -rotate-8 overflow-hidden border-2 border-black bg-black shadow-[3px_4px_0_#000]">
+            <Image src="/store/shdwmtn.webp" alt="shdwmtn zine cover" fill sizes="100px" className="object-cover" />
+          </div>
+          <div className="relative aspect-[2/3] -rotate-2 overflow-hidden border-2 border-black bg-white shadow-[3px_4px_0_#000]">
+            <Image src="/store/salamanderprint.webp" alt="salamanderprint zine cover" fill sizes="100px" className="object-cover" />
+          </div>
+          <div aria-hidden="true" className="aspect-[2/3] rotate-4 overflow-hidden border-2 border-black bg-[#eb9bca] shadow-[3px_4px_0_#000]">
+            <div className="h-full scale-110 bg-[repeating-linear-gradient(40deg,#cb46aa_0%,#cb46aa_18%,#f6c476_23%,#ee7db8_34%)] blur-[7px]" />
+          </div>
+          <div aria-hidden="true" className="aspect-[2/3] rotate-9 overflow-hidden border-2 border-black bg-[#a7bd64] shadow-[3px_4px_0_#000]">
+            <div className="h-full scale-110 bg-[repeating-linear-gradient(160deg,#436b55_0%,#436b55_17%,#e2d884_20%,#a7bd64_33%)] blur-[7px]" />
+          </div>
+        </div>
+      </div>
+      <div className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <h2 className="text-lg font-bold leading-tight sm:text-xl">Featured Zine Pack No. 1</h2>
+          <span className="rounded-full border border-black bg-[#F0EBCC] px-2.5 py-1 text-xs font-black">Coming soon</span>
+        </div>
+        <p className="mt-2 text-sm">Featuring shdwmtn and salamanderprint.</p>
+        <Link href="/issues/untitled" className="mt-4 inline-block text-sm font-bold underline">Read the shdwmtn issue ↗</Link>
+      </div>
+    </section>
+  );
 }
 
 export default function StorePage() {
   const [products, setProducts] = useState<StoreProduct[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<StoreProduct | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [catalog, setCatalog] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const [cart, setCart] = useState<StoreCartEntry[]>([]);
+  const [cartLoaded, setCartLoaded] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(CART_KEY);
-      if (saved) setCart(JSON.parse(saved));
-    } catch {}
-
-    if (window.location.search.includes('order=success')) {
-      setOrderSuccess(true);
-      localStorage.removeItem(CART_KEY);
-      setCart([]);
-      window.history.replaceState({}, '', '/store');
+    try { setCart(readCart(localStorage.getItem(CART_KEY))); } catch {}
+    setCartLoaded(true);
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get("session_id");
+    if (params.get("order") === "cancelled") {
+      setNotice("Checkout cancelled. Your cart is saved.");
+      window.history.replaceState(null, "", "/store");
     }
+    if (!session) return;
+    setNotice("Checking your payment…");
+    const controller = new AbortController();
+    fetch(`/api/payments/store-checkout?session_id=${encodeURIComponent(session)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        const result = await response.json();
+        if (result.status === "paid") {
+          setCart([]);
+          setNotice(`Payment received. Your order reference is ${result.orderId}.`);
+        } else if (result.status === "processing") {
+          setCart([]);
+          setNotice(`Payment is processing. Your order reference is ${result.orderId}.`);
+        } else {
+          setNotice("Payment is incomplete. Your cart is saved.");
+        }
+      }).catch(() => { if (!controller.signal.aborted) setNotice("We couldn’t confirm the payment. Refresh to try again or contact us for help."); });
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(CART_KEY, JSON.stringify(cart));
-  }, [cart]);
+    if (!cartLoaded) return;
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {}
+  }, [cart, cartLoaded]);
 
   useEffect(() => {
-    fetch('/api/store/products?in_stock=true')
-      .then((r) => r.json())
-      .then((d) => setProducts(d.products ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    const controller = new AbortController();
+    fetch("/api/store/products", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        setProducts(data.products);
+        setCatalog("ready");
+      })
+      .catch(() => { if (!controller.signal.aborted) setCatalog("error"); });
+    return () => controller.abort();
+  }, [attempt]);
 
-  function addToCart(product: StoreProduct) {
-    setCart((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
-      if (existing) {
-        return prev.map((i) =>
-          i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      }
-      return [
-        ...prev,
-        {
-          productId: product.id,
-          name: product.name,
-          price_cents: product.price_cents,
-          quantity: 1,
-          image_url: product.image_url,
-        },
-      ];
+  useEffect(() => {
+    const panel = dialog.current;
+    if (!panel) return;
+    if (cartOpen && !panel.open) panel.showModal();
+    if (!cartOpen && panel.open) panel.close();
+  }, [cartOpen]);
+
+  const display = products.find(isMiniDisplay);
+  const others = products.filter((product) => !isMiniDisplay(product));
+  const cartItems = cart.map((entry) => ({ ...entry, product: products.find(({ id }) => id === entry.productId) }));
+  const cartCount = cart.reduce((count, entry) => count + entry.quantity, 0);
+  const cartTotal = cartItems.reduce((total, entry) => total + (entry.product?.price_cents ?? 0) * entry.quantity, 0);
+  const canCheckOut = catalog === "ready" && cartItems.length > 0 && cartItems.every(({ product }) => product?.in_stock);
+
+  function changeCart(productId: string, quantity: number) {
+    setError("");
+    setCart((previous) => {
+      const exists = previous.some((entry) => entry.productId === productId);
+      if (quantity <= 0) return previous.filter((entry) => entry.productId !== productId);
+      if (exists) return previous.map((entry) => entry.productId === productId ? { productId, quantity } : entry);
+      if (previous.length >= MAX_CART_LINES) return previous;
+      return [...previous, { productId, quantity }];
     });
-    setSelected(null);
+  }
+
+  function buy(product: StoreProduct) {
+    const quantity = cart.find(({ productId }) => productId === product.id)?.quantity ?? 0;
+    changeCart(product.id, Math.min(quantity + 1, MAX_LINE_QUANTITY));
     setCartOpen(true);
   }
 
-  function updateQty(productId: string, delta: number) {
-    setCart((prev) =>
-      prev
-        .map((i) => (i.productId === productId ? { ...i, quantity: i.quantity + delta } : i))
-        .filter((i) => i.quantity > 0)
-    );
-  }
-
-  function removeFromCart(productId: string) {
-    setCart((prev) => prev.filter((i) => i.productId !== productId));
-  }
-
-  async function handleCheckout() {
-    if (cart.length === 0 || checkingOut) return;
+  async function checkout() {
+    if (!canCheckOut || checkingOut) return;
     setCheckingOut(true);
+    setError("");
     try {
-      const res = await fetch('/api/payments/store-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-        }),
+      const response = await fetch("/api/payments/store-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: cart }),
       });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert(data.error ?? 'Checkout failed. Please try again.');
-        setCheckingOut(false);
-      }
-    } catch {
-      alert('Checkout failed. Please try again.');
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error ?? "Checkout is unavailable. Try again.");
+      window.location.assign(data.url);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Checkout is unavailable. Try again.");
       setCheckingOut(false);
     }
   }
 
-  const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-  const cartTotal = cart.reduce((s, i) => s + i.price_cents * i.quantity, 0);
-
   return (
-    <>
-      <main className="min-h-screen text-black" style={NOTEPAD_BG}>
-        <div className="max-w-6xl mx-auto px-8 py-16">
-
-          {orderSuccess && (
-            <div className="mb-8 p-4 bg-green-50 border-2 border-green-400 rounded-xl text-green-800 font-semibold text-sm">
-              Order placed. You&apos;ll receive a confirmation email. Thank you.
+    <main className="zg-page px-4 py-5 sm:px-8 sm:py-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-4 flex items-center justify-between gap-3">
+          <h1 className="text-xl font-bold">Store</h1>
+          <button className="zg-button zg-button-dark px-5" onClick={() => setCartOpen(true)}>Cart · {cartCount}</button>
+        </header>
+        {notice && <p role="status" className="zg-panel mb-4 break-words p-4 text-sm font-bold">{notice} <Link href="/contact?topic=order" className="ml-1 underline">Order help ↗</Link></p>}
+        {catalog === "error" && <div role="alert" className="zg-panel mb-4 flex flex-wrap items-center gap-3 p-4 text-sm"><p>Live availability couldn’t load.</p><button className="zg-button" onClick={() => { setCatalog("loading"); setAttempt(attempt + 1); }}>Try again</button></div>}
+        <div className="grid items-stretch gap-4 lg:grid-cols-[1.08fr_1fr]">
+          <section className="zg-panel overflow-hidden">
+            <div className="border-b-2 border-black"><DisplayPreview /></div>
+            <div className="p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                <h2 className="text-lg font-bold leading-tight sm:text-xl">{display?.name ?? "Mini Zine Display"}</h2>
+                {display?.in_stock && <span className="text-lg font-black">{money(display.price_cents)}</span>}
+                {catalog === "ready" && !display?.in_stock && <span className="rounded-full border border-black bg-[#F0EBCC] px-2.5 py-1 text-xs font-black">Unavailable</span>}
+              </div>
+              <p className="mt-2 text-sm">A 3D-printed tabletop holder for mini zines.</p>
+              {display?.in_stock ? <button className="zg-button zg-button-dark mt-4" onClick={() => buy(display)}>Add to cart</button> :
+                <Link className="mt-4 inline-block text-sm font-bold underline" href="/contact?topic=order&reference=Mini%20Zine%20Display">Ask about availability ↗</Link>}
             </div>
-          )}
-
-          {loading && <p className="text-sm text-gray-400">Loading...</p>}
-
-          {!loading && products.length === 0 && (
-            <p className="text-sm text-gray-400 font-medium pt-2">Coming soon.</p>
-          )}
-
-          <div className="grid grid-cols-4 gap-6">
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="border-2 border-black rounded-2xl overflow-hidden bg-white flex flex-col"
-              >
-                <button
-                  onClick={() => setSelected(product)}
-                  className="w-full aspect-square bg-white border-b-2 border-black flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors group overflow-hidden"
-                  aria-label={`View ${product.name}`}
-                >
-                  {product.image_url ? (
-                    <img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <>
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-300 group-hover:text-gray-400 transition-colors">
-                        {product.category ?? 'Product'}
-                      </span>
-                      <div className="w-10 h-10 border-2 border-dashed border-gray-200 rounded-lg group-hover:border-gray-300 transition-colors" />
-                    </>
-                  )}
-                </button>
-
-                <div className="p-4 flex flex-col gap-1.5">
-                  <p className="font-bold text-sm leading-snug">{product.name}</p>
-                  <p className="text-sm font-semibold text-gray-500">{fmt(product.price_cents)}</p>
-                  <button
-                    onClick={() => setSelected(product)}
-                    className="mt-2 w-full border-2 border-black rounded-lg py-1.5 text-sm font-semibold hover:bg-black hover:text-white transition-colors"
-                  >
-                    View
-                  </button>
+          </section>
+          <PackPreview />
+        </div>
+        {others.length > 0 && <section aria-label="More products" className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {others.map((product) => <article className="zg-panel overflow-hidden" key={product.id}>
+            {product.image_url && (
+              // Merchant-supplied image hosts are dynamic.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.image_url} alt={product.name} className="aspect-square w-full border-b-2 border-black object-cover" />
+            )}
+            <div className="p-5">
+              <h2 className="text-xl font-black">{product.name}</h2>
+              {product.description && <p className="my-2 text-sm">{product.description}</p>}
+              {product.in_stock ? <><p className="my-2 font-bold">{money(product.price_cents)}</p><button className="zg-button zg-button-dark" onClick={() => buy(product)}>Add to cart</button></> : <p className="font-bold">Unavailable</p>}
+            </div>
+          </article>)}
+        </section>}
+      </div>
+      <dialog ref={dialog} onClose={() => setCartOpen(false)} aria-labelledby="store-cart-title" className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-full max-w-md border-l-2 border-black bg-white p-0 text-black backdrop:bg-black/45">
+        <div className="flex h-full flex-col">
+          <header className="flex items-center justify-between border-b-2 border-black bg-[#AAEEFF] p-4">
+            <h2 id="store-cart-title" className="text-2xl font-black">Cart</h2>
+            <button autoFocus className="zg-button" onClick={() => setCartOpen(false)}>Close</button>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4">
+            {!cartItems.length && <p className="text-sm">Your cart is empty.</p>}
+            {cartItems.map(({ quantity, productId, product }) => (
+              <div className="mb-3 rounded-lg border border-black p-3" key={productId}>
+                <p className="font-black">{product?.name ?? (catalog === "loading" ? "Loading product…" : "Unavailable product")}</p>
+                {product && <p className="text-sm">{product.in_stock ? `${money(product.price_cents)} each` : "Unavailable"}</p>}
+                <div className="mt-2 flex items-center gap-2">
+                  <button className="zg-button" aria-label={`Decrease quantity for ${product?.name ?? "product"}`} onClick={() => changeCart(productId, quantity - 1)} disabled={checkingOut}>−</button>
+                  <span className="min-w-5 text-center font-bold">{quantity}</span>
+                  <button className="zg-button" aria-label={`Increase quantity for ${product?.name ?? "product"}`} onClick={() => changeCart(productId, quantity + 1)} disabled={checkingOut || !product?.in_stock || quantity >= MAX_LINE_QUANTITY}>+</button>
+                  <button className="ml-auto text-sm font-bold underline" onClick={() => changeCart(productId, 0)} disabled={checkingOut}>Remove</button>
                 </div>
               </div>
             ))}
           </div>
+          <footer className="border-t-2 border-black p-4">
+            {error && <p role="alert" className="mb-3 text-sm font-bold text-red-800">{error}</p>}
+            <div className="mb-2 flex justify-between font-black"><span>Subtotal</span><span>{money(cartTotal)}</span></div>
+            {cartItems.length > 0 && catalog === "ready" && !canCheckOut && <p className="mb-2 text-sm">Remove unavailable items to continue.</p>}
+            <button className="zg-button zg-button-dark w-full" onClick={checkout} disabled={!canCheckOut || checkingOut}>{checkingOut ? "Opening Stripe…" : "Checkout"}</button>
+            <p className="mt-2 text-xs">U.S. shipping address collected at checkout.</p>
+          </footer>
         </div>
-      </main>
-
-      {cartCount > 0 && (
-        <button
-          onClick={() => setCartOpen(true)}
-          className="fixed bottom-8 right-8 z-40 bg-black text-white rounded-full px-5 py-3 text-sm font-bold shadow-lg hover:bg-gray-900 transition-colors flex items-center gap-2"
-        >
-          Cart
-          <span className="bg-white text-black rounded-full w-5 h-5 flex items-center justify-center text-xs font-black leading-none">
-            {cartCount}
-          </span>
-        </button>
-      )}
-
-      {cartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setCartOpen(false)} />
-          <div className="relative bg-white border-l-2 border-black w-full max-w-sm flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b-2 border-black">
-              <h2 className="text-lg font-black">Cart</h2>
-              <button
-                onClick={() => setCartOpen(false)}
-                className="text-2xl font-bold leading-none text-gray-400 hover:text-black transition-colors"
-                aria-label="Close cart"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-              {cart.length === 0 ? (
-                <p className="text-sm text-gray-400">Your cart is empty.</p>
-              ) : (
-                cart.map((item) => (
-                  <div key={item.productId} className="flex gap-3 items-start">
-                    <div className="w-14 h-14 shrink-0 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden flex items-center justify-center">
-                      {item.image_url ? (
-                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-5 h-5 border border-dashed border-gray-200 rounded" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold leading-snug truncate">{item.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{fmt(item.price_cents)} each</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <button
-                          onClick={() => updateQty(item.productId, -1)}
-                          className="w-6 h-6 border border-black rounded text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors"
-                        >
-                          -
-                        </button>
-                        <span className="text-sm font-semibold w-4 text-center">{item.quantity}</span>
-                        <button
-                          onClick={() => updateQty(item.productId, 1)}
-                          className="w-6 h-6 border border-black rounded text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors"
-                        >
-                          +
-                        </button>
-                        <button
-                          onClick={() => removeFromCart(item.productId)}
-                          className="ml-2 text-xs text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-sm font-bold shrink-0">{fmt(item.price_cents * item.quantity)}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-6 border-t-2 border-black">
-              <div className="flex justify-between items-center mb-4">
-                <span className="font-semibold text-sm">Subtotal</span>
-                <span className="font-black text-lg">{fmt(cartTotal)}</span>
-              </div>
-              <button
-                onClick={handleCheckout}
-                disabled={cart.length === 0 || checkingOut}
-                className="w-full bg-black text-white py-3 rounded-xl text-sm font-bold hover:bg-gray-900 transition-colors disabled:opacity-50"
-              >
-                {checkingOut ? 'Redirecting...' : 'Checkout'}
-              </button>
-              <p className="text-xs text-gray-400 text-center mt-2">Shipping & address collected at checkout</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selected && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-10"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            className="bg-white border-2 border-black rounded-2xl overflow-hidden flex w-full max-w-2xl max-h-[80vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-5/12 shrink-0 bg-gray-50 border-r-2 border-black flex flex-col items-center justify-center overflow-hidden">
-              {selected.image_url ? (
-                <img
-                  src={selected.image_url}
-                  alt={selected.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-3 h-full w-full p-8">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-300">
-                    {selected.category ?? 'Product'}
-                  </span>
-                  <div className="w-20 h-20 border-2 border-dashed border-gray-200 rounded-xl" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 p-8 overflow-y-auto flex flex-col min-h-[420px]">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
-                  {selected.category ?? 'Product'}
-                </span>
-                <button
-                  onClick={() => setSelected(null)}
-                  className="text-xl font-bold leading-none text-gray-400 hover:text-black transition-colors"
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-
-              <h2 className="text-2xl font-black mt-4 leading-tight">{selected.name}</h2>
-              <p className="text-lg font-bold mt-2">{fmt(selected.price_cents)}</p>
-              {selected.description && (
-                <p className="text-sm text-gray-600 mt-5 leading-relaxed">{selected.description}</p>
-              )}
-
-              <div className="mt-auto pt-8 flex flex-col gap-3">
-                {selected.in_stock ? (
-                  <button
-                    onClick={() => addToCart(selected)}
-                    className="w-full bg-black text-white py-3 rounded-xl text-sm font-bold hover:bg-gray-900 transition-colors"
-                  >
-                    Add to Cart
-                  </button>
-                ) : (
-                  <div className="w-full bg-gray-100 text-gray-400 py-3 rounded-xl text-sm font-bold text-center">
-                    Out of Stock
-                  </div>
-                )}
-                <button
-                  onClick={() => setSelected(null)}
-                  className="w-full border-2 border-black py-2.5 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors"
-                >
-                  Back
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+      </dialog>
+    </main>
   );
 }

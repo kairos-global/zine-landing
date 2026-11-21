@@ -217,6 +217,14 @@ export default function AdminDashboardPage() {
               <div className="text-sm text-gray-500">Add products, view orders, fulfil shipments</div>
             </Link>
 
+            <Link
+              href="/dashboard/admin/contact"
+              className="group relative rounded-xl border border-gray-200 bg-white p-5 transition-all hover:border-[#D16FF2] hover:shadow-md"
+            >
+              <div className="mb-1 text-base font-semibold">Contact inbox</div>
+              <div className="text-sm text-gray-500">Review and reply to requests from the site</div>
+            </Link>
+
             {/* Manage Users — coming soon */}
             <div className="relative bg-white border border-gray-100 rounded-xl p-5 opacity-50 cursor-not-allowed select-none">
               <div className="text-base font-semibold mb-1 text-gray-400">Manage Users</div>

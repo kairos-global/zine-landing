@@ -9,21 +9,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET — public: list all products (admin sees all; store shows in_stock only via filter)
+// The storefront uses public catalog fields. Admins request the full records.
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const onlyInStock = searchParams.get("in_stock") === "true";
+  const adminView = searchParams.get("admin") === "true";
+  if (adminView) {
+    const { userId } = await auth();
+    if (!userId || !await isAdmin(userId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   let query = supabase
     .from("store_products")
-    .select("*")
+    .select(adminView ? "*" : "id,name,description,price_cents,category,image_url,in_stock")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
-  if (onlyInStock) query = query.eq("in_stock", true);
-
+  if (searchParams.get("in_stock") === "true") query = query.eq("in_stock", true);
   const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: "Catalog unavailable." }, { status: 503 });
   return NextResponse.json({ products: data ?? [] });
 }
 

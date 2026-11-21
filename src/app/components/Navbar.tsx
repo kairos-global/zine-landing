@@ -1,11 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
 
 const Navbar = () => {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  if (pathname === '/map') return null;
 
   const links = [
     { label: 'About', href: '/about' },
