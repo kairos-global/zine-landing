@@ -131,7 +131,7 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
           aria-label="Search distributors"
           className="zg-input min-w-0 !text-base shadow-md"
           type="search"
-          placeholder="Shop, city, address or zine"
+          placeholder="Search the map"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -154,7 +154,7 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
         id="map-results"
         aria-labelledby="map-results-title"
         hidden={!panelOpen}
-        className="zg-panel absolute inset-x-3 bottom-7 z-10 max-h-[48dvh] overflow-y-auto overscroll-contain shadow-lg md:inset-x-auto md:bottom-auto md:left-4 md:top-[4.5rem] md:max-h-[calc(100dvh-6.25rem)] md:w-[22rem]"
+        className="zg-panel absolute inset-x-3 bottom-7 z-10 max-h-[44dvh] overflow-y-auto overscroll-contain shadow-lg md:inset-x-auto md:bottom-auto md:left-4 md:top-[4.5rem] md:max-h-[calc(100dvh-6.25rem)] md:w-[22rem]"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-[#AAEEFF] px-4 py-2.5">
           <h2 id="map-results-title" className="font-black" aria-live="polite">{loadStatus === "ready" ? `${shown.length} ${shown.length === 1 ? "location" : "locations"}` : "Locations"}</h2>
