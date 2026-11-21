@@ -277,7 +277,7 @@ export default function AdminStorePage() {
 
   async function fetchProducts() {
     setProductsLoading(true);
-    const res = await fetch("/api/store/products");
+    const res = await fetch("/api/store/products?admin=true");
     const data = await res.json();
     setProducts(data.products ?? []);
     setProductsLoading(false);

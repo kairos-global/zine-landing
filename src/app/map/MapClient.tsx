@@ -1,324 +1,192 @@
-// src/app/map/MapClient.tsx
 "use client";
 
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-import L, { DivIcon } from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { useSearchParams, useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import type { Coordinates, MapIssue, MapLocation } from "@/lib/map-directory";
 
-// ── Default map center: El Paso, TX ──────────────────────────────────────────
-const DEFAULT_CENTER: [number, number] = [31.7619, -106.485];
-const DEFAULT_ZOOM = 12;
+const DirectoryMap = dynamic(() => import("./DirectoryMap"), {
+  ssr: false,
+  loading: () => <div className="grid h-full place-items-center text-sm">Loading map…</div>,
+});
 
-// ── Types ────────────────────────────────────────────────────────────────────
+type Bounds = { south: number; west: number; north: number; east: number };
 
-type DistributorRow = {
-  id: string;
-  business_name: string | null;
-  verified_address: string | null;
-  contact_name: string | null;
-  business_email: string | null;
-  lat: number;
-  lng: number;
-};
-
-type DistributorDbRow = {
-  id: string;
-  business_name: string | null;
-  verified_address: string | null;
-  contact_name: string | null;
-  business_email: string | null;
-  lat: number | string | null;
-  lng: number | string | null;
-};
-
-type StockedIssue = { id: string; title: string | null; slug: string };
-
-// ── Supabase (public/anon — RLS must allow it) ───────────────────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: false } }
-);
-
-// ── Marker icon ───────────────────────────────────────────────────────────────
-const makeDot = (hex: string): DivIcon =>
-  L.divIcon({
-    className: "",
-    html: `<div style="
-      width:22px;height:22px;border-radius:9999px;
-      border:3px solid #000;background:${hex};
-      box-shadow:0 3px 0 rgba(0,0,0,.25);
-    "></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-  });
-
-const ICON_DISTRIB = makeDot("#D16FF2");
-
-// ── Auto-fit helper ───────────────────────────────────────────────────────────
-function FitBoundsOnce({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!bounds) return;
-    try { map.fitBounds(bounds, { padding: [56, 56] }); } catch { /* no-op */ }
-  }, [bounds, map]);
-  return null;
+function distance(a: Coordinates, b: Coordinates) {
+  const radians = Math.PI / 180;
+  const arc = Math.sin((b.lat - a.lat) * radians / 2) ** 2
+    + Math.cos(a.lat * radians) * Math.cos(b.lat * radians) * Math.sin((b.lng - a.lng) * radians / 2) ** 2;
+  return 3958.8 * 2 * Math.asin(Math.sqrt(Math.min(1, arc)));
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-export default function MapClient() {
-  const router = useRouter();
-  const search = useSearchParams();
+function inBounds(location: MapLocation, bounds: Bounds) {
+  const longitude = bounds.west + ((location.lng - bounds.west) % 360 + 360) % 360;
+  return location.lat >= bounds.south && location.lat <= bounds.north && longitude <= bounds.east;
+}
 
-  // issue filter stores the issue UUID (not slug) for easier stock lookups
-  const [issueFilter, setIssueFilter] = useState<string>(search.get("issue") ?? "");
-  const [stockedIssues, setStockedIssues] = useState<StockedIssue[]>([]);
-  const [distributors, setDistributors] = useState<DistributorRow[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function MapClient({ initialIssue, initialLocation }: { initialIssue: string; initialLocation: string }) {
+  const [locations, setLocations] = useState<MapLocation[]>([]);
+  const [query, setQuery] = useState("");
+  const [issueFilter, setIssueFilter] = useState(initialIssue);
+  const [selectedId, setSelectedId] = useState<string | null>(initialLocation);
+  const [position, setPosition] = useState<Coordinates | null>(null);
+  const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [inView, setInView] = useState(false);
+  const [mapVisible, setMapVisible] = useState(true);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const [camera, setCamera] = useState<{ type: "all" | "location" | "nearby"; target?: Coordinates; sequence: number }>({ type: "all", sequence: 0 });
 
-  // ── Load the list of issues that are actually stocked somewhere ────────────
   useEffect(() => {
-    let aborted = false;
-    (async () => {
-      // Grab all stocked issue_ids
-      const { data: stockRows } = await supabase
-        .from("distributor_stock")
-        .select("issue_id");
+    const controller = new AbortController();
+    fetch("/api/map", { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Directory unavailable");
+        return res.json() as Promise<{ locations: MapLocation[] }>;
+      })
+      .then(({ locations: data }) => {
+        const target = data.find((location) => location.id === initialLocation);
+        setLocations(data);
+        setCamera((prev) => ({ type: target ? "location" : "all", target, sequence: prev.sequence + 1 }));
+        setLoadStatus("ready");
+      })
+      .catch(() => { if (!controller.signal.aborted) setLoadStatus("error"); });
+    return () => controller.abort();
+  }, [attempt, initialLocation]);
 
-      if (!stockRows || stockRows.length === 0) return;
-
-      const uniqueIds = [
-        ...new Set(
-          (stockRows as { issue_id: string }[])
-            .map((r) => r.issue_id)
-            .filter(Boolean)
-        ),
-      ];
-
-      if (uniqueIds.length === 0) return;
-
-      const { data: issuesData } = await supabase
-        .from("issues")
-        .select("id,title,slug")
-        .in("id", uniqueIds);
-
-      if (!aborted && issuesData) {
-        setStockedIssues(
-          (issuesData as { id: string; title: string | null; slug: string }[]).map((i) => ({
-            id: i.id,
-            title: i.title ?? i.slug,
-            slug: i.slug,
-          }))
-        );
-      }
-    })();
-    return () => { aborted = true; };
-  }, []);
-
-  // ── Keep URL synced ────────────────────────────────────────────────────────
   useEffect(() => {
-    const params = new URLSearchParams(search.toString());
-    issueFilter ? params.set("issue", issueFilter) : params.delete("issue");
-    router.replace(`/map?${params.toString()}`, { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issueFilter]);
-
-  // ── Fetch distributor pins whenever filter changes ─────────────────────────
-  useEffect(() => {
-    let aborted = false;
-    async function run() {
-      setLoading(true);
-      let dData: DistributorRow[] = [];
-
-      if (issueFilter) {
-        // Find which distributors stock this specific issue
-        const { data: stockRows } = await supabase
-          .from("distributor_stock")
-          .select("distributor_id")
-          .eq("issue_id", issueFilter);
-
-        const ids = ((stockRows ?? []) as { distributor_id: string }[]).map(
-          (r) => r.distributor_id
-        );
-
-        if (ids.length > 0) {
-          const { data } = await supabase
-            .from("distributors")
-            .select("id,business_name,verified_address,contact_name,business_email,lat,lng")
-            .eq("status", "approved")
-            .not("lat", "is", null)
-            .not("lng", "is", null)
-            .in("id", ids);
-
-          dData = toDistributorRows(data);
-        }
-        // If no distributor stocks this issue: dData stays [] and map shows empty
-      } else {
-        // No filter — show every verified+approved distributor
-        const { data } = await supabase
-          .from("distributors")
-          .select("id,business_name,verified_address,contact_name,business_email,lat,lng")
-          .eq("status", "approved")
-          .not("lat", "is", null)
-          .not("lng", "is", null);
-
-        dData = toDistributorRows(data);
-      }
-
-      if (!aborted) {
-        setDistributors(dData);
-        setLoading(false);
-      }
+    const url = new URL(window.location.href);
+    for (const [key, value] of [["issue", issueFilter], ["location", selectedId]] as const) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
     }
-    run();
-    return () => { aborted = true; };
-  }, [issueFilter]);
+    window.history.replaceState(null, "", url);
+  }, [issueFilter, selectedId]);
 
-  // ── Auto-fit bounds (only when 2+ pins exist) ─────────────────────────────
-  const bounds = useMemo<L.LatLngBoundsExpression | null>(() => {
-    const pts: [number, number][] = distributors
-      .filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng))
-      .map((d) => [d.lat, d.lng]);
-    if (pts.length < 2) return null;
-    return L.latLngBounds(pts);
-  }, [distributors]);
+  const issues = useMemo(() => {
+    const unique = new Map<string, MapIssue>();
+    for (const location of locations) for (const issue of location.issues) unique.set(issue.id, issue);
+    return [...unique.values()].sort((a, b) => a.title.localeCompare(b.title));
+  }, [locations]);
+  const activeIssue = issues.find((issue) => issue.slug === issueFilter || issue.id === issueFilter);
 
-  const filteredIssueLabel = issueFilter
-    ? (stockedIssues.find((i) => i.id === issueFilter)?.title ?? "this issue")
-    : null;
+  const matches = useMemo(() => {
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return locations.filter((location) => {
+      if (issueFilter && !location.issues.some(({ slug, id }) => slug === issueFilter || id === issueFilter)) return false;
+      const searchable = [location.name, location.address, ...location.issues.map(({ title }) => title)].join(" ").toLowerCase();
+      return terms.every((term) => searchable.includes(term));
+    }).sort((a, b) => position ? distance(position, a) - distance(position, b) : a.name.localeCompare(b.name));
+  }, [locations, issueFilter, query, position]);
+
+  const shown = inView && bounds && mapVisible ? matches.filter((location) => inBounds(location, bounds)) : matches;
+  const selected = shown.find(({ id }) => id === selectedId);
+
+  function select(id: string, pan: boolean) {
+    const target = matches.find((match) => match.id === id);
+    if (!target) return;
+    setSelectedId(id);
+    if (pan) setCamera((prev) => ({ type: "location", target, sequence: prev.sequence + 1 }));
+  }
+
+  function locate() {
+    if (!navigator.geolocation) {
+      setLocationError("Location is unavailable on this device.");
+      return;
+    }
+    setLocating(true);
+    setLocationError("");
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      const target = { lat: coords.latitude, lng: coords.longitude };
+      setPosition(target);
+      setInView(false);
+      setCamera((prev) => ({ type: "nearby", target, sequence: prev.sequence + 1 }));
+      setLocating(false);
+    }, () => {
+      setLocating(false);
+      setLocationError("Couldn’t get your location. Try searching by city or address.");
+    }, { timeout: 8000, maximumAge: 60000 });
+  }
 
   return (
-    <div className="relative min-h-screen">
-
-      {/* ── Control bar ─────────────────────────────────────────────────── */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-3 z-[500] w-full max-w-lg px-4">
-        <div className="rounded-2xl border-4 border-black bg-[#AAEEFF] shadow-lg px-4 py-3 space-y-2">
-
-          {/* Top row: legend + count + filter */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-
-            {/* Legend + count */}
-            <div className="flex items-center gap-2">
-              <div
-                style={{
-                  width: 16, height: 16, borderRadius: "50%",
-                  background: "#D16FF2", border: "2.5px solid #000",
-                  boxShadow: "0 2px 0 rgba(0,0,0,.2)", flexShrink: 0,
-                }}
-              />
-              <span className="font-bold text-black text-sm sm:text-base tracking-tight">
-                Distributors
-              </span>
-              <span className="bg-black text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {loading ? "…" : distributors.length}
-              </span>
-            </div>
-
-            {/* Issue filter */}
-            <select
-              value={issueFilter}
-              onChange={(e) => setIssueFilter(e.target.value)}
-              className="rounded-lg border-2 border-black bg-white px-3 py-1.5 text-sm text-black font-medium focus:outline-none cursor-pointer"
-              aria-label="Filter by stocked issue"
-            >
-              <option value="">All locations</option>
-              {stockedIssues.map((it) => (
-                <option key={it.id} value={it.id}>
-                  {it.title ?? it.slug}
-                </option>
-              ))}
-            </select>
+    <main className="zg-page px-4 py-6 sm:px-8 sm:py-9">
+      <div className="mx-auto max-w-[1480px]">
+        <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="zg-title">Zine Map</h1>
+            <p className="mt-2 text-sm sm:text-base">Find zines on shelves at verified distributors.</p>
           </div>
+          <Link href="/contact?topic=map" className="zg-button">Suggest a location ↗</Link>
+        </header>
 
-          {/* Sub-label when a specific issue is selected */}
-          {filteredIssueLabel && (
-            <p className="text-xs text-black/60 leading-snug">
-              {distributors.length > 0
-                ? <>Showing {distributors.length} location{distributors.length !== 1 ? "s" : ""} stocking <span className="font-semibold">{filteredIssueLabel}</span></>
-                : <>No distributors are stocking <span className="font-semibold">{filteredIssueLabel}</span> yet</>
-              }
-            </p>
-          )}
+        <div className="zg-panel mb-3 grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+          <label className="grid gap-1 text-xs font-bold">Search the directory
+            <input className="zg-input" type="search" placeholder="Shop, city, address or zine" value={query} onChange={(event) => { setQuery(event.target.value); setInView(false); }} />
+          </label>
+          <label className="grid gap-1 text-xs font-bold">Stocked issue
+            <select className="zg-input" value={activeIssue?.slug ?? issueFilter} onChange={(event) => { setIssueFilter(event.target.value); setInView(false); }}>
+              <option value="">All issues</option>
+              {issueFilter && !activeIssue && <option value={issueFilter}>Linked issue</option>}
+              {issues.map(({ id, slug, title }) => <option key={id} value={slug}>{title}</option>)}
+            </select>
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="zg-button" type="button" disabled={locating} onClick={locate}>{locating ? "Locating…" : "◎ Near me"}</button>
+            <button className="zg-button" type="button" aria-pressed={!mapVisible} onClick={() => { setMapVisible(!mapVisible); setInView(false); }}>{mapVisible ? "List only" : "Show map"}</button>
+          </div>
+        </div>
+        {locationError && <p role="status" className="mb-3 text-sm">{locationError}</p>}
+
+        <div className={mapVisible ? "grid items-start gap-3 lg:grid-cols-[minmax(290px,350px)_minmax(0,1fr)]" : ""}>
+          <section aria-label="Distributor directory" className={`zg-panel overflow-hidden ${mapVisible ? "order-2 lg:order-1" : ""}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-[#AAEEFF] px-4 py-3">
+              <h2 className="font-black" aria-live="polite">{loadStatus === "ready" ? `${shown.length} ${shown.length === 1 ? "location" : "locations"}` : "Locations"}</h2>
+              {mapVisible && <label className="flex items-center gap-1.5 text-xs font-bold"><input type="checkbox" checked={inView} onChange={(event) => setInView(event.target.checked)} /> This map area</label>}
+            </div>
+            {loadStatus === "loading" && <p className="p-4 text-sm" role="status">Loading distributor listings…</p>}
+            {loadStatus === "error" && <div className="p-4"><p role="alert" className="mb-2 text-sm">The directory couldn’t load.</p><button className="zg-button" onClick={() => { setLoadStatus("loading"); setAttempt(attempt + 1); }}>Try again</button></div>}
+            {loadStatus === "ready" && !shown.length && (
+              <div className="space-y-2 p-4 text-sm">
+                <p>{inView ? "No matching distributors in this map area." : issueFilter ? "No matching distributors stock this issue." : "No matching distributors."}</p>
+                {(query || issueFilter || inView) && <button className="font-bold underline" onClick={() => { setQuery(""); setIssueFilter(""); setInView(false); }}>Clear filters</button>}
+              </div>
+            )}
+            <ul className={mapVisible ? "max-h-[32rem] divide-y divide-black/15 overflow-y-auto" : "grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3"}>
+              {shown.map((location) => (
+                <li id={`location-${location.id}`} key={location.id} className={`${!mapVisible ? "zg-panel overflow-hidden" : ""} ${selected?.id === location.id ? "bg-[#e9faff]" : ""}`}>
+                  <button type="button" className="block w-full px-4 py-3 text-left hover:bg-[#e9faff]" aria-expanded={selected?.id === location.id} onClick={() => selected?.id === location.id ? setSelectedId(null) : select(location.id, true)}>
+                    <span className="block font-black">{location.name}</span>
+                    <span className="block text-sm text-black/70">{location.address}</span>
+                    <span className="mt-1 block text-xs font-bold">{location.issues.length} stocked {location.issues.length === 1 ? "issue" : "issues"}{position ? ` · ${distance(position, location).toFixed(1)} mi` : ""}</span>
+                  </button>
+                  {selected?.id === location.id && (
+                    <div className="px-4 pb-4 text-sm">
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        <a className="zg-button" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location.address)}`} target="_blank" rel="noreferrer">Directions ↗</a>
+                        {location.email && <a className="zg-button" href={`mailto:${location.email}`}>Email shop</a>}
+                      </div>
+                      {location.issues.map((issue) => <Link key={issue.id} className="block py-0.5 font-bold underline" href={`/issues/${encodeURIComponent(issue.slug)}`}>{issue.title} ↗</Link>)}
+                      <Link className="mt-2 inline-block text-xs underline" href={`/contact?topic=map&reference=${encodeURIComponent(location.name)}`}>Report a listing update</Link>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {mapVisible && <section aria-label="Distributor map" className="zg-panel order-1 overflow-hidden lg:order-2">
+            <div className="relative h-[45svh] min-h-64 lg:h-[min(65vh,680px)]">
+              <DirectoryMap locations={matches} selectedId={selectedId} position={position} command={camera} onBounds={setBounds} onSelect={(id) => {
+                select(id, false);
+                document.getElementById(`location-${id}`)?.scrollIntoView({ block: "nearest" });
+              }} />
+              <button className="zg-button absolute bottom-6 left-3 z-[450]" type="button" disabled={!matches.length} onClick={() => { setInView(false); setCamera((prev) => ({ type: "all", sequence: prev.sequence + 1 })); }}>Fit results</button>
+            </div>
+          </section>}
         </div>
       </div>
-
-      {/* ── Map ─────────────────────────────────────────────────────────── */}
-      <MapContainer
-        center={DEFAULT_CENTER}
-        zoom={DEFAULT_ZOOM}
-        className="w-full h-[calc(100vh-0px)]"
-        preferCanvas
-      >
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <FitBoundsOnce bounds={bounds} />
-
-        {distributors.map((d) => (
-          <Marker key={`d-${d.id}`} position={[d.lat, d.lng]} icon={ICON_DISTRIB}>
-            <Popup>
-              <div className="min-w-[200px] space-y-1.5">
-                <div
-                  className="text-xs font-bold uppercase tracking-wide"
-                  style={{ color: "#D16FF2" }}
-                >
-                  Distributor
-                </div>
-                <div className="font-semibold text-sm leading-snug">
-                  {d.business_name ?? "—"}
-                </div>
-                {d.verified_address && (
-                  <div className="text-xs text-gray-600 leading-snug">
-                    {d.verified_address}
-                  </div>
-                )}
-                {d.contact_name && (
-                  <div className="text-xs text-gray-500">
-                    Contact: {d.contact_name}
-                  </div>
-                )}
-                {d.business_email && (
-                  <div className="text-xs">
-                    <a
-                      href={`mailto:${d.business_email}`}
-                      className="text-blue-600 underline"
-                    >
-                      {d.business_email}
-                    </a>
-                  </div>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
-
-      {/* Loading indicator */}
-      {loading && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-4 z-[500] rounded-full border-2 border-black bg-white/90 px-4 py-1.5 text-sm shadow">
-          Loading…
-        </div>
-      )}
-    </div>
+    </main>
   );
-}
-
-// ── Helper ────────────────────────────────────────────────────────────────────
-function toDistributorRows(data: unknown): DistributorRow[] {
-  const rows = (data ?? []) as DistributorDbRow[];
-  return rows
-    .filter((r) => r.lat != null && r.lng != null)
-    .map((r) => ({
-      id: r.id,
-      business_name: r.business_name ?? "Distributor",
-      verified_address: r.verified_address ?? null,
-      contact_name: r.contact_name ?? null,
-      business_email: r.business_email ?? null,
-      lat: Number(r.lat),
-      lng: Number(r.lng),
-    }));
 }

@@ -28,3 +28,15 @@ body {
   .eyebrow { @apply text-[11px] font-bold uppercase tracking-[.16em] text-gray-500; }
   .editor-button { @apply rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-30; }
 }
+
+@layer components {
+  .zg-page { @apply min-h-screen bg-[#F0EBCC] text-black; }
+  .zg-panel { @apply rounded-2xl border-2 border-black bg-white; }
+  .zg-button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border-2 border-black bg-white px-3 py-1.5 text-sm font-bold text-black transition-colors hover:bg-[#AAEEFF] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50; }
+  .zg-button-dark { @apply bg-black text-white hover:bg-[#333]; }
+  .zg-input { @apply min-h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm text-black focus-visible:outline-2 focus-visible:outline-offset-2; }
+  .zg-title { @apply text-4xl leading-[.96] font-black tracking-tight sm:text-6xl; }
+  .zg-pin { @apply grid place-items-center rounded-full border-[3px] border-black bg-[#D16FF2] shadow-md; }
+  .zg-pin-selected { @apply bg-[#AAEEFF] ring-[3px] ring-white; }
+  .zg-pin span { @apply block size-1.5 rounded-full bg-black; }
+}

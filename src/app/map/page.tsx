@@ -1,12 +1,12 @@
-// src/app/map/page.tsx
+import type { Metadata } from "next";
 import MapClient from "./MapClient";
 
-export const dynamic = "force-dynamic"; // always render fresh
+export const metadata: Metadata = {
+  title: "Zine Map | Zineground",
+  description: "Find verified Zineground distributors and see which issues they stock.",
+};
 
-export default function MapPage() {
-  return (
-    <main className="relative min-h-screen">
-      <MapClient />
-    </main>
-  );
+export default async function MapPage({ searchParams }: { searchParams: Promise<{ issue?: string; location?: string }> }) {
+  const { issue, location } = await searchParams;
+  return <MapClient initialIssue={typeof issue === "string" ? issue : ""} initialLocation={typeof location === "string" ? location : ""} />;
 }

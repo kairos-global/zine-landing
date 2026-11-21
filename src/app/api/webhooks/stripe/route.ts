@@ -43,6 +43,21 @@ export async function POST(req: Request) {
 
     console.log(`[StripeWebhook] Event: ${event.type} id=${event.id}`);
 
+    // Store transitions are conditional in the order table. Process them before
+    // recording event IDs so Stripe can retry a failed fulfillment write.
+    if ([
+      "checkout.session.completed",
+      "checkout.session.async_payment_succeeded",
+      "checkout.session.async_payment_failed",
+      "checkout.session.expired",
+    ].includes(event.type)) {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.type === "store_order") {
+        await handleStoreOrderPayment(session, event.type);
+        return NextResponse.json({ received: true });
+      }
+    }
+
     // Idempotency — Stripe guarantees at-least-once delivery.
     // Insert the event ID; if it already exists we've processed it.
     const { error: idempotencyError } = await supabase
@@ -70,8 +85,6 @@ export async function POST(req: Request) {
             await handleCreatorPayment(session);
           } else if (type === "distributor_shipping") {
             await handleDistributorShippingPayment(session);
-          } else if (type === "store_order") {
-            await handleStoreOrderPayment(session);
           } else {
             console.error(`[StripeWebhook] Unrecognized payment type "${type}" for session ${session.id} — doing nothing`);
           }
@@ -226,32 +239,30 @@ async function handleDistributorShippingPayment(session: Stripe.Checkout.Session
 
 // ─── Store order checkout ─────────────────────────────────────────────────────
 
-async function handleStoreOrderPayment(session: Stripe.Checkout.Session) {
+async function handleStoreOrderPayment(session: Stripe.Checkout.Session, eventType: Stripe.Event.Type) {
   const orderId = session.metadata?.orderId;
   if (!orderId) return;
 
-  type SessionExt = typeof session & {
-    shipping_details?: { name?: string; address?: Record<string, string> | null } | null;
+  const failed = eventType === "checkout.session.async_payment_failed" || eventType === "checkout.session.expired";
+  if (!failed && session.payment_status !== "paid") return;
+
+  const shipping = session.collected_information?.shipping_details
+    ?? (session as Stripe.Checkout.Session & { shipping_details?: { name: string; address: Stripe.Address } }).shipping_details;
+  const values = failed ? { status: "cancelled" } : {
+    status: "paid",
+    stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null,
+    total_cents: session.amount_total,
+    shipping_name: shipping?.name ?? session.customer_details?.name ?? null,
+    shipping_address: shipping?.address ?? null,
+    stripe_session_id: session.id,
   };
-  const sess = session as SessionExt;
 
-  const { error } = await supabase
-    .from("store_orders")
-    .update({
-      status: "paid",
-      stripe_payment_intent_id: session.payment_intent as string,
-      total_cents: session.amount_total,
-      shipping_name: sess.shipping_details?.name ?? session.customer_details?.name ?? null,
-      shipping_address: sess.shipping_details?.address ?? null,
-    })
-    .eq("id", orderId);
-
-  if (error) {
-    console.error("[StripeWebhook] store_orders update failed:", error);
-    throw error;
-  }
-
-  console.log(`[StripeWebhook] Store order ${orderId} marked paid.`);
+  const { error } = await supabase.from("store_orders")
+    .update(values)
+    .eq("id", orderId)
+    .eq("status", "pending")
+    .or(`stripe_session_id.eq.${session.id},stripe_session_id.is.null`);
+  if (error) throw error;
 }
 
 // ─── PaymentIntent succeeded (backup / auto-billing PI events) ────────────────
