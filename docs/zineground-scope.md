@@ -14,13 +14,13 @@ Zineground connects **making**, **discovering**, **collecting**, and **physicall
 | --- | --- | --- |
 | Landing | `/` | Existing visual landing experience and navigation. Unchanged by this release. |
 | About | `/about` | Reader, creator, and distributor explanations; pricing copy and FAQ. Includes an offline-zines proposal, which is informational rather than an implemented workflow. |
-| Contact | `/contact` | Email contact link. |
-| Browse zines | `/browse-zines` | Published issue covers, issue pages, PDF download/print actions, make-a-zine entry. |
+| Contact | `/contact` | Topic-based contact form. Map & Distributors is preselected on a plain visit. |
+| Browse zines | `/browse-zines` | Published issues in a desktop grid and a mobile reel that snaps to a fully visible card per issue. |
 | Issue | `/issues/[slug]` | Cover and creator, digital PDF, interactive links and QR codes, map links, flip-reader entry. |
 | Flip reader | `/issues/[slug]/flip` | Digital page-flipping viewer. |
 | Creator profile | `/u/[handle]` | Public creator identity and published work. |
 | Map | `/map` | Distributor locations and issue-stock filtering; issue pages can link to a filtered map. |
-| Store | `/store` | Product browsing, detail modal, cart, Stripe checkout, purchase confirmation. Empty stock currently produces a “Coming soon” state. |
+| Store | `/store` | Product browsing, cart, Stripe checkout, purchase confirmation. The Mini Zine Display uses one transparent turntable with a pause control. |
 | Sign in / sign up | `/sign-in/[[...sign-in]]`, `/sign-up/[[...sign-up]]` | Clerk account flows. |
 | Dashboard | `/dashboard` | Entrypoint to reader, creator, distributor, profile, analytics, and eligible admin tools; pending approval badge. Now includes a prominent scanner shortcut. |
 | **QR scanner — new** | `/dashboard/scan` | Full-screen live camera, automatic QR detection, photo import, camera switching, supported-device flashlight, native redirect, external result card, copy and scan-again actions. |
@@ -38,6 +38,12 @@ Zineground connects **making**, **discovering**, **collecting**, and **physicall
 | Paid creator administration | `/dashboard/admin/paid-creators` | Review and manage paid-creator applications and statuses. |
 | Distributor order administration | `/dashboard/admin/orders` | Review order/payment state and finalize fulfillment. |
 | Store administration | `/dashboard/admin/store` | Product management and store-order fulfillment. |
+
+## Contact defaults
+
+- Preselect **Map & Distributors** whenever someone opens `/contact`. A valid explicit topic link such as `/contact?topic=order` may preselect that topic for the visitor.
+- Use SVG icons with text labels on Contact and Store links.
+- On mobile, show a compact topic picker so the form is visible on the first screen. Keep the desktop topic list beside the form.
 
 ## Supporting services
 

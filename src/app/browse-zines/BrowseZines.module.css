@@ -1,0 +1,52 @@
+@media (width < 40rem) {
+  :global(body):has(> .page) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  :global(body):has(> .page) > :global(nav) {
+    flex: none;
+  }
+
+  .page {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .issues {
+    grid-auto-rows: 100%;
+    gap: 0.75rem;
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+  }
+
+  .issue {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .coverLink {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .cover {
+    min-height: 0;
+    flex: 1;
+    aspect-ratio: auto;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
