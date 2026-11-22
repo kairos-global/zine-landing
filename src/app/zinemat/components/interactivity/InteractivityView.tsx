@@ -397,7 +397,11 @@ export default function InteractivityView({ editId, initialMode }: {
   const hasChanges = formChanged || canvasChanged;
   const interactivityApplied = mode === "create" ? canvas.pages.some(page => page.qrCodes?.length) : pdfHasQrPlacement(files.pdf);
   const canPlace = mode === "create" || Boolean(files.pdf && !pdfPending);
-  const statusText = saveStatus === "error" ? "Not saved" : saveStatus === "saving" || uploading || hasChanges ? "Saving…" : savedId ? "Saved" : "Not saved";
+  let statusText = "Not saved";
+  if (saveStatus !== "error") {
+    if (saveStatus === "saving" || uploading || (!pdfPending && hasChanges)) statusText = "Saving…";
+    else if (savedId && !pdfPending) statusText = "Saved";
+  }
 
   async function switchMode(event: MouseEvent<HTMLAnchorElement>) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

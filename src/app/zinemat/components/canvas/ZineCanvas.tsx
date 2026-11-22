@@ -388,7 +388,7 @@ export default function ZineCanvas({ state, format, title, onChange, onImporting
               aria-label={position === 0 ? "Cover, page 1" : `Page ${position + 1}`} aria-pressed={!sheet && index === position}
               className={`min-h-11 min-w-0 rounded-lg border p-1 text-xs font-semibold ${!sheet && index === position ? selectedStyle : "border-yellow-200"}`}>
               <span className="mx-auto mb-1 block aspect-[198/306] w-7 overflow-hidden rounded-sm border border-black/10" style={{ background: item?.background ?? state.background }}>
-                {(pageHasArtwork(item) || !!item?.qrCodes?.length) && <Preview state={state} format={format} index={position} width={55} />}
+                {pageHasArtwork(item) && <Preview state={state} format={format} index={position} width={55} />}
               </span>
               {position === 0 ? "Cover" : position + 1}
             </button>

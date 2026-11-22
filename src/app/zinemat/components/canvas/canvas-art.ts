@@ -55,7 +55,7 @@ export function artworkLayers(page: CanvasPage): ArtworkLayer[] {
 }
 
 export function pageHasArtwork(page: CanvasPage | undefined) {
-  return Boolean(page && artworkLayers(page).some(layer => layer.kind === "image" || layer.text.trim()));
+  return Boolean(page && (page.qrCodes?.length || artworkLayers(page).some(layer => layer.kind === "image" || layer.text.trim())));
 }
 
 export function layerName(layer: ArtworkLayer) {
