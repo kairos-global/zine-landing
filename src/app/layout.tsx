@@ -10,6 +10,7 @@ export const metadata = {
   title: 'Zineground',
   description: 'Zineground is a zine distribution network.',
   icons: {
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     icon: "/zineground.ico?v=2",
   },
 };
