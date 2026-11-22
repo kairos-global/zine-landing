@@ -39,6 +39,7 @@ export const CONTACT_TOPICS = {
 };
 
 export type ContactTopic = keyof typeof CONTACT_TOPICS;
+export const DEFAULT_CONTACT_TOPIC: ContactTopic = "map";
 export type ContactStatus = "new" | "in_progress" | "resolved";
 
 export type ContactRequest = {

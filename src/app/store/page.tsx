@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { isMiniDisplay, MAX_CART_LINES, MAX_LINE_QUANTITY, type StoreCartEntry, type StoreProduct } from "@/lib/store";
+import ZineIcon from "@/components/ZineIcon";
 import DisplayPreview from "./DisplayPreview";
 
 const CART_KEY = "zineground_store_cart";
@@ -47,7 +48,7 @@ function PackPreview() {
           <span className="rounded-full border border-black bg-[#F0EBCC] px-2.5 py-1 text-xs font-black">Coming soon</span>
         </div>
         <p className="mt-2 text-sm">Featuring shdwmtn and salamanderprint.</p>
-        <Link href="/issues/untitled" className="mt-4 inline-block text-sm font-bold underline">Read the shdwmtn issue ↗</Link>
+        <Link href="/issues/untitled" className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold underline"><ZineIcon name="book" />Read the shdwmtn issue</Link>
       </div>
     </section>
   );
@@ -167,9 +168,9 @@ export default function StorePage() {
       <div className="mx-auto max-w-6xl">
         <header className="mb-4 flex items-center justify-between gap-3">
           <h1 className="text-xl font-bold">Store</h1>
-          <button className="zg-button zg-button-dark px-5" onClick={() => setCartOpen(true)}>Cart · {cartCount}</button>
+          <button className="zg-button zg-button-dark gap-1.5 px-5" onClick={() => setCartOpen(true)}><ZineIcon name="cart" />Cart · {cartCount}</button>
         </header>
-        {notice && <p role="status" className="zg-panel mb-4 break-words p-4 text-sm font-bold">{notice} <Link href="/contact?topic=order" className="ml-1 underline">Order help ↗</Link></p>}
+        {notice && <p role="status" className="zg-panel mb-4 break-words p-4 text-sm font-bold">{notice} <Link href="/contact?topic=order" className="ml-1 inline-flex items-center gap-1.5 underline"><ZineIcon name="mail" />Order help</Link></p>}
         {catalog === "error" && <div role="alert" className="zg-panel mb-4 flex flex-wrap items-center gap-3 p-4 text-sm"><p>Live availability couldn’t load.</p><button className="zg-button" onClick={() => { setCatalog("loading"); setAttempt(attempt + 1); }}>Try again</button></div>}
         <div className="grid items-stretch gap-4 lg:grid-cols-[1.08fr_1fr]">
           <section className="zg-panel overflow-hidden">
@@ -182,7 +183,7 @@ export default function StorePage() {
               </div>
               <p className="mt-2 text-sm">A 3D-printed tabletop holder for mini zines.</p>
               {display?.in_stock ? <button className="zg-button zg-button-dark mt-4" onClick={() => buy(display)}>Add to cart</button> :
-                <Link className="mt-4 inline-block text-sm font-bold underline" href="/contact?topic=order&reference=Mini%20Zine%20Display">Ask about availability ↗</Link>}
+                <Link className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold underline" href="/contact?topic=order&reference=Mini%20Zine%20Display"><ZineIcon name="mail" />Ask about availability</Link>}
             </div>
           </section>
           <PackPreview />

@@ -48,7 +48,7 @@ store.
 
 ## Public map, store, and contact
 
-The map reads approved distributors with verified addresses and lists published issues with positive stock. The store uses its existing catalog and order tables. Keep **Mini Zine Display** out of stock until inventory is ready. The product preview uses rendered views of `3dmodels/finished/zine-holders/zine-holder-v3-mini.stl`. The Featured Zine Pack uses cover art supplied by shdwmtn and salamanderprint.
+The map reads approved distributors with verified addresses and lists published issues with positive stock. The store uses its existing catalog and order tables. Keep **Mini Zine Display** out of stock until inventory is ready. The product preview is a single transparent, pausable 14-second turntable rendered from `3dmodels/finished/zine-holders/zine-holder-v3-mini.stl`. The Featured Zine Pack uses cover art supplied by shdwmtn and salamanderprint.
 
 ### Contact intake and Google Workspace
 

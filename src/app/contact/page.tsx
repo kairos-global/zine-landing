@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { isContactTopic } from "@/lib/contact";
+import { DEFAULT_CONTACT_TOPIC, isContactTopic } from "@/lib/contact";
 import ContactForm from "./ContactForm";
 
 export const metadata: Metadata = {
@@ -9,5 +9,7 @@ export const metadata: Metadata = {
 
 export default async function ContactPage({ searchParams }: { searchParams: Promise<{ topic?: string; reference?: string }> }) {
   const { topic, reference } = await searchParams;
-  return <ContactForm initialTopic={typeof topic === "string" && isContactTopic(topic) ? topic : "general"} initialReference={typeof reference === "string" ? reference.slice(0, 250) : ""} />;
+  const initialTopic = typeof topic === "string" && isContactTopic(topic) ? topic : DEFAULT_CONTACT_TOPIC;
+  const initialReference = typeof reference === "string" ? reference.slice(0, 250) : "";
+  return <ContactForm key={JSON.stringify([initialTopic, initialReference])} initialTopic={initialTopic} initialReference={initialReference} />;
 }

@@ -6,6 +6,7 @@ export const ZINE_CATEGORIES = [
   { key: "diy", label: "DIY" },
   { key: "photography", label: "Photography" },
   { key: "music", label: "Music" },
+  { key: "literature", label: "Literature" },
   { key: "product_catalog", label: "Product Catalog" },
   { key: "menu", label: "Menu" },
   { key: "event_calendar", label: "Event Calendar" },
