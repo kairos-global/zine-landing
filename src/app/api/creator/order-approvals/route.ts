@@ -39,14 +39,17 @@ export async function GET() {
         quantity,
         creator_approval_status,
         creator_reviewed_at,
-        order:distributor_orders(
+        order:distributor_orders!inner(
           id,
           status,
           created_at,
           distributor:distributors(business_name, contact_name, contact_email)
         ),
-        issue:issues(id, title, profile_id)
+        issue:issues!inner(id, title, profile_id)
       `)
+      .eq("issue.profile_id", profile.id)
+      .eq("issue.print_for_me", true)
+      .not("order.stripe_payment_method_id", "is", null)
       .in("creator_approval_status", [
         "pending_approval",
         "auto_approved",
@@ -152,7 +155,10 @@ export async function PATCH(req: Request) {
     // Verify this item belongs to this creator's issue
     const { data: item, error: fetchError } = await supabase
       .from("distributor_order_items")
-      .select("id, creator_approval_status, issue:issues(profile_id)")
+      .select("id, creator_approval_status, issue:issues!inner(profile_id), order:distributor_orders!inner(id)")
+      .eq("issue.print_for_me", true)
+      .eq("order.status", "pending_creator_approval")
+      .not("order.stripe_payment_method_id", "is", null)
       .eq("id", orderItemId)
       .single();
 
@@ -183,7 +189,7 @@ export async function PATCH(req: Request) {
         creator_approval_status: newStatus,
         creator_reviewed_at: new Date().toISOString(),
       })
-      .eq("id", orderItemId);
+      .eq("id", orderItemId).eq("creator_approval_status", "pending_approval");
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });

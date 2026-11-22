@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSiteBaseUrl } from "@/lib/site-url";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { createCheckoutSession } from "@/lib/stripe";
@@ -40,7 +41,9 @@ export async function POST(req: Request) {
 
     const { data: item, error: itemError } = await supabase
       .from("distributor_order_items")
-      .select("id, quantity, creator_approval_status, issue:issues(id, title, profile_id, print_for_me)")
+      .select("id, quantity, creator_approval_status, issue:issues(id, title, profile_id, print_for_me), order:distributor_orders!inner(id)")
+      .eq("order.status", "pending_creator_approval")
+      .not("order.stripe_payment_method_id", "is", null)
       .eq("id", orderItemId)
       .single();
 
@@ -110,9 +113,7 @@ export async function POST(req: Request) {
     );
     const costDollars = costCents / 100;
 
-    const appOrigin = process.env.NEXT_PUBLIC_APP_URL
-      ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
-      : "http://localhost:3000";
+    const appOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || getSiteBaseUrl()).origin;
 
     const session = await createCheckoutSession(
       costDollars,

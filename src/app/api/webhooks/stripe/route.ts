@@ -162,7 +162,10 @@ async function handleSetupCompleted(session: Stripe.Checkout.Session) {
     }
   }
 
-  console.log(`[StripeWebhook] Card saved for order ${orderId}, method ${paymentMethodId}`);
+  const { data: items, error: itemsError } = await supabase.from("distributor_order_items")
+    .select("id").eq("order_id", orderId).limit(1);
+  if (itemsError) throw itemsError;
+  if (items?.[0]) await checkAndFinalizeOrder(items[0].id, supabase);
 }
 
 // ─── Creator pays print fee ───────────────────────────────────────────────────

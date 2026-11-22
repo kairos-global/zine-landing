@@ -20,7 +20,10 @@ export function mapFromPdfUrl(url: string): ViewMap | null {
 }
 
 export function withViewMap(url: string, map: ViewMap) {
-  return `${url.split("#")[0]}#zinemat-view=${map}`;
+  const [base, hash] = url.split("#");
+  const params = new URLSearchParams(hash);
+  params.set("zinemat-view", map);
+  return `${base}#${params}`;
 }
 
 export function miniPanel(source: HTMLCanvasElement, map: MiniMap, page: number) {

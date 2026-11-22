@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { stripe, createSetupCheckoutSession } from "@/lib/stripe";
+import { getSiteBaseUrl } from "@/lib/site-url";
 import { calculateTotalCharge } from "@/lib/shipping";
 
 const supabase = createClient(
@@ -84,9 +85,11 @@ export async function POST(req: Request) {
       items: Array<{ issue_id: string; quantity: number }>;
     };
 
-    if (!items || items.length === 0) {
+    if (!Array.isArray(items) || !items.length || items.some(item =>
+      !item || typeof item.issue_id !== "string" || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 500
+    ) || new Set(items.map(item => item.issue_id)).size !== items.length) {
       return NextResponse.json(
-        { error: "Order must contain at least one item" },
+        { error: "Order must contain unique zines with quantities from 1 to 500" },
         { status: 400 }
       );
     }
@@ -119,33 +122,33 @@ export async function POST(req: Request) {
 
     // ── Validate quantities BEFORE creating any rows ──────────────────────────
     const issueIds = items.map((i) => i.issue_id);
-    const { data: issueSettings } = await supabase
+    const { data: issueSettings, error: issueError } = await supabase
       .from("issues")
-      .select("id, print_for_me, max_copies_per_order, auto_approve_quantity")
+      .select("id, pdf_url, print_for_me, self_distribute, max_copies_per_order, auto_approve_quantity")
+      .eq("status", "published")
       .in("id", issueIds);
 
     const issueMap = new Map(
       (issueSettings || []).map((iss) => [iss.id, iss])
     );
 
+    if (issueError) return NextResponse.json({ error: "Could not verify the order items" }, { status: 500 });
+    let printQuantity = 0;
     for (const item of items) {
-      const iss = issueMap.get(item.issue_id);
-      if (iss?.print_for_me && iss.max_copies_per_order != null) {
-        if (item.quantity > iss.max_copies_per_order) {
-          return NextResponse.json(
-            {
-              error: "Order quantity exceeds creator limit",
-              details: `The creator allows a maximum of ${iss.max_copies_per_order} copies per order for this zine. You requested ${item.quantity}.`,
-            },
-            { status: 422 }
-          );
-        }
+      const issue = issueMap.get(item.issue_id);
+      if (!issue || !(issue.self_distribute || issue.print_for_me && issue.pdf_url)) {
+        return NextResponse.json({ error: "A zine is no longer available for distribution" }, { status: 422 });
       }
+      if (!issue.print_for_me) continue;
+      if (item.quantity > (issue.max_copies_per_order ?? 50)) {
+        return NextResponse.json({ error: "Order quantity exceeds the creator’s limit" }, { status: 422 });
+      }
+      printQuantity += item.quantity;
     }
 
     // ── Create/reuse Stripe Customer for this distributor ─────────────────────
     let stripeCustomerId = distributor.stripe_customer_id as string | null;
-    if (!stripeCustomerId) {
+    if (printQuantity > 0 && !stripeCustomerId) {
       // Use the logged-in user's actual email (from Clerk), not the business registration email
       const clerkUser = await currentUser();
       const userEmail =
@@ -158,10 +161,9 @@ export async function POST(req: Request) {
         metadata: { distributor_id: distributor.id },
       });
       stripeCustomerId = customer.id;
-      await supabase
-        .from("distributors")
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq("id", distributor.id);
+      const { error } = await supabase.from("distributors")
+        .update({ stripe_customer_id: stripeCustomerId }).eq("id", distributor.id);
+      if (error) throw error;
     }
 
     // ── Create the order row ──────────────────────────────────────────────────
@@ -219,40 +221,40 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── Create Stripe Setup Checkout ──────────────────────────────────────────
-    const appOrigin =
-      typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
-      process.env.NEXT_PUBLIC_APP_URL
-        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
-        : "http://localhost:3000";
-
-    const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
-    const estimatedTotal = calculateTotalCharge(totalQuantity);
-
-    const setupSession = await createSetupCheckoutSession(
-      stripeCustomerId,
-      `${appOrigin}/dashboard/distributor?setup=success&session_id={CHECKOUT_SESSION_ID}`,
-      `${appOrigin}/dashboard/distributor?setup=cancelled`,
-      {
-        orderId: order.id,
-        type: "distributor_card_setup",
+    const totalQuantity = items.reduce((total, item) => total + item.quantity, 0);
+    if (!printQuantity) {
+      const { data: placed, error } = await supabase.from("distributor_orders")
+        .update({ status: "placed" }).eq("id", order.id).select().single();
+      if (error) {
+        await supabase.from("distributor_orders").delete().eq("id", order.id);
+        throw error;
       }
-    );
+      return NextResponse.json({ success: true, order: placed, estimatedTotal: 0, totalQuantity });
+    }
 
-    // Save setup session ID on the order so the webhook can match it
-    await supabase
-      .from("distributor_orders")
-      .update({ stripe_setup_session_id: setupSession.id })
-      .eq("id", order.id);
-
-    return NextResponse.json({
-      success: true,
-      order,
-      setupCheckoutUrl: setupSession.url,
-      estimatedTotal,
-      totalQuantity,
-      message: "Order created. Complete card setup to confirm your order.",
-    });
+    const appOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || getSiteBaseUrl()).origin;
+    try {
+      if (!stripeCustomerId) throw new Error("Missing Stripe customer");
+      const setupSession = await createSetupCheckoutSession(
+        stripeCustomerId,
+        `${appOrigin}/dashboard/distributor?setup=success&session_id={CHECKOUT_SESSION_ID}`,
+        `${appOrigin}/dashboard/distributor?setup=cancelled`,
+        { orderId: order.id, type: "distributor_card_setup" }
+      );
+      const { error } = await supabase.from("distributor_orders")
+        .update({ stripe_setup_session_id: setupSession.id }).eq("id", order.id);
+      if (error || !setupSession.url) throw error ?? new Error("Missing Stripe checkout URL");
+      return NextResponse.json({
+        success: true,
+        order,
+        setupCheckoutUrl: setupSession.url,
+        estimatedTotal: calculateTotalCharge(printQuantity),
+        totalQuantity,
+      });
+    } catch (error) {
+      await supabase.from("distributor_orders").delete().eq("id", order.id);
+      throw error;
+    }
   } catch (err) {
     console.error("Distributor orders POST error:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

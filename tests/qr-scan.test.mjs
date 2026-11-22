@@ -14,7 +14,7 @@ const qrPath = `/qr/${id}/${id}`;
 
 test('existing native link and collection formats open through their tracked routes', () => {
   for (const host of [base, 'https://zineground.com']) {
-    for (const path of [qrPath, `/collect/${id}`]) {
+    for (const path of [qrPath, `/collect/${id}`, `/qr/${id}/issue`, `/qr/${id}/collection`]) {
       const result = classifyQRCode(host + path, base);
       assert.equal(result.kind, 'native');
       assert.equal(result.url, host + path);
