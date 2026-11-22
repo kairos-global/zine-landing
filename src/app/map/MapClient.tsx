@@ -126,13 +126,10 @@ export default function MapClient({ initialIssue, initialLocation, initialCatego
   }
 
   return (
-    <main className="relative isolate h-dvh w-full overflow-hidden bg-[#e6e3dc] text-black">
+    <main className="zg-map-page relative isolate min-h-0 w-full flex-1 overflow-hidden bg-[#e6e3dc] text-black">
       <h1 className="sr-only">Zine Map</h1>
       <div className="absolute inset-x-3 top-3 z-20 mx-auto max-w-lg rounded-2xl border-4 border-black bg-[#AAEEFF] px-3 py-2.5 shadow-lg sm:px-4 sm:py-3">
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 sm:gap-x-3">
-          <Link href="/" aria-label="Zineground home" className="zg-button !min-h-8 shrink-0 !px-2 !py-0">
-            <span aria-hidden="true">←</span>
-          </Link>
           <button
             className="flex min-h-8 items-center gap-2 rounded font-bold tracking-tight hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
             type="button"
