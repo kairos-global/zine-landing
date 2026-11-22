@@ -5,10 +5,9 @@ const BLUE_DARK = "#1E7FA8";
 
 type Checklist = {
   basics: boolean;
-  cover: boolean;
-  pdf?: boolean;
-  interactivity?: boolean;
-  distribution?: boolean;
+  artwork: boolean;
+  interactivity: boolean;
+  distribution: boolean;
 };
 
 // ─── Small check / circle icons ──────────────────────────────────────────────
@@ -42,31 +41,18 @@ function PendingIcon({ required }: { required?: boolean }) {
   );
 }
 
-export default function FinalChecklist({
-  checklist,
-}: {
-  checklist: Checklist | Partial<Record<"A" | "B" | "C" | "D" | "E", boolean>>;
+export default function FinalChecklist({ checklist, mode, coverOnly }: {
+  checklist: Checklist;
+  mode: "upload" | "create";
+  coverOnly: boolean;
 }) {
-  // Normalise legacy format
-  const isLegacy =
-    "A" in checklist || "B" in checklist || "C" in checklist || "D" in checklist || "E" in checklist;
-
-  const c: Checklist = isLegacy
-    ? {
-        basics: !!(checklist as Record<string, boolean>).A,
-        cover: !!(checklist as Record<string, boolean>).B,
-      }
-    : (checklist as Checklist);
-
   const requiredItems = [
-    { key: "basics", ok: c.basics, label: "Title", desc: "A) Basics — required" },
-    { key: "cover", ok: c.cover, label: "Cover", desc: "B) Uploads — required" },
+    { key: "basics", ok: checklist.basics, label: "Title", desc: "A) Basics" },
+    { key: "artwork", ok: checklist.artwork, label: mode === "create" ? "Canvas artwork" : coverOnly ? "Cover" : "PDF & cover", desc: mode === "create" ? "B) Canvas" : "B) Uploads" },
   ];
-
   const optionalItems = [
-    { key: "pdf", ok: !!c.pdf, label: "PDF copy", desc: "B) Uploads" },
-    { key: "interactivity", ok: !!c.interactivity, label: "Links & QR", desc: "C) Interactivity" },
-    { key: "distribution", ok: !!c.distribution, label: "Distribution", desc: "D) Distribution" },
+    { key: "interactivity", ok: checklist.interactivity, label: "C) Links & QR" },
+    { key: "distribution", ok: checklist.distribution, label: "D) Distribution" },
   ];
 
   const requiredDone = requiredItems.filter((i) => i.ok).length;
@@ -78,9 +64,9 @@ export default function FinalChecklist({
   return (
     <div className="space-y-4">
       {/* ── Header + progress bar ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h3 className="font-semibold text-sm text-gray-700 whitespace-nowrap">Publish Checklist</h3>
-        <div className="flex-1 flex items-center gap-2">
+        <div className="flex min-w-28 flex-1 items-center gap-2">
           {/* Bar track */}
           <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
             <div
@@ -172,7 +158,7 @@ export default function FinalChecklist({
           >
             {allRequiredDone ? "Ready to publish!" : "Almost there…"}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-600">
             {allRequiredDone
               ? `Required steps complete${optionalDone > 0 ? ` · ${optionalDone} optional toolkit item${optionalDone > 1 ? "s" : ""} added` : ""}. Hit Publish when you're ready.`
               : requiredItems

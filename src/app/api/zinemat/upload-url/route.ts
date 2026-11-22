@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
+import { getOrCreateProfileId } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
 
@@ -18,27 +19,29 @@ export async function POST(req: Request) {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json();
-    const issueId = body.issueId as string;
-    const type = body.type as "cover" | "pdf";
-    const contentType = body.contentType as string | undefined;
-
-    if (!issueId || !type || (type !== "cover" && type !== "pdf")) {
-      return NextResponse.json(
-        { error: "Missing or invalid issueId or type (must be 'cover' or 'pdf')" },
-        { status: 400 }
-      );
+    const { issueId, type, revision, contentType } = await req.json();
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof issueId !== "string" || !uuid.test(issueId) ||
+        (type !== "cover" && type !== "pdf" && type !== "canvas") ||
+        (revision !== undefined && (typeof revision !== "string" || !uuid.test(revision)))) {
+      return NextResponse.json({ error: "Invalid upload request" }, { status: 400 });
     }
 
-    let path: string;
-    if (type === "cover") {
-      const ext = contentType?.startsWith("image/")
-        ? contentType.split("/")[1]?.replace("jpeg", "jpg") || "png"
-        : "png";
-      path = `covers/${issueId}.${ext}`;
-    } else {
-      path = `issues/${issueId}.pdf`;
+    const { data: issue, error: lookupError } = await supabase
+      .from("issues")
+      .select("profile_id")
+      .eq("id", issueId)
+      .maybeSingle();
+    if (lookupError) return NextResponse.json({ error: "Could not verify the draft" }, { status: 500 });
+    if ((issue && issue.profile_id !== await getOrCreateProfileId(userId)) || (type === "canvas" && !issue)) {
+      return NextResponse.json({ error: "Draft not found" }, { status: 404 });
     }
+
+    const filename = revision ? `${issueId}/${revision}` : issueId;
+    const extension = contentType === "image/jpeg" ? "jpg" : contentType === "image/webp" ? "webp" : "png";
+    const path = type === "canvas" ? `canvas/${issueId}.json`
+      : type === "cover" ? `covers/${filename}.${extension}`
+      : `issues/${filename}.pdf`;
 
     const { data, error } = await supabase.storage
       .from("zineground")

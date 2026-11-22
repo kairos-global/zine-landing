@@ -62,7 +62,7 @@ function LimitInput({
           const v = parseInt(e.target.value, 10);
           if (!isNaN(v) && v >= min && v <= max) onChange(v);
         }}
-        className="w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-1"
+        className="min-h-11 w-full rounded-lg border px-3 py-1.5 text-base focus:outline-none focus:ring-1"
         style={{ borderColor: `${PURPLE}66`, color: PURPLE_DARK }}
       />
       <p className="text-xs mt-1" style={{ color: `${PURPLE_DARK}99` }}>

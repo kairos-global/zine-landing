@@ -46,11 +46,10 @@ export async function GET(req: Request) {
 
     console.log("✅ [Load Issue] Found issue:", issue.title);
 
-    // Get links
-    const { data: links, error: linksError } = await supabase
-      .from("issue_links")
-      .select("*")
-      .eq("issue_id", issueId);
+    const [{ data: links, error: linksError }, { data: hasCanvas }] = await Promise.all([
+      supabase.from("issue_links").select("*").eq("issue_id", issueId),
+      supabase.storage.from("zineground").exists(`canvas/${issueId}.json`),
+    ]);
 
     if (linksError) {
       console.error("❌ [Load Issue] Error loading links:", linksError);
@@ -61,6 +60,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       issue: {
         id: issue.id,
+        has_canvas: hasCanvas,
         title: issue.title,
         slug: issue.slug,
         status: issue.status,

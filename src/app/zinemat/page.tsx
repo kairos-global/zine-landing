@@ -45,9 +45,9 @@ function ZineMatPage() {
           <h1 className="text-xl sm:text-2xl font-semibold">ZineMat</h1>
         </div>
 
-        {/* 🔹 Tabs: Interactivity + Canvas */}
+        {/* ZineMat workspace */}
         <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
-          <div className="p-4 sm:p-5 space-y-4">
+          <div className="p-2.5 sm:p-5">
             <Tabs />
           </div>
         </div>

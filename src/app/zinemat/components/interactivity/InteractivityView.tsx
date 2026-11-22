@@ -1,526 +1,437 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import Link from "next/link";
 import toast from "react-hot-toast";
 
-import BasicsSection, { Basics, ZineFormat } from "./BasicsSection";
-import { isZineCategoryKey, ZineCategoryKey } from "@/lib/zine-categories";
+import BasicsSection, { type Basics, type ZineFormat } from "./BasicsSection";
+import { isZineCategoryKey, type ZineCategoryKey } from "@/lib/zine-categories";
+import { withViewMap, type ViewMap } from "@/lib/zine-view-map";
 import UploadsSection from "./UploadsSection";
-import InteractivitySection, { InteractiveLink } from "./InteractivitySection";
-import DistributionSection, { Distribution } from "./DistributionSection";
+import InteractivitySection, { type InteractiveLink } from "./InteractivitySection";
+import DistributionSection, { type Distribution } from "./DistributionSection";
 import FinalChecklist from "./FinalChecklist";
+import ZineCanvas from "../canvas/ZineCanvas";
+import { canvasHasArtwork, exportArtwork, newCanvas, type CanvasState } from "../canvas/canvas-art";
 
 const AUTOSAVE_DEBOUNCE_MS = 1800;
+const initialDistribution = { self_distribute: false, print_for_me: false };
+const emptyAssets: { cover: string | null; pdf: string | null } = { cover: null, pdf: null };
+const sections = {
+  basics: { label: "A) Basics", accent: "#65CBF1" },
+  artwork: { label: "B) Uploads", accent: "#F2DC6F" },
+  links: { label: "C) Interactivity", accent: "#82E385" },
+  distribution: { label: "D) Distribution", accent: "#D16FF2" },
+};
+const toolkit = ["links", "distribution"] as const;
 
-type SectionKey = "BASICS" | "UPLOAD" | "INTERACTIVITY" | "DISTRIBUTION";
-
-const SECTION_META: Record<
-  SectionKey,
-  { label: string; accent: string; required?: boolean }
-> = {
-  BASICS: { label: "A) Basics", accent: "#65CBF1", required: true },
-  UPLOAD: { label: "B) Uploads", accent: "#F2DC6F" },
-  INTERACTIVITY: { label: "C) Interactivity", accent: "#82E385" },
-  DISTRIBUTION: { label: "D) Distribution", accent: "#D16FF2" },
+export type WorkspaceMode = "upload" | "create";
+type Section = keyof typeof sections;
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+type Issue = {
+  title: string;
+  zine_format: ZineFormat;
+  category: string | null;
+  cover_img_url: string | null;
+  pdf_url: string | null;
+  self_distribute: boolean;
+  print_for_me: boolean;
+  max_copies_per_order: number;
+  auto_approve_quantity: number;
+  has_canvas: boolean;
 };
 
-export default function InteractivityView() {
+async function checkedJson(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) throw new Error(data?.error || fallback);
+  return data;
+}
+
+export default function InteractivityView({ editId, initialMode }: {
+  editId: string | null;
+  initialMode: WorkspaceMode;
+}) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const editId = searchParams?.get("id") ?? null;
-  const { isSignedIn, user } = useUser();
-
-  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: "half_letter" });
+  const [mode, setMode] = useState(initialMode);
+  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: initialMode === "create" ? "mini" : "half_letter" });
   const [category, setCategory] = useState<ZineCategoryKey | null>(null);
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null);
-  const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
+  const [files, setFiles] = useState(emptyAssets);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
-  const [distribution, setDistribution] = useState<Distribution>({
-    self_distribute: false,
-    print_for_me: false,
-  });
-  const [active, setActive] = useState<SectionKey[]>(["BASICS"]);
-  const [loading, setLoading] = useState<boolean>(!!editId);
-  const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [uploadedCoverUrl, setUploadedCoverUrl] = useState<string | null>(null);
-  const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string | null>(null);
-  const [coverCleared, setCoverCleared] = useState(false);
-  const [pdfCleared, setPdfCleared] = useState(false);
-  const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [distribution, setDistribution] = useState<Distribution>(initialDistribution);
+  const [canvas, setCanvas] = useState(newCanvas);
+  const [active, setActive] = useState<Section[]>(["basics", "artwork"]);
+  const [loading, setLoading] = useState(Boolean(editId));
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [savedId, setSavedId] = useState<string | null>(editId);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [uploading, setUploading] = useState(false);
+  const [importingArtwork, setImportingArtwork] = useState(false);
+  const [action, setAction] = useState<"save" | "publish" | null>(null);
+  const [pdfPending, setPdfPending] = useState(false);
+  const [existingCoverOnly, setExistingCoverOnly] = useState(false);
 
-  const supabase = useMemo(
-    () =>
-      createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      ),
-    []
-  );
-
-  // Stable issueId for new zines (so autosave always targets the same draft)
-  const newIssueIdRef = useRef<string | null>(null);
-  const issueId = editId ?? newIssueIdRef.current ?? (newIssueIdRef.current = crypto.randomUUID());
-
-  // ✅ Load existing issue via API
-  useEffect(() => {
-    if (!editId) return;
-    (async () => {
-      try {
-        console.log("📖 [ZineMat] Loading issue:", editId);
-        
-        // Clean payment URL params if present (from old flow)
-        const paymentStatus = searchParams?.get("payment");
-        if (paymentStatus) {
-          router.replace(`/zinemat?id=${editId}`, { scroll: false });
-        }
-        
-        const response = await fetch(`/api/zinemat/load?id=${editId}`);
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("❌ [ZineMat] Load error:", errorData);
-          toast.error(errorData.error || "Could not load issue.");
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        console.log("✅ [ZineMat] Loaded issue:", data);
-
-        if (data.issue) {
-          setBasics({
-            title: data.issue.title ?? "",
-            zine_format: (data.issue.zine_format as ZineFormat) ?? "half_letter",
-          });
-          setCategory(isZineCategoryKey(data.issue.category) ? data.issue.category : null);
-          setExistingCoverUrl(data.issue.cover_img_url);
-          setExistingPdfUrl(data.issue.pdf_url);
-          setCoverCleared(false);
-          setPdfCleared(false);
-          
-          // Load distribution settings including creator-set limits
-          setDistribution({
-            self_distribute: data.issue.self_distribute ?? false,
-            print_for_me: data.issue.print_for_me ?? false,
-            max_copies_per_order: data.issue.max_copies_per_order ?? 50,
-            auto_approve_quantity: data.issue.auto_approve_quantity ?? 20,
-          });
-        }
-
-        if (data.links) {
-          setLinks(
-            data.links.map((l: { id: string; label: string; url: string; redirect_path: string; qr_path: string | null }) => ({
-              id: l.id,
-              label: l.label,
-              url: l.url,
-              generateQR: !!l.qr_path,
-              redirect_path: l.redirect_path,
-              qr_path: l.qr_path,
-            }))
-          );
-        }
-
-        setLoading(false);
-      } catch (err) {
-        console.error("❌ [ZineMat] Unexpected error:", err);
-        toast.error("Could not load issue.");
-        setLoading(false);
-      }
-    })();
-  }, [editId]);
-
-  // Direct upload to Supabase when user selects a file (avoids sending large body through our API)
-  useEffect(() => {
-    if (!coverFile || !user) return;
-    let cancelled = false;
-    setUploadingCover(true);
-    (async () => {
-      try {
-        const res = await fetch("/api/zinemat/upload-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            issueId,
-            type: "cover",
-            contentType: coverFile.type,
-          }),
-        });
-        if (!res.ok || cancelled) return;
-        const { token, path, publicUrl } = await res.json();
-        if (cancelled) return;
-        const { error } = await supabase.storage
-          .from("zineground")
-          .uploadToSignedUrl(path, token, coverFile, { upsert: true });
-        if (error) throw error;
-        if (!cancelled) setUploadedCoverUrl(publicUrl);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("Cover upload error:", err);
-          toast.error(err instanceof Error ? err.message : "Cover upload failed.");
-        }
-      } finally {
-        if (!cancelled) setUploadingCover(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [coverFile, issueId, user, supabase]);
+  const draftId = useRef<string | null>(editId);
+  const loadedId = useRef<string | null>(null);
+  const lastSavedForm = useRef<string | null>(null);
+  const lastSavedCanvas = useRef<CanvasState | null>(null);
+  const issueReady = useRef(Boolean(editId));
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const transfer = useRef(false);
+  const manualAction = useRef(false);
+  const alive = useRef(true);
+  const supabase = useMemo(() => createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  ), []);
 
   useEffect(() => {
-    if (!pdfFile || !user) return;
-    let cancelled = false;
-    setUploadingPdf(true);
-    (async () => {
-      try {
-        const res = await fetch("/api/zinemat/upload-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ issueId, type: "pdf" }),
-        });
-        if (!res.ok || cancelled) return;
-        const { token, path, publicUrl } = await res.json();
-        if (cancelled) return;
-        const { error } = await supabase.storage
-          .from("zineground")
-          .uploadToSignedUrl(path, token, pdfFile, { upsert: true });
-        if (error) throw error;
-        if (!cancelled) setUploadedPdfUrl(publicUrl);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("PDF upload error:", err);
-          toast.error(err instanceof Error ? err.message : "PDF upload failed.");
-        }
-      } finally {
-        if (!cancelled) setUploadingPdf(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [pdfFile, issueId, user, supabase]);
-
-  // ✅ Checklist validation (Publish requires all basics + upload fields)
-  const checklist = useMemo(() => {
-    const basicsOk = basics.title.trim().length > 0;
-    const coverOk = !!(existingCoverUrl || uploadedCoverUrl || coverFile);
-    const pdfOk = !!(existingPdfUrl || uploadedPdfUrl || pdfFile);
-    const interactivityOk = links.filter((l) => l.label !== "__issue_qr__" && l.label !== "__collection_qr__").length > 0;
-    const distributionOk = distribution.self_distribute || distribution.print_for_me;
-    return { basics: basicsOk, cover: coverOk, pdf: pdfOk, interactivity: interactivityOk, distribution: distributionOk };
-  }, [basics.title, existingCoverUrl, uploadedCoverUrl, coverFile, existingPdfUrl, uploadedPdfUrl, pdfFile, links, distribution]);
-
-  const canPublish = checklist.basics && checklist.cover;
-
-  const addSection = (key: SectionKey) =>
-    setActive((cur) => (cur.includes(key) ? cur : [...cur, key]));
-  const removeSection = (key: SectionKey) =>
-    setActive((cur) => cur.filter((k) => k !== key));
-
-  const handleCoverChange = useCallback((file: File | null) => {
-    setCoverFile(file);
-    if (file) {
-      setCoverCleared(false);
-      setUploadedCoverUrl(null);
-    } else {
-      setUploadedCoverUrl(null);
-      setCoverCleared(true);
-    }
-  }, []);
-  const handlePdfChange = useCallback((file: File | null) => {
-    setPdfFile(file);
-    if (file) {
-      setPdfCleared(false);
-      setUploadedPdfUrl(null);
-    } else {
-      setUploadedPdfUrl(null);
-      setPdfCleared(true);
-    }
+    alive.current = true;
+    return () => { alive.current = false; };
   }, []);
 
-  // Build FormData for save — send URLs from direct upload only (no file bodies to avoid timeouts)
-  const buildSaveFormData = useCallback(() => {
-    const formData = new FormData();
-    formData.append("title", basics.title.trim() || "Untitled");
-    formData.append("zine_format", basics.zine_format);
-    formData.append("category", category ?? "");
-    formData.append("issueId", issueId);
-    if (coverCleared) formData.append("cover_url", "");
-    else if (uploadedCoverUrl) formData.append("cover_url", uploadedCoverUrl);
-    if (pdfCleared) formData.append("pdf_url", "");
-    else if (uploadedPdfUrl) formData.append("pdf_url", uploadedPdfUrl);
-    // Exclude auto-generated QR links — the save route manages them separately
-    formData.append("interactiveLinks", JSON.stringify(links.filter((l) => l.label !== "__issue_qr__" && l.label !== "__collection_qr__")));
-    formData.append("distribution", JSON.stringify(distribution));
-    return formData;
-  }, [basics.title, basics.zine_format, category, issueId, coverCleared, uploadedCoverUrl, pdfCleared, uploadedPdfUrl, links, distribution]);
-
-  const SAVE_TIMEOUT_MS = 90_000; // 90s for large PDFs
-
-  // Perform save (saved state) — returns success
-  const performSave = useCallback(async (): Promise<boolean> => {
-    const formData = buildSaveFormData();
+  useEffect(() => {
+    if (!editId || loadedId.current === editId || draftId.current === editId && lastSavedForm.current !== null) return;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS);
-    try {
-      const res = await fetch("/api/zinemat/save", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      let result: { error?: string; message?: string };
+    setLoading(true);
+    setLoadError("");
+    void (async () => {
       try {
-        result = await res.json();
-      } catch {
-        result = {};
+        const data = await checkedJson(await fetch(`/api/zinemat/load?id=${encodeURIComponent(editId)}`, {
+          signal: controller.signal,
+        }), "Couldn’t open this zine.");
+        const issue: Issue = data.issue;
+        let artwork = newCanvas();
+        if (issue.has_canvas) {
+          const result = await checkedJson(await fetch(`/api/canvas/${encodeURIComponent(editId)}`, {
+            signal: controller.signal,
+          }), "Couldn’t load the canvas.");
+          if (!result.state) throw new Error("Couldn’t load the canvas.");
+          artwork = { ...artwork, ...result.state };
+        }
+        if (controller.signal.aborted) return;
+        const create = issue.has_canvas || (issue.zine_format === "mini" &&
+          !issue.pdf_url && !issue.cover_img_url && (initialMode === "create" || issue.title === "Untitled canvas"));
+        const title = issue.title === "Untitled canvas" && create ? "" : issue.title;
+        setMode(create ? "create" : "upload");
+        setBasics({ title, zine_format: issue.zine_format });
+        setCategory(isZineCategoryKey(issue.category) ? issue.category : null);
+        setFiles({ cover: issue.cover_img_url, pdf: issue.pdf_url });
+        setExistingCoverOnly(Boolean(issue.cover_img_url && !issue.pdf_url));
+        setDistribution({
+          self_distribute: issue.self_distribute,
+          print_for_me: issue.print_for_me,
+          max_copies_per_order: issue.max_copies_per_order,
+          auto_approve_quantity: issue.auto_approve_quantity,
+        });
+        const savedLinks = (data.links ?? []).map((link: InteractiveLink) => ({ ...link, generateQR: Boolean(link.qr_path) }));
+        setLinks(savedLinks);
+        setActive([
+          "basics", "artwork",
+          ...(savedLinks.some(isReaderLink) ? ["links" as const] : []),
+          ...(issue.self_distribute || issue.print_for_me ? ["distribution" as const] : []),
+        ]);
+        setCanvas(artwork);
+        lastSavedCanvas.current = issue.has_canvas ? artwork : null;
+        issueReady.current = true;
+        loadedId.current = editId;
+        draftId.current = editId;
+        setSavedId(editId);
+        setLoading(false);
+      } catch (caught) {
+        if (!controller.signal.aborted) {
+          setLoadError(caught instanceof Error ? caught.message : "Couldn’t open this zine.");
+          setLoading(false);
+        }
       }
-      if (!res.ok) {
-        const msg = result.error || result.message || "Something went wrong.";
-        toast.error(msg);
-        return false;
+    })();
+    return () => controller.abort();
+  }, [editId, initialMode, loadAttempt]);
+
+  const titleOk = Boolean(basics.title.trim());
+  const artworkOk = mode === "create" ? canvasHasArtwork(canvas, basics.zine_format)
+    : Boolean(files.cover && (files.pdf || existingCoverOnly));
+  const visibleLinks = useMemo(() => links.filter(isReaderLink), [links]);
+  const distributionOk = distribution.self_distribute || distribution.print_for_me;
+  const form = useMemo(() => ({
+    title: basics.title.trim() || (mode === "create" ? "Untitled canvas" : "Untitled"),
+    zine_format: basics.zine_format,
+    category: category ?? "",
+    cover_url: files.cover ?? "",
+    pdf_url: files.pdf ?? "",
+    interactiveLinks: JSON.stringify(visibleLinks),
+    distribution: JSON.stringify(distribution),
+  }), [basics, category, distribution, files, mode, visibleLinks]);
+
+  const formKey = JSON.stringify(form);
+
+  const getDraftId = useCallback(() => draftId.current ?? (draftId.current = crypto.randomUUID()), []);
+
+  const uploadAsset = useCallback(async (type: "cover" | "pdf" | "canvas", blob: Blob) => {
+    const { token, path, publicUrl } = await checkedJson(await fetch("/api/zinemat/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        issueId: getDraftId(),
+        type,
+        contentType: blob.type,
+        ...(type !== "canvas" ? { revision: crypto.randomUUID() } : {}),
+      }),
+    }), "Couldn’t prepare the upload.");
+    const { error } = await supabase.storage.from("zineground").uploadToSignedUrl(path, token, blob, {
+      upsert: true,
+      contentType: blob.type,
+      cacheControl: type === "canvas" ? "0" : "3600",
+    });
+    if (error) throw error;
+    return publicUrl as string;
+  }, [getDraftId, supabase]);
+
+  const sendForm = useCallback(async (values: Record<string, string>, endpoint: "save" | "publish") => {
+    const body = new FormData();
+    body.set("issueId", getDraftId());
+    Object.entries(values).forEach(([key, value]) => body.set(key, value));
+    return checkedJson(await fetch(`/api/zinemat/${endpoint}`, { method: "POST", body }), `Couldn’t ${endpoint} this zine.`);
+  }, [getDraftId]);
+
+  const save = useCallback(async (intent: "autosave" | "save" | "publish") => {
+    const result = queue.current.then(async () => {
+      if (!alive.current) return false;
+      const canvasChanged = mode === "create" && lastSavedCanvas.current !== canvas;
+      const needsGeneratedFiles = mode === "create" && intent === "publish";
+      if (intent === "autosave" && lastSavedForm.current === formKey && !canvasChanged) return true;
+      setSaveStatus("saving");
+      let values = form;
+
+      // Canvas storage requires an owned issue before the first write.
+      if (mode === "create" && !issueReady.current) {
+        await sendForm(form, "save");
+        issueReady.current = true;
+        lastSavedForm.current = formKey;
+      }
+      if (canvasChanged) {
+        await uploadAsset("canvas", new Blob([JSON.stringify(canvas)], { type: "application/json" }));
+        lastSavedCanvas.current = canvas;
+      }
+
+      if (needsGeneratedFiles) {
+        const output = await exportArtwork(canvas, basics.zine_format);
+        const [cover, pdf] = await Promise.all([uploadAsset("cover", output.cover), uploadAsset("pdf", output.pdf)]);
+        values = { ...form, cover_url: cover, pdf_url: withViewMap(pdf, basics.zine_format === "mini" ? "mini-center" : "pages") };
+      }
+      // Serialize writes so a slower draft save can’t overwrite a newer save or publish.
+      if (intent === "publish" || lastSavedForm.current !== formKey) {
+        await sendForm(values, intent === "publish" ? "publish" : "save");
+        lastSavedForm.current = JSON.stringify(values);
+      }
+      if (alive.current) {
+        const id = getDraftId();
+        setSavedId(id);
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("id") !== id || url.searchParams.has("payment")) {
+          url.searchParams.set("id", id);
+          url.searchParams.delete("payment");
+          window.history.replaceState(null, "", url);
+        }
+        setSaveStatus("saved");
       }
       return true;
-    } catch (err) {
-      clearTimeout(timeoutId);
-      if (err instanceof Error && err.name === "AbortError") {
-        toast.error("Save timed out. Try again or use a smaller PDF.");
-        return false;
+    }).catch(caught => {
+      if (alive.current) {
+        setSaveStatus("error");
+        if (intent !== "autosave") toast.error(caught instanceof Error ? caught.message : "Couldn’t save this zine.");
       }
-      toast.error(err instanceof Error ? err.message : "Save failed.");
       return false;
-    }
-  }, [buildSaveFormData]);
+    });
+    queue.current = result;
+    return result;
+  }, [basics.zine_format, canvas, form, formKey, getDraftId, mode, sendForm, uploadAsset]);
 
-  // ✅ Autosave: debounced save when any field changes
-  const autosaveTriggerRef = useRef(false);
+  const baseline = useRef<{ form: string; canvas: CanvasState } | null>(null);
   useEffect(() => {
-    if (!user || loading) return;
-    // Skip the first mount so we don't save an empty form on load
-    if (!autosaveTriggerRef.current) {
-      autosaveTriggerRef.current = true;
+    if (loading || loadError || action || uploading) return;
+    if (!baseline.current) {
+      baseline.current = { form: formKey, canvas };
       return;
     }
-    const timer = setTimeout(async () => {
-      const ok = await performSave();
-      // After first successful save of a new zine, add id to URL so refresh loads from DB
-      if (ok && !editId) {
-        router.replace(`/zinemat?id=${issueId}`, { scroll: false });
-      }
+    if (!lastSavedForm.current && baseline.current.form === formKey && baseline.current.canvas === canvas) return;
+    if (lastSavedForm.current === formKey && (mode !== "create" || lastSavedCanvas.current === canvas)) return;
+    const timer = window.setTimeout(() => {
+      if (!manualAction.current && !transfer.current) void save("autosave");
     }, AUTOSAVE_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [user, loading, editId, issueId, basics.title, basics.zine_format, category, uploadedCoverUrl, uploadedPdfUrl, links, distribution, performSave, router]);
+    return () => window.clearTimeout(timer);
+  }, [action, canvas, formKey, loadError, loading, mode, save, uploading]);
 
-  // Save button: save then go to My Library
-  const handleSave = async () => {
-    if (!user) return;
-    setSaving(true);
+  function toggle(section: Section) {
+    setActive(previous => previous.includes(section) ? previous.filter(key => key !== section) : [...previous, section]);
+  }
+
+  async function transferFiles(update: () => Promise<typeof emptyAssets>) {
+    if (transfer.current || manualAction.current) return false;
+    setUploading(true);
+    transfer.current = true;
     try {
-      const ok = await performSave();
-      if (ok) {
-        toast.success("Changes saved!");
-        setTimeout(() => router.push("/dashboard/library"), 800);
-      }
+      const updated = await update();
+      setFiles(updated);
+      return true;
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Upload failed. Try again.");
+      return false;
     } finally {
-      setSaving(false);
+      transfer.current = false;
+      setUploading(false);
     }
-  };
+  }
 
-  // Publish button: save then publish then go to Browse zines
-  const handlePublish = async () => {
-    if (!user || !canPublish) return;
-    setPublishing(true);
-    try {
-      const formData = buildSaveFormData();
-      const res = await fetch("/api/zinemat/publish", { method: "POST", body: formData });
-      let result: { error?: string; message?: string } = {};
-      try {
-        result = await res.json();
-      } catch {
-        /* non-JSON response */
-      }
-      if (!res.ok) {
-        const msg = result.error || result.message || "Something went wrong.";
-        toast.error(msg);
-        return;
-      }
-      toast.success("Published successfully!");
-      setTimeout(() => router.push("/browse-zines"), 800);
-    } catch (err: unknown) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Unexpected error");
-    } finally {
-      setPublishing(false);
+  function setCover(file: File | null) {
+    return transferFiles(async () => ({ ...files, cover: file ? await uploadAsset("cover", file) : null }));
+  }
+
+  function applyMap(file: File | null, map: ViewMap, cover: Blob) {
+    return transferFiles(async () => {
+      const [pdf, coverUrl] = await Promise.all([
+        file ? uploadAsset("pdf", new Blob([file], { type: "application/pdf" })) : files.pdf,
+        uploadAsset("cover", cover),
+      ]);
+      if (!pdf) throw new Error("Choose a PDF first.");
+      if (map !== "pages") setBasics(previous => ({ ...previous, zine_format: "mini" }));
+      return { cover: coverUrl, pdf: withViewMap(pdf, map) };
+    });
+  }
+
+  async function finish(intent: "save" | "publish") {
+    if (manualAction.current || transfer.current || importingArtwork || pdfPending || (intent === "publish" && (!titleOk || !artworkOk))) return;
+    manualAction.current = true;
+    setAction(intent);
+    if (await save(intent)) {
+      toast.success(intent === "publish" ? "Published successfully!" : "Changes saved!");
+      router.push(intent === "publish" ? "/browse-zines" : "/dashboard/library");
+      return;
     }
-  };
+    manualAction.current = false;
+    setAction(null);
+  }
 
-  if (isSignedIn === false)
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        Redirecting to sign in…
-      </div>
-    );
-  if (isSignedIn === undefined || loading)
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        Loading…
-      </div>
-    );
-
-  const slug = basics.title?.toLowerCase().replace(/\s+/g, "-") ?? "";
-  const uploadInProgress = Boolean(
-    (coverFile && !uploadedCoverUrl) || (pdfFile && !uploadedPdfUrl)
+  if (loading) return <p className="p-5 text-sm" role="status">Opening ZineMat…</p>;
+  if (loadError) return (
+    <div className="space-y-3 p-3">
+      <p role="alert" className="text-sm text-red-700">{loadError}</p>
+      <button type="button" onClick={() => setLoadAttempt(attempt => attempt + 1)} className="min-h-11 rounded-xl border px-3 text-sm">Try again</button>
+    </div>
   );
 
+  const busy = action !== null || uploading || importingArtwork;
+  const artworkLabel = mode === "create" ? "B) Canvas" : sections.artwork.label;
+  const alternate = mode === "create" ? "upload" : "create";
+  const alternateUrl = `/zinemat?mode=${alternate}`;
+  const editing = Boolean(savedId);
+  const formChanged = formKey !== (lastSavedForm.current ?? baseline.current?.form);
+  const canvasChanged = mode === "create" && canvas !== (lastSavedCanvas.current ?? baseline.current?.canvas);
+  const hasChanges = formChanged || canvasChanged;
+
+  async function switchMode(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (busy || pdfPending) {
+      event.preventDefault();
+      if (pdfPending) toast.error("Apply the view map or cancel the PDF change first.");
+      return;
+    }
+    if (!hasChanges) return;
+    event.preventDefault();
+    manualAction.current = true;
+    setAction("save");
+    if (await save("save")) router.push(alternateUrl);
+    else {
+      manualAction.current = false;
+      setAction(null);
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-semibold">Interactivity</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={saving || uploadInProgress}
-            className="rounded-xl border px-3 py-1 text-sm hover:bg-white disabled:opacity-50"
-          >
-            {saving ? "Saving…" : uploadInProgress ? "Uploading…" : "Save"}
+    <div className="min-w-0 space-y-4">
+      <nav className="grid grid-cols-2 gap-2 rounded-xl border bg-white/90 p-1" aria-label="ZineMat workspace">
+        {(["upload", "create"] as const).map(item => {
+          const label = item === "upload" ? "Upload" : "Create";
+          const style = "flex min-h-11 items-center justify-center rounded-lg px-2 text-center text-sm font-semibold";
+          return item === mode
+            ? <span key={item} className={`${style} bg-[#65CBF1]/25 ring-1 ring-inset ring-[#65CBF1]`} aria-current="page">{label}</span>
+            : <Link key={item} href={alternateUrl} onClick={switchMode} className={`${style} hover:bg-gray-50`} aria-label={editing ? `${label} a new zine` : label}>{label}{editing && <span className="sr-only"> a new zine</span>}</Link>;
+        })}
+      </nav>
+      <fieldset disabled={action !== null} className="min-w-0 space-y-3">
+        <Card section="basics" expanded={active.includes("basics")} onToggle={toggle}>
+          <BasicsSection value={basics} onChange={setBasics} category={category} onCategoryChange={setCategory} />
+        </Card>
+        <Card section="artwork" title={artworkLabel} expanded={active.includes("artwork")} onToggle={toggle}>
+          {mode === "create"
+            ? <ZineCanvas state={canvas} format={basics.zine_format} title={basics.title} onChange={setCanvas} onImportingChange={setImportingArtwork} />
+            : <UploadsSection coverUrl={files.cover} pdfUrl={files.pdf} format={basics.zine_format} busy={busy} onCover={setCover} onPdf={applyMap} onPending={setPdfPending} />}
+        </Card>
+        <section className="space-y-3 rounded-2xl border bg-white/90 p-2 sm:p-3">
+          <h2 className="px-2 text-sm font-semibold">Toolkit</h2>
+          {toolkit.map(section => (
+            <Card key={section} section={section} expanded={active.includes(section)} onToggle={toggle}>
+              {section === "links" ? (
+                <InteractivitySection
+                  links={links}
+                  onChange={setLinks}
+                  issueId={savedId}
+                  slug={basics.title.trim().toLowerCase().replace(/\s+/g, "-")}
+                  siteUrl={process.env.NEXT_PUBLIC_SITE_URL}
+                />
+              ) : <DistributionSection value={distribution} onChange={setDistribution} />}
+            </Card>
+          ))}
+        </section>
+      </fieldset>
+
+      <div className="space-y-4 rounded-2xl border bg-white p-3 sm:p-4">
+        <FinalChecklist mode={mode} coverOnly={existingCoverOnly && !files.pdf} checklist={{ basics: titleOk, artwork: artworkOk && !pdfPending, interactivity: visibleLinks.length > 0, distribution: distributionOk }} />
+        <p className="text-xs text-gray-600" role="status">
+          {uploading ? "Uploading files…" : saveStatus === "saving" ? "Saving draft…" : saveStatus === "error" ? "Draft save failed. Tap Save to retry." : saveStatus === "saved" && !hasChanges ? "Draft saved" : "Drafts autosave as you work."}
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+          <button type="button" onClick={() => void finish("save")} disabled={busy || pdfPending}
+            className="min-h-11 rounded-xl border px-4 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+            {action === "save" ? "Saving…" : "Save"}
           </button>
-          <button
-            onClick={handlePublish}
-            disabled={!canPublish || publishing || uploadInProgress}
-            className={`rounded-xl px-3 py-1 text-sm font-medium ${
-              canPublish && !publishing && !uploadInProgress ? "bg-[#65CBF1]" : "bg-gray-300 text-gray-600"
-            }`}
-          >
-            {publishing ? "Publishing…" : uploadInProgress ? "Uploading…" : "Publish"}
+          <button type="button" onClick={() => void finish("publish")} disabled={busy || !titleOk || !artworkOk || pdfPending}
+            className="min-h-11 rounded-xl bg-[#65CBF1] px-4 text-sm font-semibold disabled:bg-gray-200 disabled:text-gray-600">
+            {action === "publish" ? "Publishing…" : "Publish"}
           </button>
         </div>
-      </div>
-
-      {/* Section Cards */}
-      <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
-        <div className="p-4 sm:p-5 space-y-4">
-          <Card
-            title={SECTION_META.BASICS.label}
-            accent={SECTION_META.BASICS.accent}
-          >
-            <BasicsSection value={basics} onChange={setBasics} />
-          </Card>
-
-          {active
-            .filter((k) => k !== "BASICS")
-            .map((k) => (
-              <Card
-                key={k}
-                title={SECTION_META[k].label}
-                accent={SECTION_META[k].accent}
-                onRemove={() => removeSection(k)}
-              >
-                {k === "UPLOAD" && (
-                  <UploadsSection
-                    coverFile={coverFile}
-                    pdfFile={pdfFile}
-                    onCoverChange={handleCoverChange}
-                    onPdfChange={handlePdfChange}
-                    existingCoverUrl={existingCoverUrl}
-                    existingPdfUrl={existingPdfUrl}
-                    category={category}
-                    onCategoryChange={setCategory}
-                  />
-                )}
-                {k === "INTERACTIVITY" && (
-                  <InteractivitySection
-                    links={links}
-                    onChange={setLinks}
-                    issueId={editId}
-                    slug={slug}
-                    siteUrl={process.env.NEXT_PUBLIC_SITE_URL}
-                  />
-                )}
-                {k === "DISTRIBUTION" && (
-                  <DistributionSection
-                    value={distribution}
-                    onChange={setDistribution}
-                  />
-                )}
-              </Card>
-            ))}
-        </div>
-      </div>
-
-      {/* Add New Sections */}
-      <div className="rounded-2xl border bg-white/90">
-        <div className="px-4 py-3 border-b font-semibold text-sm">Toolkit</div>
-        <div className="p-4 grid gap-3 sm:grid-cols-2">
-          {(["UPLOAD", "INTERACTIVITY", "DISTRIBUTION"] as SectionKey[])
-            .filter((k) => !active.includes(k))
-            .map((k) => (
-              <div
-                key={k}
-                className="rounded-xl border p-3 bg-white flex items-center justify-between"
-                style={{ borderColor: `${SECTION_META[k].accent}55` }}
-              >
-                <div className="text-sm font-medium">
-                  {SECTION_META[k].label}
-                </div>
-                <button
-                  onClick={() => addSection(k)}
-                  className="rounded-md border px-3 py-1 text-xs hover:bg-white"
-                >
-                  Add
-                </button>
-              </div>
-            ))}
-        </div>
-      </div>
-
-      {/* Final Checklist */}
-      <div className="rounded-2xl border bg-white p-4">
-        <FinalChecklist checklist={checklist} />
       </div>
     </div>
   );
 }
 
-// ✅ Reusable Card
-function Card({
-  title,
-  accent,
-  onRemove,
-  children,
-}: {
-  title: string;
-  accent: string;
-  onRemove?: () => void;
+function isReaderLink(link: InteractiveLink) {
+  return link.label !== "__issue_qr__" && link.label !== "__collection_qr__";
+}
+
+function Card({ section, title, expanded, onToggle, children }: {
+  section: Section;
+  title?: string;
+  expanded: boolean;
+  onToggle: (section: Section) => void;
   children: React.ReactNode;
 }) {
+  const { label, accent } = sections[section];
   return (
-    <div
-      className="rounded-2xl border bg-white shadow-sm"
-      style={{ borderColor: `${accent}55` }}
-    >
-      <div
-        className="flex items-center justify-between rounded-t-2xl border-b px-3 py-2"
-        style={{ background: `${accent}22`, borderColor: `${accent}55` }}
-      >
-        <div className="text-sm font-semibold">{title}</div>
-        {onRemove ? (
-          <button
-            onClick={onRemove}
-            className="rounded-md border px-2 py-0.5 text-xs hover:bg-white"
-          >
-            Remove
-          </button>
-        ) : (
-          <span className="rounded-md border px-2 py-0.5 text-[10px] text-gray-500">
-            Required
-          </span>
-        )}
+    <section className="min-w-0 rounded-2xl border bg-white shadow-sm" style={{ borderColor: `${accent}66` }}>
+      <h2>
+        <button type="button" aria-expanded={expanded} aria-controls={`zinemat-${section}`} onClick={() => onToggle(section)}
+          className={`flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold ${expanded ? "rounded-t-2xl border-b" : "rounded-2xl"}`}
+          style={{ backgroundColor: `${accent}22`, borderColor: `${accent}66` }}>
+          {title ?? label}
+          <span className="text-base leading-none" aria-hidden="true">{expanded ? "−" : "+"}</span>
+        </button>
+      </h2>
+      <div id={`zinemat-${section}`} hidden={!expanded} className="min-w-0 p-2.5 sm:p-3">
+        {(expanded || section === "artwork") && children}
       </div>
-      <div className="p-3 space-y-2">{children}</div>
-    </div>
+    </section>
   );
 }

@@ -52,16 +52,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Fetch existing issue (for URLs and slug; keep slug on update to avoid unique constraint)
-    const { data: existingForUrls } = await supabase
+    const profileId = await getOrCreateProfileId(userId);
+    const { data: existing, error: lookupError } = await supabase
       .from("issues")
-      .select("cover_img_url, pdf_url, slug")
+      .select("id, cover_img_url, pdf_url, slug, profile_id, published_at")
       .eq("id", issueId)
       .maybeSingle();
+    if (lookupError) return NextResponse.json({ error: "Could not verify the draft" }, { status: 500 });
+    if (existing && existing.profile_id !== profileId) {
+      return NextResponse.json({ error: "Draft not found" }, { status: 404 });
+    }
 
     // uploads - preserve existing URLs if not uploading new files
-    let cover_img_url: string | null = existingForUrls?.cover_img_url ?? null;
-    let pdf_url: string | null = existingForUrls?.pdf_url ?? null;
+    let cover_img_url: string | null = existing?.cover_img_url ?? null;
+    let pdf_url: string | null = existing?.pdf_url ?? null;
 
     console.log("📤 [Publish] Existing URLs - Cover:", cover_img_url, "PDF:", pdf_url);
 
@@ -109,17 +113,10 @@ export async function POST(req: Request) {
       }
     }
 
-    const profileId = await getOrCreateProfileId(userId);
+    if (!cover_img_url) return NextResponse.json({ error: "Add a cover before publishing." }, { status: 400 });
 
     const baseSlug = slugFromTitle(title);
-    const slug = existingForUrls?.slug ?? (await ensureUniqueSlug(supabase, baseSlug, issueId));
-
-    // ✅ check if issue already exists (for published_at)
-    const { data: existing } = await supabase
-      .from("issues")
-      .select("id, published_at")
-      .eq("id", issueId)
-      .maybeSingle();
+    const slug = existing?.slug ?? (await ensureUniqueSlug(supabase, baseSlug, issueId));
 
     // Parse distribution settings
     const distributionRaw = formData.get("distribution");
@@ -172,15 +169,10 @@ export async function POST(req: Request) {
       updates.published_at = new Date().toISOString();
     }
 
-    if (existing) {
-      await supabase.from("issues").update(updates).eq("id", issueId);
-    } else {
-      updates.id = issueId;
-      if (!updates.published_at) {
-        updates.published_at = new Date().toISOString();
-      }
-      await supabase.from("issues").insert(updates);
-    }
+    const { error: writeError } = existing
+      ? await supabase.from("issues").update(updates).eq("id", issueId)
+      : await supabase.from("issues").insert({ ...updates, id: issueId });
+    if (writeError) return NextResponse.json({ error: writeError.message }, { status: 500 });
 
     // 🔗 Interactive links + QR
     const interactiveLinksRaw = formData.get("interactiveLinks");
