@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
-import { randomUUID } from "crypto";
-import QRCode from "qrcode";
 import { getOrCreateProfileId } from "@/lib/profile";
 import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
-import { getSiteBaseUrl } from "@/lib/site-url";
+import { syncZineLinks } from "@/lib/zine-qr-storage";
 import { isZineCategoryKey, ZineCategoryKey } from "@/lib/zine-categories";
 
 export const dynamic = "force-dynamic";
@@ -14,14 +12,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-type InteractiveLink = {
-  id?: string;
-  label: string;
-  url: string;
-  generateQR?: boolean;
-};
-type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
 interface IssueUpdate {
   id?: string;
@@ -82,7 +72,7 @@ export async function POST(req: Request) {
           .from("zineground")
           .upload(`covers/${issueId}.${extension}`, coverFile, { upsert: true });
         if (error) {
-          console.error("💾 [Save] Cover upload error:", error);
+          console.error("[Save] Cover upload error:", error);
           return NextResponse.json(
             { error: `Cover image upload failed: ${error.message}` },
             { status: 500 }
@@ -102,7 +92,7 @@ export async function POST(req: Request) {
           .from("zineground")
           .upload(`issues/${issueId}.pdf`, pdfFile, { upsert: true });
         if (error) {
-          console.error("💾 [Save] PDF upload error:", error);
+          console.error("[Save] PDF upload error:", error);
           return NextResponse.json(
             { error: `PDF upload failed: ${error.message}` },
             { status: 500 }
@@ -159,7 +149,7 @@ export async function POST(req: Request) {
     if (existing) {
       const { error: updateError } = await supabase.from("issues").update(updates).eq("id", issueId);
       if (updateError) {
-        console.error("💾 [Save] Update error:", updateError);
+        console.error("[Save] Update error:", updateError);
         return NextResponse.json({ error: updateError.message }, { status: 500 });
       }
     } else {
@@ -169,133 +159,13 @@ export async function POST(req: Request) {
       updates.published_at = null;
       const { error: insertError } = await supabase.from("issues").insert(updates);
       if (insertError) {
-        console.error("💾 [Save] Insert error:", insertError);
+        console.error("[Save] Insert error:", insertError);
         return NextResponse.json({ error: insertError.message }, { status: 500 });
       }
     }
 
-    const interactiveLinksRaw = formData.get("interactiveLinks");
-    const processedLinks: ProcessedLink[] = [];
-
-    if (interactiveLinksRaw) {
-      const interactiveLinks: InteractiveLink[] = JSON.parse(interactiveLinksRaw.toString() || "[]");
-
-      for (const link of interactiveLinks) {
-        const linkId = link.id || randomUUID();
-        const redirect_path = `/qr/${issueId}/${linkId}`;
-        let qr_path: string | null = null;
-        if (link.generateQR !== false) {
-          const qrPngBuffer = await QRCode.toBuffer(
-            `${getSiteBaseUrl()}${redirect_path}`,
-            { type: "png", width: 400 }
-          );
-          const { data: qrData, error: qrErr } = await supabase.storage
-            .from("zineground")
-            .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
-              contentType: "image/png",
-              upsert: true,
-            });
-          if (qrErr || !qrData) {
-            console.error("💾 [Save] QR upload error:", qrErr);
-          } else {
-            qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
-          }
-        }
-        await supabase.from("issue_links").upsert({
-          id: linkId,
-          issue_id: issueId,
-          label: link.label,
-          url: link.url,
-          qr_path,
-          redirect_path,
-        });
-        processedLinks.push({ ...link, id: linkId, qr_path: qr_path || "", redirect_path });
-      }
-    }
-
-    // ── Auto-upsert the Issue QR link ────────────────────────────────────────
-    // Every issue automatically gets a QR code that redirects to its browse page.
-    // We look up any existing __issue_qr__ link so we can reuse its stable ID.
-    const { data: existingIssueQr } = await supabase
-      .from("issue_links")
-      .select("id")
-      .eq("issue_id", issueId)
-      .eq("label", "__issue_qr__")
-      .maybeSingle();
-
-    const issueQrLinkId = existingIssueQr?.id ?? randomUUID();
-    const issueQrUrl = `${getSiteBaseUrl()}/issues/${slug}`;
-    const issueQrRedirectPath = `/qr/${issueId}/${issueQrLinkId}`;
-
-    let issueQrPath: string | null = null;
-    try {
-      const issueQrBuffer = await QRCode.toBuffer(
-        `${getSiteBaseUrl()}${issueQrRedirectPath}`,
-        { type: "png", width: 400 }
-      );
-      const { data: issueQrData, error: issueQrErr } = await supabase.storage
-        .from("zineground")
-        .upload(`qr-codes/${issueQrLinkId}.png`, issueQrBuffer, {
-          contentType: "image/png",
-          upsert: true,
-        });
-      if (!issueQrErr && issueQrData) {
-        issueQrPath = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${issueQrData.path}`;
-      }
-    } catch (qrErr) {
-      console.error("💾 [Save] Issue QR generation error:", qrErr);
-    }
-
-    await supabase.from("issue_links").upsert({
-      id: issueQrLinkId,
-      issue_id: issueId,
-      label: "__issue_qr__",
-      url: issueQrUrl,
-      qr_path: issueQrPath,
-      redirect_path: issueQrRedirectPath,
-    });
-
-    // ── Auto-upsert the Collection QR link ───────────────────────────────────
-    // Encodes a direct link to /collect/[issueId] — scanning records the
-    // collection in the user's library and redirects them to the issue page.
-    const { data: existingCollectionQr } = await supabase
-      .from("issue_links")
-      .select("id")
-      .eq("issue_id", issueId)
-      .eq("label", "__collection_qr__")
-      .maybeSingle();
-
-    const collectionQrLinkId = existingCollectionQr?.id ?? randomUUID();
-    const collectionQrUrl = `${getSiteBaseUrl()}/collect/${issueId}`;
-
-    let collectionQrPath: string | null = null;
-    try {
-      const collectionQrBuffer = await QRCode.toBuffer(collectionQrUrl, {
-        type: "png",
-        width: 400,
-      });
-      const { data: collectionQrData, error: collectionQrErr } = await supabase.storage
-        .from("zineground")
-        .upload(`qr-codes/${collectionQrLinkId}.png`, collectionQrBuffer, {
-          contentType: "image/png",
-          upsert: true,
-        });
-      if (!collectionQrErr && collectionQrData) {
-        collectionQrPath = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${collectionQrData.path}`;
-      }
-    } catch (qrErr) {
-      console.error("💾 [Save] Collection QR generation error:", qrErr);
-    }
-
-    await supabase.from("issue_links").upsert({
-      id: collectionQrLinkId,
-      issue_id: issueId,
-      label: "__collection_qr__",
-      url: collectionQrUrl,
-      qr_path: collectionQrPath,
-      redirect_path: null,
-    });
-    // ─────────────────────────────────────────────────────────────────────────
+    const rawLinks = formData.get("interactiveLinks");
+    const processedLinks = await syncZineLinks(supabase, issueId, slug, rawLinks ? JSON.parse(String(rawLinks)) : []);
 
     return NextResponse.json({
       status: "saved",
@@ -306,7 +176,7 @@ export async function POST(req: Request) {
       interactiveLinks: processedLinks,
     });
   } catch (err) {
-    console.error("🔥 [Save] error:", err);
+    console.error("[Save] error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }

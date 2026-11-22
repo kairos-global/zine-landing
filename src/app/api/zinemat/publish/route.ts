@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
-import { randomUUID } from "crypto";
-import QRCode from "qrcode";
 import { getOrCreateProfileId } from "@/lib/profile";
 import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
-import { getSiteBaseUrl } from "@/lib/site-url";
+import { syncZineLinks } from "@/lib/zine-qr-storage";
 import { isZineCategoryKey, ZineCategoryKey } from "@/lib/zine-categories";
 
 export const dynamic = "force-dynamic";
@@ -14,14 +12,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-type InteractiveLink = { 
-  id?: string;
-  label: string; 
-  url: string;
-  generateQR?: boolean;
-};
-type ProcessedLink = InteractiveLink & { id: string; qr_path: string; redirect_path: string };
 
 interface IssueUpdate {
   id?: string;
@@ -67,7 +57,7 @@ export async function POST(req: Request) {
     let cover_img_url: string | null = existing?.cover_img_url ?? null;
     let pdf_url: string | null = existing?.pdf_url ?? null;
 
-    console.log("📤 [Publish] Existing URLs - Cover:", cover_img_url, "PDF:", pdf_url);
+    console.log("[Publish] Existing URLs - Cover:", cover_img_url, "PDF:", pdf_url);
 
     const coverUrlFromForm = formData.get("cover_url");
     const pdfUrlFromForm = formData.get("pdf_url");
@@ -81,7 +71,7 @@ export async function POST(req: Request) {
           .from("zineground")
           .upload(`covers/${issueId}.${extension}`, coverFile, { upsert: true });
         if (error) {
-          console.error("📤 [Publish] Cover upload error:", error);
+          console.error("[Publish] Cover upload error:", error);
           return NextResponse.json(
             { error: `Cover image upload failed: ${error.message}` },
             { status: 500 }
@@ -101,7 +91,7 @@ export async function POST(req: Request) {
           .from("zineground")
           .upload(`issues/${issueId}.pdf`, pdfFile, { upsert: true });
         if (error) {
-          console.error("📤 [Publish] PDF upload error:", error);
+          console.error("[Publish] PDF upload error:", error);
           return NextResponse.json(
             { error: `PDF upload failed: ${error.message}` },
             { status: 500 }
@@ -129,7 +119,9 @@ export async function POST(req: Request) {
     if (distributionRaw) {
       distribution = JSON.parse(distributionRaw.toString());
     }
-    // No upfront payment gate — creators pay per copy when distributors order.
+    if (distribution.print_for_me && !pdf_url) {
+      return NextResponse.json({ error: "Add a PDF for Zineground printing." }, { status: 400 });
+    }
 
     const zineFormatRaw = formData.get("zine_format") as string | null;
     const zine_format: "mini" | "half_letter" | undefined =
@@ -169,57 +161,16 @@ export async function POST(req: Request) {
       updates.published_at = new Date().toISOString();
     }
 
-    const { error: writeError } = existing
-      ? await supabase.from("issues").update(updates).eq("id", issueId)
-      : await supabase.from("issues").insert({ ...updates, id: issueId });
-    if (writeError) return NextResponse.json({ error: writeError.message }, { status: 500 });
-
-    // 🔗 Interactive links + QR
-    const interactiveLinksRaw = formData.get("interactiveLinks");
-    const processedLinks: ProcessedLink[] = [];
-
-    if (interactiveLinksRaw) {
-      const interactiveLinks: InteractiveLink[] = JSON.parse(interactiveLinksRaw.toString() || "[]");
-
-      for (const link of interactiveLinks) {
-        // Use existing ID or generate new one
-        const linkId = link.id || randomUUID();
-        const redirect_path = `/qr/${issueId}/${linkId}`;
-        
-        // Only generate QR if requested
-        let qr_path: string | null = null;
-        if (link.generateQR !== false) {
-          const qrPngBuffer = await QRCode.toBuffer(
-            `${getSiteBaseUrl()}${redirect_path}`,
-            { type: "png", width: 400 }
-          );
-
-          const { data: qrData, error: qrErr } = await supabase.storage
-            .from("zineground")
-            .upload(`qr-codes/${linkId}.png`, qrPngBuffer, {
-              contentType: "image/png",
-              upsert: true,
-            });
-
-          if (qrErr || !qrData) {
-            console.error("QR Upload Error:", qrErr);
-          } else {
-            qr_path = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/zineground/${qrData.path}`;
-          }
-        }
-
-        await supabase.from("issue_links").upsert({
-          id: linkId,
-          issue_id: issueId,
-          label: link.label,
-          url: link.url,
-          qr_path,
-          redirect_path,
-        });
-
-        processedLinks.push({ ...link, id: linkId, qr_path: qr_path || "", redirect_path });
-      }
+    if (!existing) {
+      const { error } = await supabase.from("issues").insert({ ...updates, id: issueId, status: "draft", published_at: null });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    const rawLinks = formData.get("interactiveLinks");
+    const processedLinks = await syncZineLinks(supabase, issueId, slug, rawLinks ? JSON.parse(String(rawLinks)) : []);
+
+    const { error: writeError } = await supabase.from("issues").update(updates).eq("id", issueId).eq("profile_id", profileId);
+    if (writeError) return NextResponse.json({ error: writeError.message }, { status: 500 });
 
     return NextResponse.json({
       status: "published",
@@ -230,7 +181,7 @@ export async function POST(req: Request) {
       interactiveLinks: processedLinks,
     });
   } catch (err) {
-    console.error("🔥 Publish error:", err);
+    console.error("Publish error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }

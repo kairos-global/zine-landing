@@ -12,7 +12,7 @@
  *       - the issue is self_distribute → no payment needed, just the decision
  *
  * Once all items are resolved:
- *   - If 0 approved print_for_me copies → cancel the order
+ *   - If 0 approved print-for-me copies → place any approved self-distributed copies
  *   - Otherwise → charge the distributor's saved Stripe card
  */
 
@@ -209,12 +209,11 @@ export async function checkAndFinalizeOrder(
   );
 
   if (totalQty === 0) {
-    // All print_for_me items were rejected (or none existed) — cancel, no charge
-    console.log(`[AutoBill] Order ${orderId}: all rejected, cancelling.`);
-    await supabase
-      .from("distributor_orders")
-      .update({ status: "cancelled" })
-      .eq("id", orderId);
+    const hasApprovedItems = items.some(item => item.creator_approval_status !== "rejected");
+    await supabase.from("distributor_orders")
+      .update({ status: hasApprovedItems ? "placed" : "cancelled" })
+      .eq("id", orderId)
+      .eq("status", "pending_creator_approval");
     return;
   }
 
@@ -225,17 +224,7 @@ export async function checkAndFinalizeOrder(
     .eq("id", order.distributor_id)
     .single();
 
-  if (!distributor?.stripe_customer_id || !order.stripe_payment_method_id) {
-    console.error(
-      `[AutoBill] Order ${orderId}: missing Stripe payment info. customer=${distributor?.stripe_customer_id}, method=${order.stripe_payment_method_id}`
-    );
-    // Can't charge — mark so admin can intervene
-    await supabase
-      .from("distributor_orders")
-      .update({ payment_status: "failed" })
-      .eq("id", orderId);
-    return;
-  }
+  if (!distributor?.stripe_customer_id || !order.stripe_payment_method_id) return;
 
   const shippingCost = calculateShippingCost(totalQty);
   const totalCharge = shippingCost + DISTRIBUTOR_SERVICE_FEE;
@@ -256,12 +245,10 @@ export async function checkAndFinalizeOrder(
         orderId: order.id,
         type: "distributor_shipping",
       },
-    });
+    }, { idempotencyKey: `zineground-distributor-shipping-${order.id}` });
 
-    if (
-      paymentIntent.status === "succeeded" ||
-      paymentIntent.status === "processing"
-    ) {
+    if (paymentIntent.status === "processing") return;
+    if (paymentIntent.status === "succeeded") {
       await supabase
         .from("distributor_orders")
         .update({

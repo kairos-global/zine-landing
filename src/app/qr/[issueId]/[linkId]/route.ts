@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { builtInQrLabels } from "@/lib/zine-qr";
+import { getSiteBaseUrl } from "@/lib/site-url";
 import { PostHog } from "posthog-node";
 
 export const runtime = "nodejs";
@@ -25,17 +27,29 @@ export async function GET(
 ) {
   const { issueId, linkId } = await params;
 
-  // Look up the link in DB
-  const { data: link, error } = await supabase
-    .from("issue_links")
-    .select("id, issue_id, url, label")
-    .eq("id", linkId)
-    .eq("issue_id", issueId)
-    .single();
-
+  const kind = linkId === "issue" || linkId === "collection" ? linkId : null;
+  const lookup = supabase.from("issue_links").select("id, issue_id, url, label").eq("issue_id", issueId);
+  const { data: link, error } = await (kind
+    ? lookup.eq("label", builtInQrLabels[kind]).order("id").limit(1)
+    : lookup.eq("id", linkId)).maybeSingle();
   if (error || !link?.url) {
     return new NextResponse("QR link not found", { status: 404 });
   }
+
+  let destination = link.url;
+  if (link.label === builtInQrLabels.issue || link.label === builtInQrLabels.collection) {
+    const { data: issue } = await supabase.from("issues").select("status, slug").eq("id", issueId).maybeSingle();
+    if (issue?.status !== "published") {
+      return new NextResponse("This zine has not been published yet.", {
+        status: 404,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    destination = link.label === builtInQrLabels.issue
+      ? `${getSiteBaseUrl()}/issues/${issue.slug}`
+      : `${getSiteBaseUrl()}/collect/${issueId}`;
+  }
+  if (!/^https?:\/\//i.test(destination)) return new NextResponse("QR link not found", { status: 404 });
 
   // Grab context from request
   const ua = req.headers.get("user-agent") || null;
@@ -43,8 +57,7 @@ export async function GET(
   const ip =
     (req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim() || null;
 
-  // 1️⃣ Log to Supabase (qr_scans: issue_id, link_id, scanned_at, user_agent, ip_address, referer)
-  await supabase.from("qr_scans").insert({
+  const { error: scanError } = await supabase.from("qr_scans").insert({
     issue_id: link.issue_id,
     link_id: link.id,
     scanned_at: new Date().toISOString(),
@@ -53,9 +66,10 @@ export async function GET(
     referer,
   });
 
-  // 2️⃣ Send to PostHog
+  if (scanError) console.error("[QR] Could not record scan:", scanError);
+
   if (posthog) {
-    posthog.capture({
+    after(() => posthog.captureImmediate({
       distinctId: ip || "anonymous",
       event: "qr_scan",
       properties: {
@@ -66,11 +80,10 @@ export async function GET(
         user_agent: ua,
         path: req.nextUrl.pathname,
       },
-    });
+    }).catch(error => console.error("[QR] PostHog delivery failed:", error)));
   }
 
-  // 3️⃣ Redirect to final destination
-  const res = NextResponse.redirect(link.url, 302);
+  const res = NextResponse.redirect(destination, 302);
   res.headers.set("Cache-Control", "no-store");
   return res;
 }

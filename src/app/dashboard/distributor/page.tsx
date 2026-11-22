@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { calculateTotalCharge } from "@/lib/shipping";
 import { stockedZineCategories } from "@/lib/zine-categories";
 
 type Distributor = {
@@ -376,7 +377,10 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
       if (orderData.setupCheckoutUrl) {
         window.location.href = orderData.setupCheckoutUrl;
       } else {
-        toast.error("Failed to get card setup URL");
+        setCart([]);
+        setActiveTab("orders");
+        await fetchOrders();
+        toast.success("Order placed");
       }
     } catch (err) {
       console.error("Error placing order:", err);
@@ -491,7 +495,7 @@ function PdfModal({ issue, onClose }: { issue: Issue; onClose: () => void }) {
         </div>
         <div className="flex-1 min-h-0 p-2">
           <iframe
-            src={`${issue.pdf_url}#toolbar=0`}
+            src={`${issue.pdf_url?.split("#")[0]}#toolbar=0`}
             title={issue.title || "Zine PDF"}
             className="w-full h-[75vh] rounded-lg border-0 bg-gray-100"
           />
@@ -520,6 +524,7 @@ function BrowseZines({
   placing: boolean;
 }) {
   const [pdfModalIssue, setPdfModalIssue] = useState<Issue | null>(null);
+  const printQuantity = cart.reduce((total, item) => issues.find(issue => issue.id === item.issue_id)?.print_for_me ? total + item.quantity : total, 0);
 
   if (loading) {
     return <div className="text-center py-12 text-gray-600">Loading zines...</div>;
@@ -681,30 +686,16 @@ function BrowseZines({
                 disabled={placing}
                 className="w-full px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 font-medium"
               >
-                {placing ? "Processing..." : "Place Order & Save Card"}
+                {placing ? "Processing…" : printQuantity ? "Place order and save card" : "Place order"}
               </button>
-              {(() => {
-                const totalQty = cart.reduce((s, i) => s + i.quantity, 0);
-                const shipping =
-                  totalQty <= 10 ? 5 :
-                  totalQty <= 25 ? 8 :
-                  totalQty <= 50 ? 12 :
-                  totalQty <= 100 ? 18 :
-                  totalQty <= 200 ? 25 :
-                  totalQty <= 500 ? 40 : 60;
-                const total = (shipping + 0.50).toFixed(2);
-                return (
-                  <div className="mt-3 text-xs text-gray-500 text-center space-y-1">
-                    <p>
-                      Est. max charge: <strong>${total}</strong> for {totalQty} copies
-                    </p>
-                    <p className="text-gray-400">(shipping + $0.50 fee, if all approved)</p>
-                    <p className="text-gray-400 pt-1">
-                      Your card is saved now — you are only charged once creators approve their copies.
-                    </p>
-                  </div>
-                );
-              })()}
+              {printQuantity > 0 ? (
+                <div className="mt-3 space-y-1 text-center text-xs text-gray-600">
+                  <p>Estimated charge for {printQuantity} Zineground-printed copies: <strong>${calculateTotalCharge(printQuantity).toFixed(2)}</strong></p>
+                  <p>Your card is charged for shipping and the service fee after the creators approve and pay for printing.</p>
+                </div>
+              ) : (
+                <p className="mt-3 text-center text-xs text-gray-600">Creators fulfill these copies directly.</p>
+              )}
             </>
           )}
         </div>

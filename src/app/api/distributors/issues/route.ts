@@ -38,7 +38,7 @@ export async function GET() {
       .from("issues")
       .select("*")
       .eq("status", "published")
-      .or("self_distribute.eq.true,print_for_me.eq.true")
+      .or("self_distribute.eq.true,and(print_for_me.eq.true,pdf_url.not.is.null)")
       .order("published_at", { ascending: false });
 
     if (error) {

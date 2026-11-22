@@ -40,11 +40,6 @@ function ZineMatPage() {
       />
 
       <div className="max-w-[1120px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Page header */}
-        <div className="mb-5 flex items-center justify-between">
-          <h1 className="text-xl sm:text-2xl font-semibold">ZineMat</h1>
-        </div>
-
         {/* ZineMat workspace */}
         <div className="rounded-2xl border shadow-inner overflow-hidden bg-white/80 backdrop-blur-[1px]">
           <div className="p-2.5 sm:p-5">

@@ -31,42 +31,13 @@ export default function BasicsSection({
         />
       </div>
 
-      {/* Format */}
       <div className="space-y-2">
-        <p id="zinemat-format" className="text-sm font-medium">Format *</p>
-        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="zinemat-format">
-          {(
-            [
-              {
-                id: "mini" as ZineFormat,
-                label: "Mini Zine",
-                desc: "Letter sheet folded into 8 panels",
-              },
-              {
-                id: "half_letter" as ZineFormat,
-                label: "Half Letter Zine",
-                desc: "Letter sheet folded in half",
-              },
-            ] as const
-          ).map(({ id, label, desc }) => {
-            const selected = value.zine_format === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => onChange({ ...value, zine_format: id })}
-                className={`rounded-xl border-2 p-3 text-left transition ${
-                  selected
-                    ? "border-[#65CBF1] bg-[#65CBF1]/10"
-                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                <span className="block text-sm font-semibold">{label}</span>
-                <span className="mt-0.5 block text-xs text-gray-500">{desc}</span>
-              </button>
-            );
-          })}
+        <p className="text-sm font-medium">Format</p>
+        <div className="rounded-xl border-2 border-[#65CBF1] bg-[#65CBF1]/10 p-3">
+          <span className="block text-sm font-semibold">{value.zine_format === "mini" ? "Mini Zine" : "Half Letter Zine"}</span>
+          <span className="mt-0.5 block text-xs text-gray-600">
+            {value.zine_format === "mini" ? "Letter sheet folded into 8 panels" : "Existing half letter zine"}
+          </span>
         </div>
       </div>
       <label className="block text-sm font-medium">
