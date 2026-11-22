@@ -1,101 +1,41 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { getOrCreateProfileId } from "@/lib/profile";
+import { zineDb } from "@/lib/zine-reader-server";
 
 export const dynamic = "force-dynamic";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+type CollectionEntry = {
+  issue: {
+    id: string; title: string | null; slug: string; cover_img_url: string | null; status: string;
+    kept: { title: string | null; cover_img_url: string | null } | null;
+  };
+};
 
 export async function GET() {
   try {
     const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    console.log("📚 [Library API] Fetching for user:", userId);
+    if (!userId) return NextResponse.json({ error: "Sign in to see your library." }, { status: 401 });
 
     const profileId = await getOrCreateProfileId(userId);
-
-    // Get issues
-    const { data: issues, error: issuesError } = await supabase
-      .from("issues")
-      .select("*")
-      .eq("profile_id", profileId)
-      .order("created_at", { ascending: false });
-
-    if (issuesError) {
-      console.error("❌ [Library API] Issues error:", issuesError);
-      return NextResponse.json(
-        { error: "Failed to fetch issues", details: issuesError },
-        { status: 500 }
-      );
-    }
-
-    console.log("✅ [Library API] Found issues:", issues?.length || 0);
-
-    // Fetch the auto-generated Issue QR link for each issue
-    let issueQrLinks: { id: string; issue_id: string; qr_path: string | null; redirect_path: string | null }[] = [];
-    if (issues && issues.length > 0) {
-      const issueIds = issues.map((i: { id: string }) => i.id);
-      const { data: qrData } = await supabase
-        .from("issue_links")
-        .select("id, issue_id, qr_path, redirect_path")
-        .in("issue_id", issueIds)
-        .eq("label", "__issue_qr__");
-      issueQrLinks = qrData || [];
-    }
-
-    // Fetch issues the user has collected (from other creators)
-    const { data: collectionRows } = await supabase
-      .from("collections")
-      .select("issue_id, collected_at")
-      .eq("profile_id", profileId)
-      .order("collected_at", { ascending: false });
-
-    let collectedIssues: {
-      id: string;
-      title: string | null;
-      slug: string | null;
-      cover_img_url: string | null;
-      collected_at: string;
-    }[] = [];
-
-    if (collectionRows && collectionRows.length > 0) {
-      const collectedIds = collectionRows.map((r: { issue_id: string }) => r.issue_id);
-      const { data: collectedData } = await supabase
-        .from("issues")
-        .select("id, title, slug, cover_img_url")
-        .in("id", collectedIds)
-        .eq("status", "published");
-
-      if (collectedData) {
-        collectedIssues = collectedData.map((issue: { id: string; title: string | null; slug: string | null; cover_img_url: string | null }) => {
-          const row = collectionRows.find((r: { issue_id: string; collected_at: string }) => r.issue_id === issue.id);
-          return { ...issue, collected_at: row?.collected_at ?? "" };
-        });
-      }
-    }
+    const [owned, collected] = await Promise.all([
+      zineDb.from("issues").select("id,title,slug,status,cover_img_url,published_at").eq("profile_id", profileId)
+        .in("status", ["draft", "published"]).order("created_at", { ascending: false }),
+      zineDb.from("collections").select("issue:issues!inner(id,title,slug,cover_img_url,status,kept:kept_zine_editions(title,cover_img_url))")
+        .eq("profile_id", profileId).order("collected_at", { ascending: false }).returns<CollectionEntry[]>(),
+    ]);
+    if (owned.error || collected.error) throw owned.error ?? collected.error;
 
     return NextResponse.json({
-      profile: {
-        id: profileId,
-        email: null,
-      },
-      issues: issues || [],
-      issueQrLinks,
-      collectedIssues,
+      issues: owned.data!.map(({ published_at, ...issue }) => ({ ...issue, wasPublished: Boolean(published_at) || issue.status === "published" })),
+      collectedIssues: collected.data!.flatMap(({ issue }) => {
+        const edition = issue.status === "published" ? issue : issue.kept;
+        if (!edition) return [];
+        return [{ id: issue.id, title: edition.title, slug: issue.slug, cover_img_url: edition.cover_img_url }];
+      }),
     });
   } catch (error) {
-    console.error("❌ [Library API] Unexpected error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("[Library]", error);
+    return NextResponse.json({ error: "Couldn’t open your library." }, { status: 500 });
   }
 }
-

@@ -17,9 +17,10 @@ export function ActionIcon({ name }: { name: "download" | "place" | "close" }) {
   );
 }
 
-export function QrActions({ url, label, canPlace, prepare, onPlace }: {
+export function QrActions({ url, label, description, canPlace, prepare, onPlace }: {
   url: string;
   label: string;
+  description: string;
   canPlace: boolean;
   prepare: () => Promise<boolean>;
   onPlace: (src: string, label: string) => void;
@@ -59,20 +60,28 @@ export function QrActions({ url, label, canPlace, prepare, onPlace }: {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {src && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} width={88} height={88} alt={`${label} QR code`} className="order-last rounded-md border border-green-200 bg-white" />
-      )}
-      <button type="button" disabled={!src || waiting} onClick={() => void run(false)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[#82E385] px-3 text-sm font-medium text-green-950 hover:bg-green-300 disabled:opacity-50">
-        <ActionIcon name="download" /> {waiting ? "Preparing…" : "Download QR"}
-      </button>
-      {canPlace && (
-        <button type="button" disabled={!src || waiting} onClick={() => void run(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-green-300 px-3 text-sm font-medium hover:bg-green-50 disabled:opacity-50">
-          <ActionIcon name="place" /> Place on file
+    <article className="space-y-3 rounded-xl border border-green-200 bg-[#82E385]/8 p-3 sm:p-4">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-green-950">{label}</h3>
+          <p className="mt-1 text-sm text-gray-700">{description}</p>
+        </div>
+        {src && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} width={80} height={80} alt={label} className="shrink-0 rounded-md border border-green-200 bg-white" />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={!src || waiting} onClick={() => void run(false)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-[#82E385] px-3 text-sm font-medium text-green-950 hover:bg-green-300 disabled:opacity-50">
+          <ActionIcon name="download" /> {waiting ? "Preparing…" : "Download QR"}
         </button>
-      )}
-      {error && <p role="alert" className="w-full text-xs text-red-700">{error}</p>}
-    </div>
+        {canPlace && (
+          <button type="button" disabled={!src || waiting} onClick={() => void run(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-green-300 bg-white px-3 text-sm font-medium hover:bg-green-50 disabled:opacity-50">
+            <ActionIcon name="place" /> Place on file
+          </button>
+        )}
+      </div>
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+    </article>
   );
 }

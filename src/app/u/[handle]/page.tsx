@@ -1,3 +1,4 @@
+import ZineCover from "@/components/ZineCover";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
@@ -19,7 +20,6 @@ type Issue = {
   title: string | null;
   slug: string | null;
   cover_img_url: string | null;
-  published_at: string | null;
 };
 
 type ProfileRow = {
@@ -78,7 +78,7 @@ export default async function PublicProfilePage({
   // Published zines for this profile
   const { data: issues } = await supabase
     .from("issues")
-    .select("id, title, slug, cover_img_url, published_at")
+    .select("id, title, slug, cover_img_url")
     .eq("profile_id", profile.id)
     .eq("status", "published")
     .order("published_at", { ascending: false });
@@ -180,29 +180,11 @@ export default async function PublicProfilePage({
                 href={issue.slug ? `/issues/${issue.slug}` : "#"}
                 className="group rounded-xl overflow-hidden border border-gray-200 bg-white hover:border-black transition-colors"
               >
-                <div className="aspect-square bg-gray-100 overflow-hidden">
-                  {issue.cover_img_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={issue.cover_img_url}
-                      alt={issue.title || "Zine cover"}
-                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
-                    />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center text-gray-400 text-xs">
-                      No cover
-                    </div>
-                  )}
-                </div>
+                <ZineCover src={issue.cover_img_url} title={issue.title} />
                 <div className="p-3">
                   <div className="text-sm font-semibold truncate text-black">
                     {issue.title || "(Untitled)"}
                   </div>
-                  {issue.published_at && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {new Date(issue.published_at).toLocaleDateString()}
-                    </div>
-                  )}
                 </div>
               </Link>
             ))}

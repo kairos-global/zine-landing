@@ -1,0 +1,46 @@
+.collectionArt {
+  display: grid;
+  width: 5.5rem;
+  aspect-ratio: 1;
+  margin: 1rem auto;
+  place-items: center;
+  border-radius: 1.5rem;
+  background: #e6f9e5;
+  color: #214f27;
+  position: relative;
+}
+.collectionArt svg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+.saved {
+  background: #82e385;
+  animation: collected 640ms cubic-bezier(.2, .8, .32, 1.15) both;
+}
+.saved::before,
+.saved::after {
+  position: absolute;
+  border: 2px solid #489c4c;
+  border-radius: inherit;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  animation: collection-ripple 750ms ease-out both;
+}
+.saved::after {
+  border-color: #4c9cb3;
+  animation-delay: 110ms;
+}
+@keyframes collected {
+  0% { transform: translateY(-14px) rotate(-12deg) scale(.7); }
+  55% { transform: translateY(5px) rotate(5deg) scale(1.12); }
+  100% { transform: translateY(0) rotate(0) scale(1); }
+}
+@keyframes collection-ripple {
+  0% { transform: scale(.8); opacity: .9; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .saved { animation: none; }
+  .saved::before, .saved::after { display: none; }
+}

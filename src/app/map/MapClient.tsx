@@ -37,7 +37,7 @@ export default function MapClient({ initialIssue, initialLocation, initialCatego
   const [position, setPosition] = useState<Coordinates | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [inView, setInView] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(Boolean(initialLocation));
+  const [panelOpen, setPanelOpen] = useState(Boolean(initialLocation || initialIssue));
   const selectedRow = useRef<HTMLLIElement>(null);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");

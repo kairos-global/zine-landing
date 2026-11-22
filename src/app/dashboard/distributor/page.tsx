@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import ZineIcon from "@/components/ZineIcon";
 import { calculateTotalCharge } from "@/lib/shipping";
 import { stockedZineCategories } from "@/lib/zine-categories";
 
@@ -400,6 +401,7 @@ function ApprovedPortal({ distributor }: { distributor: Distributor }) {
           </Link>
           <h1 className="text-3xl font-bold">Distributor Portal</h1>
           <p className="text-gray-600 mt-1">{distributor.business_name}</p>
+          <Link href="/dashboard/distributor/recommendations" className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-gray-400 bg-white px-3 text-sm font-medium hover:bg-gray-50">Reader recommendations</Link>
         </div>
 
         {/* Tabs */}
@@ -555,7 +557,7 @@ function BrowseZines({
                   <img
                     src={issue.cover_img_url}
                     alt={issue.title || "Zine cover"}
-                    className="w-24 h-32 object-cover rounded"
+                    className="w-24 h-36 object-contain rounded bg-gray-50"
                   />
                 )}
                 {issue.pdf_url && (
@@ -564,18 +566,13 @@ function BrowseZines({
                     onClick={() => setPdfModalIssue(issue)}
                     className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
                   >
-                    View PDF
+                    <ZineIcon name="printer" className="mr-1 inline-block" /> View PDF
                   </button>
                 )}
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">{issue.title || "Untitled"}</h3>
                 <p className="text-sm text-gray-600">{issue.slug}</p>
-                {issue.published_at && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Published: {new Date(issue.published_at).toLocaleDateString()}
-                  </p>
-                )}
                 {issue.print_for_me && issue.max_copies_per_order && (
                   <p className="text-xs text-gray-400 mt-1">
                     Max {issue.max_copies_per_order} copies/order

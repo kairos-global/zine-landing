@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { getOrCreateProfileId } from "@/lib/profile";
 import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
-import { syncZineLinks } from "@/lib/zine-qr-storage";
+import { ensureCollectionQr } from "@/lib/zine-qr-storage";
 import { isZineCategoryKey, ZineCategoryKey } from "@/lib/zine-categories";
 
 export const dynamic = "force-dynamic";
@@ -164,8 +164,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const rawLinks = formData.get("interactiveLinks");
-    const processedLinks = await syncZineLinks(supabase, issueId, slug, rawLinks ? JSON.parse(String(rawLinks)) : []);
+    const collectionQr = await ensureCollectionQr(supabase, issueId, slug);
 
     return NextResponse.json({
       status: "saved",
@@ -173,7 +172,7 @@ export async function POST(req: Request) {
       slug,
       cover_img_url,
       pdf_url,
-      interactiveLinks: processedLinks,
+      collectionQr,
     });
   } catch (err) {
     console.error("[Save] error:", err);

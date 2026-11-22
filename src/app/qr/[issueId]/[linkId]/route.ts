@@ -1,17 +1,12 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { ensureCollectionQr } from "@/lib/zine-qr-storage";
+import { zineDb, zineIdPattern } from "@/lib/zine-reader-server";
 import { builtInQrLabels } from "@/lib/zine-qr";
 import { getSiteBaseUrl } from "@/lib/site-url";
 import { PostHog } from "posthog-node";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Supabase service role client (server-only)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // PostHog client (server-only, do not expose key to browser)
 const posthog =
@@ -28,28 +23,35 @@ export async function GET(
   const { issueId, linkId } = await params;
 
   const kind = linkId === "issue" || linkId === "collection" ? linkId : null;
-  const lookup = supabase.from("issue_links").select("id, issue_id, url, label").eq("issue_id", issueId);
-  const { data: link, error } = await (kind
-    ? lookup.eq("label", builtInQrLabels[kind]).order("id").limit(1)
-    : lookup.eq("id", linkId)).maybeSingle();
-  if (error || !link?.url) {
-    return new NextResponse("QR link not found", { status: 404 });
+  const notFound = () => new NextResponse("QR link not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  if (!zineIdPattern.test(issueId) || (!kind && !zineIdPattern.test(linkId))) return notFound();
+
+  const lookup = zineDb.from("issue_links").select("id, issue_id, url, label").eq("issue_id", issueId);
+  const [{ data: issue }, { data: storedLink, error }] = await Promise.all([
+    zineDb.from("issues").select("status, slug").eq("id", issueId).maybeSingle(),
+    (kind ? lookup.eq("label", builtInQrLabels[kind]).order("id").limit(1) : lookup.eq("id", linkId)).maybeSingle(),
+  ]);
+  if (error || issue?.status !== "published" || !issue.slug) return notFound();
+
+  let link = storedLink;
+  if (!link && kind === "collection") {
+    try {
+      link = await ensureCollectionQr(zineDb, issueId, issue.slug);
+    } catch (error) {
+      console.error("[QR] Could not register collection code:", error);
+    }
   }
 
-  let destination = link.url;
-  if (link.label === builtInQrLabels.issue || link.label === builtInQrLabels.collection) {
-    const { data: issue } = await supabase.from("issues").select("status, slug").eq("id", issueId).maybeSingle();
-    if (issue?.status !== "published") {
-      return new NextResponse("This zine has not been published yet.", {
-        status: 404,
-        headers: { "Cache-Control": "no-store" },
-      });
-    }
-    destination = link.label === builtInQrLabels.issue
-      ? `${getSiteBaseUrl()}/issues/${issue.slug}`
-      : `${getSiteBaseUrl()}/collect/${issueId}`;
+  const issueUrl = `${getSiteBaseUrl()}/issues/${encodeURIComponent(issue.slug)}`;
+  if (!link && kind === "collection") {
+    const response = NextResponse.redirect(`${issueUrl}?save=1`, 302);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
-  if (!/^https?:\/\//i.test(destination)) return new NextResponse("QR link not found", { status: 404 });
+  if (!link?.url) return notFound();
+  const destination = link.label === builtInQrLabels.collection ? `${issueUrl}?save=1`
+    : link.label === builtInQrLabels.issue ? issueUrl : link.url;
+  if (!/^https?:\/\//i.test(destination)) return notFound();
 
   // Grab context from request
   const ua = req.headers.get("user-agent") || null;
@@ -57,7 +59,7 @@ export async function GET(
   const ip =
     (req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim() || null;
 
-  const { error: scanError } = await supabase.from("qr_scans").insert({
+  const { error: scanError } = await zineDb.from("qr_scans").insert({
     issue_id: link.issue_id,
     link_id: link.id,
     scanned_at: new Date().toISOString(),
