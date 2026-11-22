@@ -124,18 +124,18 @@ export default function UploadsSection({
       </div>
 
       {preview && (
-        <div className="grid min-w-0 gap-4 rounded-xl border border-yellow-200 p-3 sm:p-4 lg:grid-cols-2">
+        <div className="grid min-w-0 gap-4 rounded-xl border border-yellow-200 p-3 sm:p-4">
           <div className="min-w-0 space-y-3">
             <div>
               <h3 className="text-sm font-semibold">View map</h3>
               <p className="mt-1 text-xs text-gray-600">Choose how readers turn the pages. Page 1 becomes the cover.</p>
             </div>
-            <div className="grid gap-2" role="group" aria-label="Reading order">
-              <button type="button" className={`${control} py-2 text-left ${map === "pages" ? "bg-[#F2DC6F]/40" : ""}`} aria-pressed={map === "pages"} disabled={working} onClick={() => { setMap("pages"); setPage(1); }}>
-                PDF order <span className="ml-1 text-xs text-gray-600">· {preview.pdf.numPages} {preview.pdf.numPages === 1 ? "page" : "pages"} as uploaded</span>
+            <div className={`grid gap-2 ${preview.mini ? "grid-cols-3" : ""}`} role="group" aria-label="Reading order">
+              <button type="button" className={`${control} min-w-0 px-1.5 py-2 text-left sm:px-3 ${map === "pages" ? "bg-[#F2DC6F]/40" : ""}`} aria-pressed={map === "pages"} disabled={working} onClick={() => { setMap("pages"); setPage(1); }}>
+                PDF order <span className="block text-xs text-gray-600">{preview.pdf.numPages} {preview.pdf.numPages === 1 ? "page" : "pages"} as uploaded</span>
               </button>
               {preview.mini && miniMapIds.map(id => (
-                <button type="button" key={id} className={`${control} py-2 text-left ${map === id ? "bg-[#F2DC6F]/40" : ""}`} aria-pressed={map === id} disabled={working} onClick={() => { setMap(id); setPage(1); }}>
+                <button type="button" key={id} className={`${control} min-w-0 px-1.5 py-2 text-left sm:px-3 ${map === id ? "bg-[#F2DC6F]/40" : ""}`} aria-pressed={map === id} disabled={working} onClick={() => { setMap(id); setPage(1); }}>
                   {miniMaps[id].label}
                   <span className="mt-2 grid grid-cols-4 gap-px overflow-hidden rounded border border-yellow-300 bg-yellow-300 text-center text-xs" aria-hidden="true">
                     {miniMaps[id].order.map((number, index) => (
@@ -147,7 +147,7 @@ export default function UploadsSection({
                 </button>
               ))}
             </div>
-            {!pending && pdfUrl && coverUrl && <p role="status" className="text-sm text-yellow-900">View map applied</p>}
+            {!pending && pdfUrl && coverUrl && <p role="status" className="text-sm text-green-800">View map applied</p>}
             {pending && !file && savedMap && <button type="button" disabled={working} onClick={() => { setMap(savedMap); setPage(1); }} className="min-h-11 text-sm underline disabled:opacity-40">Reset map</button>}
           </div>
           <div className="min-w-0 space-y-2">
@@ -158,7 +158,7 @@ export default function UploadsSection({
             </div>
             <div ref={holder} role="img" aria-label={`PDF preview, page ${page}`} className="grid min-h-32 place-items-center overflow-hidden rounded-lg bg-gray-50 p-2 [&>canvas]:h-auto [&>canvas]:max-h-[26rem] [&>canvas]:max-w-full [&>canvas]:object-contain" />
           </div>
-          {(pending || !coverUrl) && <button type="button" onClick={() => void apply()} disabled={working} className={`${control} bg-[#F2DC6F] lg:col-span-2`}>
+          {(pending || !coverUrl) && <button type="button" onClick={() => void apply()} disabled={working} className={`${control} bg-[#F2DC6F]`}>
             {applying ? "Applying view map…" : "Apply view map"}
           </button>}
         </div>

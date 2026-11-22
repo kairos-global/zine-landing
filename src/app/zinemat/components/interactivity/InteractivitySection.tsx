@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
-import QRCode from "qrcode-generator";
+import { useId, useState, type FormEvent } from "react";
+import { builtInQrLabels, qrUrl, type BuiltInQr } from "@/lib/zine-qr";
+import { ActionIcon, QrActions } from "./QrActions";
 
 export type InteractiveLink = {
   id: string;
@@ -12,405 +13,112 @@ export type InteractiveLink = {
   qr_path?: string | null;
 };
 
-// Interactivity section accent (green)
-const GREEN = "#82E385";
-const GREEN_DARK = "#2A6B2C";
+const descriptions: Record<BuiltInQr, [string, string]> = {
+  issue: ["Issue QR Code", "Opens your published zine on Zineground."],
+  collection: ["Collection QR Code", "Lets readers add your published zine to their Zineground collection."],
+};
 
-// ─── Checkmark icon (same pattern as DistributionSection) ────────────────────
-function CheckIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-      <path
-        d="M1.5 5L4 7.5L8.5 2.5"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+export function isReaderLink(link: InteractiveLink) {
+  return !Object.values(builtInQrLabels).some(label => label === link.label);
 }
 
-// ─── Custom green checkbox ────────────────────────────────────────────────────
-function GreenCheckbox({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <div
-      className="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center cursor-pointer transition-all"
-      style={
-        checked
-          ? { borderColor: GREEN, backgroundColor: GREEN }
-          : { borderColor: "#D1D5DB", backgroundColor: "white" }
-      }
-      onClick={onChange}
-    >
-      {checked && <CheckIcon />}
-    </div>
-  );
-}
-
-// ─── QR helpers ───────────────────────────────────────────────────────────────
-function generateQRDataURL(url: string): string {
-  try {
-    const qr = QRCode(0, "L");
-    qr.addData(url);
-    qr.make();
-    return qr.createDataURL(4);
-  } catch {
-    return "";
-  }
-}
-
-function downloadQR(dataURL: string, label: string) {
-  const link = document.createElement("a");
-  link.href = dataURL;
-  link.download = `qr-${label.toLowerCase().replace(/\s+/g, "-") || "code"}.png`;
-  link.click();
-}
-
-export default function InteractivitySection({
-  links,
-  onChange,
-  issueId,
-  slug,
-  siteUrl,
-}: {
+export default function InteractivitySection({ links, onChange, issueId, canPlace, prepare, onPlace, onRemove }: {
   links: InteractiveLink[];
   onChange: (next: InteractiveLink[]) => void;
-  issueId?: string | null;
-  slug?: string | null;
-  siteUrl?: string;
+  issueId: string | null;
+  canPlace: boolean;
+  prepare: () => Promise<boolean>;
+  onPlace: (src: string, label: string) => void;
+  onRemove: (id: string) => Promise<boolean>;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const fieldId = useId();
   const [formQR, setFormQR] = useState(true);
-  const maxLinks = 8;
+  const [error, setError] = useState("");
+  const [removing, setRemoving] = useState<string | null>(null);
+  const regularLinks = links.filter(isReaderLink);
 
-  // Separate auto-generated QR links from user links
-  const issueQrLink = links.find((l) => l.label === "__issue_qr__");
-  const collectionQrLink = links.find((l) => l.label === "__collection_qr__");
-  const regularLinks = links.filter(
-    (l) => l.label !== "__issue_qr__" && l.label !== "__collection_qr__"
-  );
-
-  const baseUrl = siteUrl || process.env.NEXT_PUBLIC_SITE_URL || "https://zineground.com";
-
-  // Issue QR: prefer stored qr_path, fall back to client-side preview
-  const issueQrImageUrl = issueQrLink?.qr_path
-    ? issueQrLink.qr_path
-    : slug
-    ? generateQRDataURL(`${baseUrl}/issues/${slug}`)
-    : "";
-
-  // Collection QR: prefer stored qr_path, fall back to client-side preview
-  const collectionQrImageUrl = collectionQrLink?.qr_path
-    ? collectionQrLink.qr_path
-    : issueId
-    ? generateQRDataURL(`${baseUrl}/collect/${issueId}`)
-    : "";
-
-  function add(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (regularLinks.length >= maxLinks) return;
-    const fd = new FormData(e.currentTarget);
-    const label = (fd.get("label") as string)?.trim() ?? "";
-    let url = (fd.get("url") as string)?.trim() ?? "";
+  function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (regularLinks.length >= 8) return;
+    const data = new FormData(event.currentTarget);
+    const label = String(data.get("label") ?? "").trim();
+    let url = String(data.get("url") ?? "").trim();
     if (!url) return;
-    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-    const linkId = crypto.randomUUID();
-    onChange([...links, { id: linkId, label, url, generateQR: formQR, redirect_path: null, qr_path: null }]);
-    e.currentTarget.reset();
-    setFormQR(true);
+    try {
+      if (!/^[a-z][a-z\d+.-]*:\/\//i.test(url)) url = `https://${url}`;
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
+      if (!isReaderLink({ id: "", label, url, generateQR: formQR })) throw new Error();
+      onChange([...links, { id: crypto.randomUUID(), label, url: parsed.href, generateQR: formQR }]);
+      setError("");
+      event.currentTarget.reset();
+      setFormQR(true);
+    } catch {
+      setError("Use a valid web URL and a custom label.");
+    }
   }
 
-  const remove = async (id: string) => {
-    const linkToRemove = regularLinks.find((l) => l.id === id);
-    if (linkToRemove && issueId) {
-      try {
-        const response = await fetch(`/api/zinemat/deletelink?linkId=${id}&issueId=${issueId}`, { method: "DELETE" });
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("❌ [InteractivitySection] Delete error:", errorData);
-          alert("Failed to delete link. Please try again.");
-          return;
-        }
-      } catch (err) {
-        console.error("❌ [InteractivitySection] Unexpected error:", err);
-        alert("Failed to delete link. Please try again.");
-        return;
-      }
-    }
-    onChange(links.filter((l) => l.id !== id));
-  };
-
-  const toggleQR = (id: string) =>
-    onChange(links.map((l) => (l.id === id ? { ...l, generateQR: !l.generateQR } : l)));
+  async function remove(id: string) {
+    setError("");
+    setRemoving(id);
+    if (!await onRemove(id)) setError("Couldn’t remove the link. Try again.");
+    setRemoving(null);
+  }
 
   return (
-    <div className="relative">
-      {/* 🔒 Overlay if draft not saved */}
-      {!issueId && (
-        <div className="absolute inset-0 z-10 flex items-start justify-center backdrop-blur-sm bg-white/80 rounded-md pointer-events-none">
-          <div
-            className="mt-6 text-sm px-4 py-2 rounded shadow"
-            style={{ backgroundColor: `${GREEN}22`, border: `1px solid ${GREEN}88`, color: GREEN_DARK }}
-          >
-            💡 Save your draft before adding links or generating QR codes.
+    <div className="space-y-4">
+      {(Object.keys(descriptions) as BuiltInQr[]).map(kind => {
+        const [label, description] = descriptions[kind];
+        return (
+          <div key={kind} className="space-y-2 rounded-xl border-2 border-[#82E385]/60 bg-[#82E385]/6 p-4">
+            <h3 className="text-sm font-semibold text-green-900">{label}</h3>
+            <p className="text-sm text-gray-600">{description}</p>
+            {issueId && <QrActions url={qrUrl(issueId, kind)} label={kind} canPlace={canPlace} prepare={prepare} onPlace={onPlace} />}
           </div>
+        );
+      })}
+
+      <form onSubmit={add} className="space-y-2">
+        <div className="grid items-end gap-2 md:grid-cols-[1fr_2fr_auto_auto]">
+          <label htmlFor={`${fieldId}-label`} className="text-xs font-medium text-gray-600">
+            Label
+            <input id={`${fieldId}-label`} name="label" maxLength={120} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base" placeholder="e.g. Printable template" />
+          </label>
+          <label htmlFor={`${fieldId}-url`} className="text-xs font-medium text-gray-600">
+            Link URL
+            <input id={`${fieldId}-url`} name="url" required maxLength={2048} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base" placeholder="https://your-link.com" />
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-green-700" checked={formQR} onChange={event => setFormQR(event.target.checked)} /> Generate QR
+          </label>
+          <button className="min-h-11 rounded-xl bg-black px-3 text-sm text-white disabled:opacity-50" type="submit" disabled={regularLinks.length >= 8}>Add</button>
+        </div>
+        {regularLinks.length >= 8 && <p className="text-xs text-gray-600">Maximum 8 links reached</p>}
+        {error && <p className="text-xs text-red-700" role="alert">{error}</p>}
+      </form>
+
+      {regularLinks.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-gray-600">Added links ({regularLinks.length}/8)</h3>
+          {regularLinks.map((link, index) => (
+            <div key={link.id} className="space-y-3 rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold">{link.label || `Link ${index + 1}`}</p>
+                  <a href={link.url} target="_blank" rel="noreferrer" className="break-all text-sm text-blue-700 underline">{link.url}</a>
+                </div>
+                <button type="button" disabled={removing !== null} onClick={() => void remove(link.id)} aria-label={`Remove ${link.label || `link ${index + 1}`}`} className="grid size-11 shrink-0 place-items-center rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50">
+                  <ActionIcon name="close" />
+                </button>
+              </div>
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" className="size-4 accent-green-700" checked={link.generateQR} onChange={() => onChange(links.map(item => item.id === link.id ? { ...item, generateQR: !item.generateQR } : item))} /> Generate QR
+              </label>
+              {issueId && link.generateQR && <QrActions url={qrUrl(issueId, link.id)} label={link.label || `link-${index + 1}`} canPlace={canPlace} prepare={prepare} onPlace={onPlace} />}
+            </div>
+          ))}
         </div>
       )}
-
-      <div className={!issueId ? "opacity-40 pointer-events-none" : ""}>
-
-        {/* ── Issue QR Block ──────────────────────────────────────────────── */}
-        <div
-          className="rounded-xl border-2 p-4 mb-4 flex items-start gap-4"
-          style={{ borderColor: `${GREEN}88`, backgroundColor: `${GREEN}0F` }}
-        >
-          {/* QR image */}
-          <div className="flex-shrink-0">
-            {issueQrImageUrl ? (
-              <img
-                src={issueQrImageUrl}
-                alt="Issue QR Code"
-                className="w-[88px] h-[88px] rounded-md border"
-                style={{ borderColor: `${GREEN}55` }}
-              />
-            ) : (
-              <div
-                className="w-[88px] h-[88px] rounded-md border flex items-center justify-center text-xs text-center"
-                style={{ borderColor: `${GREEN}55`, color: GREEN_DARK }}
-              >
-                QR pending
-              </div>
-            )}
-          </div>
-
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold mb-1" style={{ color: GREEN_DARK }}>
-              Issue QR Code
-            </div>
-            <div className="text-sm text-gray-500 mb-2">
-              Scans redirect to your published zine via Zineground. Print it in your zine or share it anywhere.
-            </div>
-            {!issueQrLink && (
-              <div className="text-xs" style={{ color: `${GREEN_DARK}99` }}>
-                ⏳ Will activate after your first save
-              </div>
-            )}
-            {issueQrLink && issueQrImageUrl && (
-              <button
-                type="button"
-                onClick={() => downloadQR(issueQrLink.qr_path || issueQrImageUrl, slug || "issue")}
-                className="text-sm font-medium min-h-11 px-3 py-1.5 rounded-lg transition-colors"
-                style={{ backgroundColor: GREEN, color: "white" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)}
-              >
-                ↓ Download
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Collection QR Block ─────────────────────────────────────────── */}
-        <div
-          className="rounded-xl border-2 p-4 mb-4 flex items-start gap-4"
-          style={{ borderColor: `${GREEN}88`, backgroundColor: `${GREEN}0F` }}
-        >
-          {/* QR image */}
-          <div className="flex-shrink-0">
-            {collectionQrImageUrl ? (
-              <img
-                src={collectionQrImageUrl}
-                alt="Collection QR Code"
-                className="w-[88px] h-[88px] rounded-md border"
-                style={{ borderColor: `${GREEN}55` }}
-              />
-            ) : (
-              <div
-                className="w-[88px] h-[88px] rounded-md border flex items-center justify-center text-xs text-center"
-                style={{ borderColor: `${GREEN}55`, color: GREEN_DARK }}
-              >
-                QR pending
-              </div>
-            )}
-          </div>
-
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold mb-1" style={{ color: GREEN_DARK }}>
-              Collection QR Code
-            </div>
-            <div className="text-sm text-gray-500 mb-2">
-              Readers scan this to add your zine to their Zineground collection. Print it inside your zine.
-            </div>
-            {!collectionQrLink && (
-              <div className="text-xs" style={{ color: `${GREEN_DARK}99` }}>
-                Will activate after your first save
-              </div>
-            )}
-            {collectionQrLink && collectionQrImageUrl && (
-              <button
-                type="button"
-                onClick={() =>
-                  downloadQR(
-                    collectionQrLink.qr_path || collectionQrImageUrl,
-                    `collection-${slug || issueId || "qr"}`
-                  )
-                }
-                className="text-sm font-medium min-h-11 px-3 py-1.5 rounded-lg transition-colors"
-                style={{ backgroundColor: GREEN, color: "white" }}
-                onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)
-                }
-                onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)
-                }
-              >
-                ↓ Download
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Add Link Form ────────────────────────────────────────────────── */}
-        <form ref={formRef} onSubmit={add} className="mb-4 space-y-2">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">Label</label>
-              <input
-                name="label"
-                className="min-h-11 w-full rounded-xl border px-3 py-2 text-base"
-                placeholder="e.g. My Instagram"
-                disabled={!issueId}
-              />
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-xs font-medium text-gray-600">Link URL</label>
-              <input
-                name="url"
-                className="min-h-11 w-full rounded-xl border px-3 py-2 text-base"
-                placeholder="https://your-link.com"
-                disabled={!issueId}
-              />
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-600">QR</label>
-                <div className="flex items-center gap-2 h-[38px]">
-                  <GreenCheckbox checked={formQR} onChange={() => setFormQR(!formQR)} />
-                  <span className="text-sm text-gray-600">{formQR ? "On" : "Off"}</span>
-                </div>
-              </div>
-              <button
-                className="ml-auto min-h-11 rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 transition-colors"
-                style={{ backgroundColor: "black" }}
-                type="submit"
-                disabled={!issueId || regularLinks.length >= maxLinks}
-              >
-                Add
-              </button>
-            </div>
-          </div>
-          {regularLinks.length >= maxLinks && (
-            <div className="text-xs text-orange-600">Maximum {maxLinks} links reached</div>
-          )}
-        </form>
-
-        {/* ── Added Links ──────────────────────────────────────────────────── */}
-        {regularLinks.length > 0 && (
-          <div>
-            <div className="text-xs font-semibold text-gray-500 mb-2">
-              Added Links ({regularLinks.length}/{maxLinks})
-            </div>
-            <div className="space-y-3">
-              {regularLinks.map((l, index) => {
-                const qrUrl = l.qr_path
-                  ? l.qr_path
-                  : l.redirect_path
-                  ? generateQRDataURL(`${baseUrl}${l.redirect_path}`)
-                  : l.generateQR
-                  ? generateQRDataURL(l.url)
-                  : "";
-
-                return (
-                  <div key={l.id} className="rounded-xl border bg-white p-4">
-                    {/* Title + URL + Remove */}
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-base mb-1">
-                          {l.label || `Link ${index + 1}`}
-                        </div>
-                        <a
-                          className="text-sm text-blue-600 underline break-all"
-                          href={l.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {l.url}
-                        </a>
-                      </div>
-                      <button
-                        onClick={() => remove(l.id)}
-                        className="text-xs text-red-500 hover:text-red-700 min-h-11 px-2 rounded border border-red-200 hover:bg-red-50 transition flex-shrink-0"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    {/* Generate QR checkbox + QR preview row */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      {/* Checkbox */}
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <GreenCheckbox checked={l.generateQR} onChange={() => toggleQR(l.id)} />
-                        <span className="text-sm text-gray-700">Generate QR</span>
-                      </label>
-
-                      {/* Download button LEFT, QR image RIGHT */}
-                      {l.generateQR && qrUrl && (
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => downloadQR(qrUrl, l.label || `link-${index + 1}`)}
-                            className="text-sm font-medium min-h-11 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-                            style={{ backgroundColor: GREEN, color: "white" }}
-                            onMouseEnter={(e) =>
-                              ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)
-                            }
-                            onMouseLeave={(e) =>
-                              ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)
-                            }
-                          >
-                            ↓ Download QR
-                          </button>
-                          <img
-                            src={qrUrl}
-                            alt={`QR for ${l.label}`}
-                            className="w-[96px] h-[96px] rounded-md border border-gray-200 flex-shrink-0"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {regularLinks.length === 0 && issueId && (
-          <div className="text-xs text-gray-400 text-center py-3">
-            No links added yet — use the form above to add your first link.
-          </div>
-        )}
-      </div>
     </div>
   );
 }

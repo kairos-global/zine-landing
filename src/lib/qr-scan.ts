@@ -6,7 +6,7 @@ export type ScanResult = {
 };
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const nativePath = new RegExp(`^/(?:qr/${UUID}/${UUID}|collect/${UUID})/?$`, "i");
+const nativePath = new RegExp(`^/(?:qr/${UUID}/(?:${UUID}|issue|collection)|collect/${UUID})/?$`, "i");
 
 /** Only our exact HTTPS origins and existing QR routes may open automatically. */
 export function classifyQRCode(raw: string, siteUrl: string): ScanResult {

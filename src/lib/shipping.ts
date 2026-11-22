@@ -27,5 +27,5 @@ export function calculateShippingCost(totalQuantity: number): number {
 
 /** shipping + service fee combined */
 export function calculateTotalCharge(totalQuantity: number): number {
-  return calculateShippingCost(totalQuantity) + DISTRIBUTOR_SERVICE_FEE;
+  return totalQuantity > 0 ? calculateShippingCost(totalQuantity) + DISTRIBUTOR_SERVICE_FEE : 0;
 }

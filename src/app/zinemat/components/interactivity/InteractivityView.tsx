@@ -10,14 +10,17 @@ import BasicsSection, { type Basics, type ZineFormat } from "./BasicsSection";
 import { isZineCategoryKey, type ZineCategoryKey } from "@/lib/zine-categories";
 import { withViewMap, type ViewMap } from "@/lib/zine-view-map";
 import UploadsSection from "./UploadsSection";
-import InteractivitySection, { type InteractiveLink } from "./InteractivitySection";
+import InteractivitySection, { isReaderLink, type InteractiveLink } from "./InteractivitySection";
+import { builtInQrLabels } from "@/lib/zine-qr";
+import { pdfHasQrPlacement, withQrPlacement, type QrPlacement } from "@/lib/zine-qr-placement";
+import QrPlacementDialog from "./QrPlacementDialog";
 import DistributionSection, { type Distribution } from "./DistributionSection";
 import FinalChecklist from "./FinalChecklist";
 import ZineCanvas from "../canvas/ZineCanvas";
 import { canvasHasArtwork, exportArtwork, newCanvas, type CanvasState } from "../canvas/canvas-art";
 
 const AUTOSAVE_DEBOUNCE_MS = 1800;
-const initialDistribution = { self_distribute: false, print_for_me: false };
+const initialDistribution = { self_distribute: false, print_for_me: false, max_copies_per_order: 50, auto_approve_quantity: 20 };
 const emptyAssets: { cover: string | null; pdf: string | null } = { cover: null, pdf: null };
 const sections = {
   basics: { label: "A) Basics", accent: "#65CBF1" },
@@ -43,6 +46,18 @@ type Issue = {
   has_canvas: boolean;
 };
 
+function draftForm(basics: Basics, mode: WorkspaceMode, category: ZineCategoryKey | null, files: typeof emptyAssets, links: InteractiveLink[], distribution: Distribution) {
+  return {
+    title: basics.title.trim() || (mode === "create" ? "Untitled canvas" : "Untitled"),
+    zine_format: basics.zine_format,
+    category: category ?? "",
+    cover_url: files.cover ?? "",
+    pdf_url: files.pdf ?? "",
+    interactiveLinks: JSON.stringify(links.map(({ id, label, url, generateQR }) => ({ id, label, url, generateQR }))),
+    distribution: JSON.stringify(distribution),
+  };
+}
+
 async function checkedJson(response: Response, fallback: string) {
   const data = await response.json().catch(() => null);
   if (!response.ok || !data) throw new Error(data?.error || fallback);
@@ -55,7 +70,7 @@ export default function InteractivityView({ editId, initialMode }: {
 }) {
   const router = useRouter();
   const [mode, setMode] = useState(initialMode);
-  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: initialMode === "create" ? "mini" : "half_letter" });
+  const [basics, setBasics] = useState<Basics>({ title: "", zine_format: "mini" });
   const [category, setCategory] = useState<ZineCategoryKey | null>(null);
   const [files, setFiles] = useState(emptyAssets);
   const [links, setLinks] = useState<InteractiveLink[]>([]);
@@ -66,6 +81,8 @@ export default function InteractivityView({ editId, initialMode }: {
   const [loadError, setLoadError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [savedId, setSavedId] = useState<string | null>(editId);
+  const [qrIssueId, setQrIssueId] = useState<string | null>(editId);
+  const [placingQr, setPlacingQr] = useState<{ src: string; label: string } | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [uploading, setUploading] = useState(false);
   const [importingArtwork, setImportingArtwork] = useState(false);
@@ -78,6 +95,8 @@ export default function InteractivityView({ editId, initialMode }: {
   const lastSavedForm = useRef<string | null>(null);
   const lastSavedCanvas = useRef<CanvasState | null>(null);
   const issueReady = useRef(Boolean(editId));
+  const qrReady = useRef(false);
+  const removedLinks = useRef(new Set<string>());
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const transfer = useRef(false);
   const manualAction = useRef(false);
@@ -114,20 +133,28 @@ export default function InteractivityView({ editId, initialMode }: {
         if (controller.signal.aborted) return;
         const create = issue.has_canvas || (issue.zine_format === "mini" &&
           !issue.pdf_url && !issue.cover_img_url && (initialMode === "create" || issue.title === "Untitled canvas"));
-        const title = issue.title === "Untitled canvas" && create ? "" : issue.title;
-        setMode(create ? "create" : "upload");
-        setBasics({ title, zine_format: issue.zine_format });
-        setCategory(isZineCategoryKey(issue.category) ? issue.category : null);
-        setFiles({ cover: issue.cover_img_url, pdf: issue.pdf_url });
-        setExistingCoverOnly(Boolean(issue.cover_img_url && !issue.pdf_url));
-        setDistribution({
+        const title = issue.title === "Untitled canvas" && create || issue.title === "Untitled" ? "" : issue.title;
+        const nextBasics = { title, zine_format: issue.zine_format };
+        const nextCategory = isZineCategoryKey(issue.category) ? issue.category : null;
+        const nextFiles = { cover: issue.cover_img_url, pdf: issue.pdf_url };
+        const nextDistribution = {
           self_distribute: issue.self_distribute,
           print_for_me: issue.print_for_me,
           max_copies_per_order: issue.max_copies_per_order,
           auto_approve_quantity: issue.auto_approve_quantity,
-        });
-        const savedLinks = (data.links ?? []).map((link: InteractiveLink) => ({ ...link, generateQR: Boolean(link.qr_path) }));
+        };
+        const savedLinks: InteractiveLink[] = (data.links ?? []).map((link: InteractiveLink) => ({ ...link, generateQR: Boolean(link.qr_path) }));
+        lastSavedForm.current = JSON.stringify(draftForm(nextBasics, create ? "create" : "upload", nextCategory, nextFiles, savedLinks.filter(isReaderLink), nextDistribution));
+        qrReady.current = Object.values(builtInQrLabels).every(label => savedLinks.some(link => link.label === label));
+        setMode(create ? "create" : "upload");
+        setBasics(nextBasics);
+        setCategory(nextCategory);
+        setFiles(nextFiles);
+        setExistingCoverOnly(Boolean(issue.cover_img_url && !issue.pdf_url));
+        setDistribution(nextDistribution);
         setLinks(savedLinks);
+        setQrIssueId(editId);
+        setSaveStatus("saved");
         setActive([
           "basics", "artwork",
           ...(savedLinks.some(isReaderLink) ? ["links" as const] : []),
@@ -155,15 +182,7 @@ export default function InteractivityView({ editId, initialMode }: {
     : Boolean(files.cover && (files.pdf || existingCoverOnly));
   const visibleLinks = useMemo(() => links.filter(isReaderLink), [links]);
   const distributionOk = distribution.self_distribute || distribution.print_for_me;
-  const form = useMemo(() => ({
-    title: basics.title.trim() || (mode === "create" ? "Untitled canvas" : "Untitled"),
-    zine_format: basics.zine_format,
-    category: category ?? "",
-    cover_url: files.cover ?? "",
-    pdf_url: files.pdf ?? "",
-    interactiveLinks: JSON.stringify(visibleLinks),
-    distribution: JSON.stringify(distribution),
-  }), [basics, category, distribution, files, mode, visibleLinks]);
+  const form = useMemo(() => draftForm(basics, mode, category, files, visibleLinks, distribution), [basics, category, distribution, files, mode, visibleLinks]);
 
   const formKey = JSON.stringify(form);
 
@@ -193,15 +212,19 @@ export default function InteractivityView({ editId, initialMode }: {
     const body = new FormData();
     body.set("issueId", getDraftId());
     Object.entries(values).forEach(([key, value]) => body.set(key, value));
+    if (removedLinks.current.size) {
+      const links: InteractiveLink[] = JSON.parse(values.interactiveLinks);
+      body.set("interactiveLinks", JSON.stringify(links.filter(link => !removedLinks.current.has(link.id))));
+    }
     return checkedJson(await fetch(`/api/zinemat/${endpoint}`, { method: "POST", body }), `Couldn’t ${endpoint} this zine.`);
   }, [getDraftId]);
 
-  const save = useCallback(async (intent: "autosave" | "save" | "publish") => {
+  const save = useCallback(async (intent: "autosave" | "prepare" | "save" | "publish") => {
     const result = queue.current.then(async () => {
       if (!alive.current) return false;
       const canvasChanged = mode === "create" && lastSavedCanvas.current !== canvas;
       const needsGeneratedFiles = mode === "create" && intent === "publish";
-      if (intent === "autosave" && lastSavedForm.current === formKey && !canvasChanged) return true;
+      if ((intent === "autosave" || intent === "prepare" && qrReady.current) && lastSavedForm.current === formKey && !canvasChanged) return true;
       setSaveStatus("saving");
       let values = form;
 
@@ -209,6 +232,7 @@ export default function InteractivityView({ editId, initialMode }: {
       if (mode === "create" && !issueReady.current) {
         await sendForm(form, "save");
         issueReady.current = true;
+        qrReady.current = true;
         lastSavedForm.current = formKey;
       }
       if (canvasChanged) {
@@ -222,9 +246,11 @@ export default function InteractivityView({ editId, initialMode }: {
         values = { ...form, cover_url: cover, pdf_url: withViewMap(pdf, basics.zine_format === "mini" ? "mini-center" : "pages") };
       }
       // Serialize writes so a slower draft save can’t overwrite a newer save or publish.
-      if (intent === "publish" || lastSavedForm.current !== formKey) {
+      if (intent === "publish" || intent === "prepare" && !qrReady.current || lastSavedForm.current !== formKey) {
         await sendForm(values, intent === "publish" ? "publish" : "save");
-        lastSavedForm.current = JSON.stringify(values);
+        issueReady.current = true;
+        qrReady.current = true;
+        lastSavedForm.current = formKey;
       }
       if (alive.current) {
         const id = getDraftId();
@@ -249,6 +275,8 @@ export default function InteractivityView({ editId, initialMode }: {
     return result;
   }, [basics.zine_format, canvas, form, formKey, getDraftId, mode, sendForm, uploadAsset]);
 
+  const prepareQr = useCallback(() => save("prepare"), [save]);
+
   const baseline = useRef<{ form: string; canvas: CanvasState } | null>(null);
   useEffect(() => {
     if (loading || loadError || action || uploading) return;
@@ -265,6 +293,7 @@ export default function InteractivityView({ editId, initialMode }: {
   }, [action, canvas, formKey, loadError, loading, mode, save, uploading]);
 
   function toggle(section: Section) {
+    if (section === "links" && !qrIssueId) setQrIssueId(getDraftId());
     setActive(previous => previous.includes(section) ? previous.filter(key => key !== section) : [...previous, section]);
   }
 
@@ -296,9 +325,43 @@ export default function InteractivityView({ editId, initialMode }: {
         uploadAsset("cover", cover),
       ]);
       if (!pdf) throw new Error("Choose a PDF first.");
-      if (map !== "pages") setBasics(previous => ({ ...previous, zine_format: "mini" }));
       return { cover: coverUrl, pdf: withViewMap(pdf, map) };
     });
+  }
+
+  function applyQr(page: number, placement: QrPlacement, pdf?: Blob) {
+    if (pdf) {
+      return transferFiles(async () => {
+        const url = await uploadAsset("pdf", pdf);
+        const hash = files.pdf?.split("#")[1];
+        return { ...files, pdf: withQrPlacement(hash ? `${url}#${hash}` : url) };
+      });
+    }
+    const code = { ...placement, id: crypto.randomUUID() };
+    setCanvas(previous => ({
+      ...previous,
+      pages: previous.pages.map((item, index) => index === page - 1
+        ? { ...item, qrCodes: [...item.qrCodes ?? [], code] }
+        : item),
+    }));
+    return Promise.resolve(true);
+  }
+
+  async function removeLink(id: string) {
+    const result = queue.current.then(async () => {
+      if (issueReady.current) {
+        const params = new URLSearchParams({ issueId: getDraftId(), linkId: id });
+        await checkedJson(await fetch(`/api/zinemat/deletelink?${params}`, { method: "DELETE" }), "Couldn’t remove the link.");
+      }
+      setLinks(previous => previous.filter(link => link.id !== id));
+      return true;
+    }).catch(() => {
+      removedLinks.current.delete(id);
+      return false;
+    });
+    removedLinks.current.add(id);
+    queue.current = result;
+    return result;
   }
 
   async function finish(intent: "save" | "publish") {
@@ -327,9 +390,14 @@ export default function InteractivityView({ editId, initialMode }: {
   const alternate = mode === "create" ? "upload" : "create";
   const alternateUrl = `/zinemat?mode=${alternate}`;
   const editing = Boolean(savedId);
-  const formChanged = formKey !== (lastSavedForm.current ?? baseline.current?.form);
-  const canvasChanged = mode === "create" && canvas !== (lastSavedCanvas.current ?? baseline.current?.canvas);
+  const previousForm = lastSavedForm.current ?? baseline.current?.form;
+  const formChanged = previousForm != null && formKey !== previousForm;
+  const previousCanvas = lastSavedCanvas.current ?? baseline.current?.canvas;
+  const canvasChanged = mode === "create" && previousCanvas != null && canvas !== previousCanvas;
   const hasChanges = formChanged || canvasChanged;
+  const interactivityApplied = mode === "create" ? canvas.pages.some(page => page.qrCodes?.length) : pdfHasQrPlacement(files.pdf);
+  const canPlace = mode === "create" || Boolean(files.pdf && !pdfPending);
+  const statusText = saveStatus === "error" ? "Not saved" : saveStatus === "saving" || uploading || hasChanges ? "Saving…" : savedId ? "Saved" : "Not saved";
 
   async function switchMode(event: MouseEvent<HTMLAnchorElement>) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -351,6 +419,16 @@ export default function InteractivityView({ editId, initialMode }: {
 
   return (
     <div className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold sm:text-2xl">ZineMat</h1>
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          <label className="sr-only" htmlFor="zinemat-workspace-title">Zine title</label>
+          <input id="zinemat-workspace-title" disabled={action !== null} value={basics.title}
+            onChange={event => setBasics(previous => ({ ...previous, title: event.target.value }))}
+            placeholder="Untitled zine" className="min-h-11 w-40 min-w-0 rounded-xl border bg-white px-3 text-base sm:w-60" />
+          <span className={`min-w-[5.25rem] text-sm ${statusText === "Saved" ? "text-green-800" : saveStatus === "error" ? "text-red-700" : "text-gray-600"}`} role="status">{statusText}</span>
+        </div>
+      </div>
       <nav className="grid grid-cols-2 gap-2 rounded-xl border bg-white/90 p-1" aria-label="ZineMat workspace">
         {(["upload", "create"] as const).map(item => {
           const label = item === "upload" ? "Upload" : "Create";
@@ -365,6 +443,7 @@ export default function InteractivityView({ editId, initialMode }: {
           <BasicsSection value={basics} onChange={setBasics} category={category} onCategoryChange={setCategory} />
         </Card>
         <Card section="artwork" title={artworkLabel} expanded={active.includes("artwork")} onToggle={toggle}>
+          {interactivityApplied && <p role="status" className="mb-3 text-sm text-green-800">Interactivity applied</p>}
           {mode === "create"
             ? <ZineCanvas state={canvas} format={basics.zine_format} title={basics.title} onChange={setCanvas} onImportingChange={setImportingArtwork} />
             : <UploadsSection coverUrl={files.cover} pdfUrl={files.pdf} format={basics.zine_format} busy={busy} onCover={setCover} onPdf={applyMap} onPending={setPdfPending} />}
@@ -377,21 +456,25 @@ export default function InteractivityView({ editId, initialMode }: {
                 <InteractivitySection
                   links={links}
                   onChange={setLinks}
-                  issueId={savedId}
-                  slug={basics.title.trim().toLowerCase().replace(/\s+/g, "-")}
-                  siteUrl={process.env.NEXT_PUBLIC_SITE_URL}
+                  issueId={qrIssueId}
+                  canPlace={canPlace && !busy}
+                  prepare={prepareQr}
+                  onPlace={(src, label) => setPlacingQr({ src, label })}
+                  onRemove={removeLink}
                 />
               ) : <DistributionSection value={distribution} onChange={setDistribution} />}
             </Card>
           ))}
         </section>
       </fieldset>
+      {placingQr && canPlace && (
+        <QrPlacementDialog code={placingQr} source={mode === "create" ? { canvas, format: basics.zine_format } : { url: files.pdf!, format: basics.zine_format }}
+          onClose={() => setPlacingQr(null)} onApply={applyQr} />
+      )}
 
       <div className="space-y-4 rounded-2xl border bg-white p-3 sm:p-4">
-        <FinalChecklist mode={mode} coverOnly={existingCoverOnly && !files.pdf} checklist={{ basics: titleOk, artwork: artworkOk && !pdfPending, interactivity: visibleLinks.length > 0, distribution: distributionOk }} />
-        <p className="text-xs text-gray-600" role="status">
-          {uploading ? "Uploading files…" : saveStatus === "saving" ? "Saving draft…" : saveStatus === "error" ? "Draft save failed. Tap Save to retry." : saveStatus === "saved" && !hasChanges ? "Draft saved" : "Drafts autosave as you work."}
-        </p>
+        <FinalChecklist mode={mode} coverOnly={existingCoverOnly && !files.pdf} checklist={{ basics: titleOk, artwork: artworkOk && !pdfPending, interactivity: visibleLinks.length > 0 || interactivityApplied, distribution: distributionOk }} />
+        {saveStatus === "error" && <p className="text-xs text-red-700">Draft save failed. Select Save to retry.</p>}
         <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
           <button type="button" onClick={() => void finish("save")} disabled={busy || pdfPending}
             className="min-h-11 rounded-xl border px-4 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
@@ -405,10 +488,6 @@ export default function InteractivityView({ editId, initialMode }: {
       </div>
     </div>
   );
-}
-
-function isReaderLink(link: InteractiveLink) {
-  return link.label !== "__issue_qr__" && link.label !== "__collection_qr__";
 }
 
 function Card({ section, title, expanded, onToggle, children }: {

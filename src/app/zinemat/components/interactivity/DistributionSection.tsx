@@ -1,5 +1,7 @@
 "use client";
 
+import { useId, useState } from "react";
+
 export type Distribution = {
   self_distribute: boolean;
   print_for_me: boolean;
@@ -48,24 +50,31 @@ function LimitInput({
   max: number;
   onChange: (v: number) => void;
 }) {
+  const id = useId();
+  const [editing, setEditing] = useState<string | null>(null);
+
   return (
     <div>
-      <label className="block text-xs font-medium mb-1" style={{ color: PURPLE_DARK }}>
+      <label htmlFor={id} className="block text-xs font-medium mb-1" style={{ color: PURPLE_DARK }}>
         {label}
       </label>
       <input
+        id={id}
+        aria-describedby={`${id}-hint`}
         type="number"
         min={min}
         max={max}
-        value={value}
-        onChange={(e) => {
-          const v = parseInt(e.target.value, 10);
-          if (!isNaN(v) && v >= min && v <= max) onChange(v);
+        value={editing ?? value}
+        onChange={event => {
+          setEditing(event.target.value);
+          const next = event.target.valueAsNumber;
+          if (Number.isInteger(next) && next >= min && next <= max) onChange(next);
         }}
+        onBlur={() => setEditing(null)}
         className="min-h-11 w-full rounded-lg border px-3 py-1.5 text-base focus:outline-none focus:ring-1"
         style={{ borderColor: `${PURPLE}66`, color: PURPLE_DARK }}
       />
-      <p className="text-xs mt-1" style={{ color: `${PURPLE_DARK}99` }}>
+      <p id={`${id}-hint`} className="text-xs mt-1" style={{ color: `${PURPLE_DARK}99` }}>
         {hint}
       </p>
     </div>
@@ -80,7 +89,7 @@ export default function DistributionSection({
   onChange: (next: Distribution) => void;
 }) {
   const maxCopies = value.max_copies_per_order ?? 50;
-  const autoApprove = value.auto_approve_quantity ?? 20;
+  const autoApprove = Math.min(value.auto_approve_quantity ?? 20, maxCopies);
 
   return (
     <div className="space-y-3">
@@ -142,7 +151,7 @@ export default function DistributionSection({
               Self distribute
             </div>
             <div className="mt-0.5 text-xs text-gray-500">
-              You print and fulfill your own zines whenever you get a distribution order.
+              You print and ship orders from approved distributors.
             </div>
           </div>
         </div>
@@ -236,10 +245,10 @@ export default function DistributionSection({
             value={maxCopies}
             min={1}
             max={500}
-            onChange={(v) => onChange({ ...value, max_copies_per_order: v })}
+            onChange={v => onChange({ ...value, max_copies_per_order: v, auto_approve_quantity: Math.min(autoApprove, v) })}
           />
           <LimitInput
-            label="Auto-approve below"
+            label="Auto-approve up to"
             hint="Orders up to this quantity are approved automatically. Above it, you approve manually in the Creator Portal. Set to 0 to review every order."
             value={autoApprove}
             min={0}

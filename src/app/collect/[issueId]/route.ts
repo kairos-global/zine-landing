@@ -13,7 +13,7 @@ const supabase = createClient(
 );
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ issueId: string }> }
 ) {
   const { issueId } = await params;
@@ -34,18 +34,23 @@ export async function GET(
     .eq("id", issueId)
     .maybeSingle();
 
-  if (!issue || !issue.slug) {
-    return NextResponse.redirect(`${baseUrl}/browse`, 302);
+  if (issue?.status !== "published" || !issue.slug) {
+    return NextResponse.redirect(`${baseUrl}/browse-zines`, 302);
   }
 
   // Record the collection
   const profileId = await getOrCreateProfileId(userId);
-  await supabase
+  const { error } = await supabase
     .from("collections")
     .upsert(
       { profile_id: profileId, issue_id: issueId },
       { onConflict: "profile_id,issue_id" }
     );
+
+  if (error) {
+    console.error("[Collection] Could not add issue:", error);
+    return new NextResponse("Could not add the zine to your collection. Try scanning again.", { status: 500 });
+  }
 
   // Redirect to the issue page with a flag so the page can show a confirmation
   const destination = new URL(`${baseUrl}/issues/${issue.slug}`);
