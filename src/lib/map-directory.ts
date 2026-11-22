@@ -1,4 +1,4 @@
-export type MapIssue = { id: string; slug: string; title: string };
+export type MapIssue = { id: string; slug: string; title: string; category: string | null };
 export type MapLocation = {
   id: string;
   name: string;

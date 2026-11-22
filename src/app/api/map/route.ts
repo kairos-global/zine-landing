@@ -37,7 +37,7 @@ export async function GET() {
       const ids = locations.slice(start, start + 100).map(({ id }) => id);
       for (let offset = 0; ; offset += pageSize) {
         const { data, error } = await db.from("distributor_stock")
-          .select("distributor_id,issue:issues!inner(id,slug,title)")
+          .select("distributor_id,issue:issues!inner(id,slug,title,category)")
           .in("distributor_id", ids).gt("quantity", 0).eq("issue.status", "published")
           .order("distributor_id").order("issue_id").range(offset, offset + pageSize - 1)
           .returns<{ distributor_id: string; issue: MapIssue }[]>();

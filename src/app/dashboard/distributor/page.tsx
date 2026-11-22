@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { stockedZineCategories } from "@/lib/zine-categories";
 
 type Distributor = {
   id: string;
@@ -23,6 +24,7 @@ type Issue = {
   id: string;
   slug: string;
   title: string;
+  category?: string | null;
   cover_img_url?: string;
   pdf_url?: string;
   status: string;
@@ -713,6 +715,10 @@ function BrowseZines({
 
 // ========== STOCK VIEW TAB ==========
 function StockView({ stock }: { stock: StockItem[] }) {
+  const categories = stockedZineCategories(stock
+    .filter(({ quantity, issue }) => quantity > 0 && issue?.status === "published")
+    .map(({ issue }) => issue));
+
   if (stock.length === 0) {
     return (
       <div className="text-center py-12">
@@ -725,6 +731,16 @@ function StockView({ stock }: { stock: StockItem[] }) {
 
   return (
     <div className="bg-white rounded-xl border overflow-hidden">
+      {categories.length > 0 && (
+        <div className="border-b px-6 py-3">
+          <h2 className="mb-1.5 text-sm font-semibold">Categories in stock</h2>
+          <ul className="flex flex-wrap gap-1.5">
+            {categories.map(({ key, label }) => (
+              <li key={key} className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">{label}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <table className="w-full">
         <thead className="bg-gray-50 border-b">
           <tr>
