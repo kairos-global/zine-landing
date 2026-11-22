@@ -3,7 +3,8 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Coordinates, MapIssue, MapLocation } from "@/lib/map-directory";
+import type { Coordinates, MapLocation } from "@/lib/map-directory";
+import { isZineCategoryKey, stockedZineCategories, ZINE_CATEGORIES, zineCategoryLabel, type ZineCategoryKey } from "@/lib/zine-categories";
 
 const DirectoryMap = dynamic(() => import("./DirectoryMap"), {
   ssr: false,
@@ -24,9 +25,13 @@ function inBounds(location: MapLocation, bounds: Bounds) {
   return location.lat >= bounds.south && location.lat <= bounds.north && longitude <= bounds.east;
 }
 
-export default function MapClient({ initialIssue, initialLocation }: { initialIssue: string; initialLocation: string }) {
+export default function MapClient({ initialIssue, initialLocation, initialCategory }: {
+  initialIssue: string;
+  initialLocation: string;
+  initialCategory: ZineCategoryKey | "";
+}) {
   const [locations, setLocations] = useState<MapLocation[]>([]);
-  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState(initialCategory);
   const [issueFilter, setIssueFilter] = useState(initialIssue);
   const [selectedId, setSelectedId] = useState<string | null>(initialLocation);
   const [position, setPosition] = useState<Coordinates | null>(null);
@@ -64,31 +69,31 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    for (const [key, value] of [["issue", issueFilter], ["location", selectedId]] as const) {
+    for (const [key, value] of [["category", category], ["issue", issueFilter], ["location", selectedId]] as const) {
       if (value) url.searchParams.set(key, value);
       else url.searchParams.delete(key);
     }
     window.history.replaceState(null, "", url);
-  }, [issueFilter, selectedId]);
+  }, [category, issueFilter, selectedId]);
 
-  const issues = useMemo(() => {
-    const unique = new Map<string, MapIssue>();
-    for (const location of locations) for (const issue of location.issues) unique.set(issue.id, issue);
-    return [...unique.values()].sort((a, b) => a.title.localeCompare(b.title));
-  }, [locations]);
-  const activeIssue = issues.find((issue) => issue.slug === issueFilter || issue.id === issueFilter);
+  const activeIssue = useMemo(() => {
+    if (!issueFilter) return;
+    for (const { issues } of locations) {
+      const issue = issues.find(({ slug, id }) => slug === issueFilter || id === issueFilter);
+      if (issue) return issue;
+    }
+  }, [issueFilter, locations]);
+  const categoryLabel = zineCategoryLabel(category);
 
-  const matches = useMemo(() => {
-    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return locations.filter((location) => {
-      if (issueFilter && !location.issues.some(({ slug, id }) => slug === issueFilter || id === issueFilter)) return false;
-      const searchable = [location.name, location.address, ...location.issues.map(({ title }) => title)].join(" ").toLowerCase();
-      return terms.every((term) => searchable.includes(term));
-    }).sort((a, b) => position ? distance(position, a) - distance(position, b) : a.name.localeCompare(b.name));
-  }, [locations, issueFilter, query, position]);
+  const matches = useMemo(() => locations.filter(({ issues }) => (
+    (!category || issues.some((issue) => issue.category === category))
+    && (!issueFilter || issues.some(({ slug, id }) => slug === issueFilter || id === issueFilter))
+  )).sort((a, b) => position ? distance(position, a) - distance(position, b) : a.name.localeCompare(b.name)),
+  [locations, category, issueFilter, position]);
 
   const shown = inView && bounds ? matches.filter((location) => inBounds(location, bounds)) : matches;
   const selected = shown.find(({ id }) => id === selectedId);
+  const selectedCategories = selected ? stockedZineCategories(selected.issues) : [];
 
   useEffect(() => {
     if (panelOpen && selected) selectedRow.current?.scrollIntoView({ block: "nearest" });
@@ -116,56 +121,65 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
       setLocating(false);
     }, () => {
       setLocating(false);
-      setLocationError("Couldn’t get your location. Try searching by city or address.");
+      setLocationError("Couldn’t get your location. You can still pan or zoom the map.");
     }, { timeout: 8000, maximumAge: 60000 });
   }
 
   return (
     <main className="relative isolate h-dvh w-full overflow-hidden bg-[#e6e3dc] text-black">
       <h1 className="sr-only">Zine Map</h1>
-      <div className="absolute inset-x-3 top-3 z-20 flex max-w-md gap-2 md:left-4 md:top-4">
-        <Link href="/" aria-label="Zineground home" className="zg-button shrink-0 shadow-md">
-          <span aria-hidden="true">←</span>
-        </Link>
-        <input
-          aria-label="Search distributors"
-          className="zg-input min-w-0 !text-base shadow-md"
-          type="search"
-          placeholder="Search the map"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setInView(false);
-            setPanelOpen(true);
-          }}
-        />
-        <button
-          className="zg-button shrink-0 shadow-md"
-          type="button"
-          aria-controls="map-results"
-          aria-expanded={panelOpen}
-          onClick={() => setPanelOpen((open) => !open)}
-        >
-          Results
-        </button>
+      <div className="absolute inset-x-3 top-3 z-20 mx-auto max-w-lg rounded-2xl border-4 border-black bg-[#AAEEFF] px-3 py-2.5 shadow-lg sm:px-4 sm:py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 sm:gap-x-3">
+          <Link href="/" aria-label="Zineground home" className="zg-button !min-h-8 shrink-0 !px-2 !py-0">
+            <span aria-hidden="true">←</span>
+          </Link>
+          <button
+            className="flex min-h-8 items-center gap-2 rounded font-bold tracking-tight hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            type="button"
+            aria-controls="map-results"
+            aria-expanded={panelOpen}
+            onClick={() => setPanelOpen((open) => !open)}
+          >
+            <span aria-hidden="true" className="size-4 rounded-full border-[2.5px] border-black bg-[#D16FF2] shadow-[0_2px_0_#0003]" />
+            <span className="text-sm sm:text-base">Distributors</span>
+            {loadStatus !== "error" && (
+              <span className="rounded-full bg-black px-2 py-0.5 text-xs text-white" aria-live="polite">
+                {loadStatus === "ready" ? shown.length : "…"}
+              </span>
+            )}
+          </button>
+          <select
+            aria-label="Stocked zine category"
+            className="min-w-[7.5rem] flex-1 cursor-pointer rounded-lg border-2 border-black bg-white px-2 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 sm:max-w-52 sm:px-3"
+            value={category}
+            onChange={(event) => {
+              const value = event.target.value;
+              setCategory(isZineCategoryKey(value) ? value : "");
+              setSelectedId(null);
+            }}
+          >
+            <option value="">All categories</option>
+            {ZINE_CATEGORIES.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+          </select>
+        </div>
+        {issueFilter && (
+          <button type="button" className="mt-1 block max-w-full truncate rounded text-left text-xs font-bold underline focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => setIssueFilter("")}>
+            Clear issue filter{activeIssue ? ` · ${activeIssue.title}` : ""}
+          </button>
+        )}
       </div>
 
       <section
         id="map-results"
         aria-labelledby="map-results-title"
         hidden={!panelOpen}
-        className="zg-panel absolute inset-x-3 bottom-7 z-10 max-h-[44dvh] overflow-y-auto overscroll-contain scroll-pt-12 shadow-lg md:inset-x-auto md:bottom-auto md:left-4 md:top-[4.5rem] md:max-h-[calc(100dvh-6.25rem)] md:w-[22rem]"
+        className="zg-panel absolute inset-x-3 bottom-7 z-10 max-h-[min(44%,calc(50%_-_3rem))] overflow-y-auto overscroll-contain scroll-pt-12 shadow-lg md:inset-x-auto md:bottom-auto md:left-4 md:top-28 md:max-h-[calc(100%_-_8.75rem)] md:w-[22rem]"
       >
         <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b-2 border-black bg-[#AAEEFF] px-4 py-2.5">
           <h2 id="map-results-title" className="font-black" aria-live="polite">{loadStatus === "ready" ? `${shown.length} ${shown.length === 1 ? "location" : "locations"}` : "Locations"}</h2>
           <Link href="/contact?topic=map" className="text-sm font-bold underline">Suggest a distributor</Link>
         </div>
         <div className="space-y-2.5 border-b border-black/15 p-3">
-          <select aria-label="Stocked issue" className="zg-input !text-base" value={activeIssue?.slug ?? issueFilter} onChange={(event) => { setIssueFilter(event.target.value); setInView(false); }}>
-            <option value="">All issues</option>
-            {issueFilter && !activeIssue && <option value={issueFilter}>Linked issue</option>}
-            {issues.map(({ id, slug, title }) => <option key={id} value={slug}>{title}</option>)}
-          </select>
           <div className="flex flex-wrap items-center gap-2">
             <button className="zg-button" type="button" disabled={locating} onClick={locate}>{locating ? "Locating…" : "Near me"}</button>
             <button className="zg-button" type="button" disabled={!matches.length} onClick={() => { setInView(false); setCamera((prev) => ({ type: "all", sequence: prev.sequence + 1 })); }}>Fit results</button>
@@ -177,8 +191,8 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
         {loadStatus === "error" && <div className="p-4"><p role="alert" className="mb-2 text-sm">The directory couldn’t load.</p><button className="zg-button" onClick={() => { setLoadStatus("loading"); setAttempt(attempt + 1); }}>Try again</button></div>}
         {loadStatus === "ready" && !shown.length && (
           <div className="space-y-2 p-4 text-sm">
-            <p>{inView ? "No matching distributors in this map area." : issueFilter ? "No matching distributors stock this issue." : "No matching distributors."}</p>
-            {(query || issueFilter || inView) && <button className="font-bold underline" onClick={() => { setQuery(""); setIssueFilter(""); setInView(false); }}>Clear filters</button>}
+            <p>{inView ? "No matching distributors in this map area." : categoryLabel ? `No matching distributors have ${categoryLabel} zines in stock.` : issueFilter ? "No matching distributors stock this issue." : "No matching distributors."}</p>
+            {(category || issueFilter || inView) && <button className="font-bold underline" onClick={() => { setCategory(""); setIssueFilter(""); setInView(false); }}>Clear filters</button>}
           </div>
         )}
         <ul className="divide-y divide-black/15">
@@ -195,6 +209,16 @@ export default function MapClient({ initialIssue, initialLocation }: { initialIs
                     <a className="zg-button" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(location.address)}`} target="_blank" rel="noreferrer">Directions ↗</a>
                     {location.email && <a className="zg-button" href={`mailto:${location.email}`}>Email shop</a>}
                   </div>
+                  {selectedCategories.length > 0 && (
+                    <div className="mb-3">
+                      <h3 className="mb-1 text-xs font-bold">Categories in stock</h3>
+                      <ul className="flex flex-wrap gap-1.5">
+                        {selectedCategories.map(({ key, label }) => (
+                          <li key={key} className="rounded-full border border-black bg-[#AAEEFF] px-2 py-0.5 text-xs font-bold">{label}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {location.issues.map((issue) => <Link key={issue.id} className="block py-0.5 font-bold underline" href={`/issues/${encodeURIComponent(issue.slug)}`}>{issue.title} ↗</Link>)}
                   <Link className="mt-2 inline-block text-xs underline" href={`/contact?topic=map&reference=${encodeURIComponent(location.name)}`}>Report a listing update</Link>
                 </div>

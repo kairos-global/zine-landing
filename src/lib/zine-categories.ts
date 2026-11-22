@@ -13,6 +13,11 @@ export const ZINE_CATEGORIES = [
 
 export type ZineCategoryKey = (typeof ZINE_CATEGORIES)[number]["key"];
 
+export function stockedZineCategories(issues: readonly { category?: string | null }[]) {
+  const categories = new Set(issues.map(({ category }) => category));
+  return ZINE_CATEGORIES.filter(({ key }) => categories.has(key));
+}
+
 export function zineCategoryLabel(key: string | null | undefined): string | null {
   if (!key) return null;
   const found = ZINE_CATEGORIES.find((c) => c.key === key);
