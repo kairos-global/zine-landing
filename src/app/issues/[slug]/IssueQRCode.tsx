@@ -3,32 +3,17 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
-interface IssueQRCodeProps {
-  fullRedirectUrl: string;
-  label: string;
-}
-
-/**
- * Renders a QR code that encodes the given full redirect URL.
- * Used on the issue view page so scans always go to the correct origin (no undefined).
- */
-export function IssueQRCode({ fullRedirectUrl, label }: IssueQRCodeProps) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-
+export function IssueQRCode({ fullRedirectUrl, label }: { fullRedirectUrl: string; label: string }) {
+  const [src, setSrc] = useState<string>();
   useEffect(() => {
-    if (!fullRedirectUrl) return;
-    QRCode.toDataURL(fullRedirectUrl, { width: 400 })
-      .then(setDataUrl)
-      .catch(() => setDataUrl(null));
+    let active = true;
+    void QRCode.toDataURL(fullRedirectUrl, { width: 320, margin: 4, errorCorrectionLevel: "M" })
+      .then(value => { if (active) setSrc(value); })
+      .catch(() => { if (active) setSrc(undefined); });
+    return () => { active = false; };
   }, [fullRedirectUrl]);
 
-  if (!dataUrl) return <div className="w-full aspect-square bg-neutral-100 rounded animate-pulse" aria-hidden />;
-
-  return (
-    <img
-      src={dataUrl}
-      alt={`QR code for ${label || "link"}`}
-      className="w-full aspect-square"
-    />
-  );
+  if (!src) return <div className="aspect-square w-full bg-neutral-100" aria-hidden="true" />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt={`QR code for ${label}`} className="aspect-square w-full" />;
 }

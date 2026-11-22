@@ -1,382 +1,192 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import ActionDialog from "@/components/ActionDialog";
+import ZineCover from "@/components/ZineCover";
+import { qrPngOptions, qrUrl } from "@/lib/zine-qr";
+import { IssueQRCode } from "@/app/issues/[slug]/IssueQRCode";
 
-type Issue = {
-  id: string;
-  title: string | null;
-  slug: string | null;
-  status: string | null;
-  cover_img_url: string | null;
-  pdf_url: string | null;
-  published_at: string | null;
-  created_at: string | null;
-};
+type Zine = { id: string; title: string | null; slug: string; cover_img_url: string | null };
+type OwnedZine = Zine & { status: "draft" | "published"; wasPublished: boolean };
 
-type IssueQrLink = {
-  id: string;
-  issue_id: string;
-  qr_path: string | null;
-  redirect_path: string | null;
-};
-
-type CollectedIssue = {
-  id: string;
-  title: string | null;
-  slug: string | null;
-  cover_img_url: string | null;
-  collected_at: string;
-};
+const button = "inline-flex min-h-10 items-center justify-center rounded-lg border px-2.5 text-sm font-medium hover:bg-gray-100 disabled:opacity-50";
+const shelf = "grid grid-cols-2 gap-3 sm:gap-4";
+const tile = "flex min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white";
 
 export default function LibraryPage() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
-  const [drafts, setDrafts] = useState<Issue[]>([]);
-  const [published, setPublished] = useState<Issue[]>([]);
-  const [allIssues, setAllIssues] = useState<Issue[]>([]);
-  const [issueQrLinks, setIssueQrLinks] = useState<IssueQrLink[]>([]);
-  const [collectedIssues, setCollectedIssues] = useState<CollectedIssue[]>([]);
+  const [owned, setOwned] = useState<OwnedZine[]>([]);
+  const [collected, setCollected] = useState<Zine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const [action, setAction] = useState<OwnedZine | null>(null);
+  const [collectionChoice, setCollectionChoice] = useState<"keep" | "remove">("keep");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!user) {
-      router.push("/sign-in");
-      return;
-    }
+    if (!user) { router.replace("/sign-in"); return; }
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError("");
+    void fetch("/api/library", { signal: controller.signal }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Couldn’t open your library.");
+      setOwned(data.issues);
+      setCollected(data.collectedIssues);
+    }).catch(caught => {
+      if (!controller.signal.aborted) setLoadError(caught instanceof Error ? caught.message : "Couldn’t open your library.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [attempt, isLoaded, router, user]);
 
-    async function fetchIssues() {
-      if (!user) return;
-      try {
-        const response = await fetch("/api/library");
-        if (!response.ok) {
-          setLoading(false);
-          return;
-        }
-        const data = await response.json();
-        const issues = data.issues || [];
-        setDrafts(issues.filter((i: Issue) => i.status === "draft"));
-        setPublished(issues.filter((i: Issue) => i.status === "published"));
-        setAllIssues(issues);
-        setIssueQrLinks(data.issueQrLinks || []);
-        setCollectedIssues(data.collectedIssues || []);
-        setLoading(false);
-      } catch {
-        setLoading(false);
-      }
-    }
-
-    fetchIssues();
-  }, [isLoaded, user, router]);
-
-  if (!isLoaded || loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading your library...</p>
-          </div>
-        </div>
-      </div>
-    );
+  function manage(zine: OwnedZine) {
+    setError("");
+    setCollectionChoice("keep");
+    setAction(zine);
   }
 
+  async function apply() {
+    if (!action || saving) return;
+    const unpublish = action.status === "published";
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/library/${action.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: unpublish ? collectionChoice : "delete" }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error || "Couldn’t update this zine.");
+      if (unpublish) setOwned(items => items.map(item => item.id === action.id ? { ...item, status: "draft", wasPublished: true } : item));
+      else setOwned(items => items.filter(item => item.id !== action.id));
+      if (!unpublish || collectionChoice === "remove") setCollected(items => items.filter(item => item.id !== action.id));
+      setAnnouncement(unpublish ? "Zine unpublished." : "Draft permanently deleted.");
+      setAction(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Couldn’t update this zine.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!isLoaded || loading) return <p className="mx-auto max-w-7xl px-4 py-8" role="status">Opening your library…</p>;
+
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
-      {/* Header */}
-      <div className="mb-4 sm:mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">My Library</h1>
-          <p className="text-gray-600 text-sm sm:text-base">Manage your saved zines and published issues</p>
+    <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold sm:text-3xl">My Library</h1>
+        <Link href="/zinemat" className={`${button} border-blue-700 bg-blue-600 text-white hover:bg-blue-700`}>Create new zine</Link>
+      </header>
+      {loadError && <p className="mb-3 text-red-800" role="alert">{loadError} <button className="min-h-10 underline" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
+      {announcement && <p className="mb-3 text-sm text-green-800" role="status">{announcement}</p>}
+      {!loadError && <>
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
+          {(["draft", "published"] as const).map(status => {
+            const zines = owned.filter(item => item.status === status);
+            return (
+              <section key={status} className="min-w-0 space-y-3">
+                <h2 className="text-xl font-semibold">{status === "draft" ? "Saved" : "Published"}</h2>
+                {zines.length ? <div className={shelf}>{zines.map(zine => <OwnedCard key={zine.id} zine={zine} manage={manage} />)}</div>
+                  : <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-600">{status === "draft" ? "No drafts yet." : "No published zines yet."}</p>}
+              </section>
+            );
+          })}
         </div>
-        <button
-          onClick={() => router.push("/zinemat")}
-          className="bg-blue-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-600 transition text-xs sm:text-sm font-medium"
-        >
-          + Create New Zine
-        </button>
-      </div>
-
-      {/* Saved + Published grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 min-w-0 mb-8">
-        {/* Saved */}
-        <section className="min-w-0">
-          <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-            Saved
-            {drafts.length > 0 && (
-              <span className="text-xs sm:text-sm font-normal text-gray-500">({drafts.length})</span>
-            )}
-          </h2>
-          {drafts.length === 0 ? (
-            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-dashed border-yellow-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-              <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">Nothing saved yet</h3>
-              <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm">Create a zine in ZineMat and click Save to see it here.</p>
-              <button
-                onClick={() => router.push("/zinemat")}
-                className="bg-yellow-500 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-lg hover:bg-yellow-600 transition font-medium text-xs sm:text-sm"
-              >
-                Go to ZineMat
-              </button>
-            </div>
-          ) : (
-            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
-              {drafts.map((issue) => (
-                <div key={issue.id} className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-auto snap-start">
-                  <IssueCard issue={issue} router={router} isSaved />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Published */}
-        <section className="min-w-0">
-          <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-            Published
-            {published.length > 0 && (
-              <span className="text-xs sm:text-sm font-normal text-gray-500">({published.length})</span>
-            )}
-          </h2>
-          {published.length === 0 ? (
-            <div className="bg-gradient-to-br from-green-50 to-teal-50 border-2 border-dashed border-green-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-              <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No published issues yet</h3>
-              <p className="text-gray-600 text-xs sm:text-sm">Publish your first zine to share it with the world!</p>
-            </div>
-          ) : (
-            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
-              {published.map((issue) => (
-                <div key={issue.id} className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-auto snap-start">
-                  <IssueCard issue={issue} router={router} />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Zine QR Codes */}
-      {allIssues.length > 0 && (
-        <section className="min-w-0 mb-8">
-          <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-            Zine QR Codes
-            <span className="text-xs sm:text-sm font-normal text-gray-500">
-              ({issueQrLinks.length}/{allIssues.length})
-            </span>
-          </h2>
-          <p className="text-xs text-gray-500 mb-3">
-            Each zine gets its own QR code — scan it to go straight to the browse page. Print it in your zine or share it anywhere.
-          </p>
-          {issueQrLinks.length === 0 ? (
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-dashed border-green-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-              <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No QR codes yet</h3>
-              <p className="text-gray-600 text-xs sm:text-sm">Open a saved zine in ZineMat and add the Interactivity section to generate your Issue QR.</p>
-            </div>
-          ) : (
-            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:flex lg:flex-wrap lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
-              {allIssues
-                .map((issue) => {
-                  const qrLink = issueQrLinks.find((q) => q.issue_id === issue.id);
-                  if (!qrLink) return null;
-                  return (
-                    <div
-                      key={issue.id}
-                      className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-[150px] snap-start"
-                    >
-                      <ZineQRCard issue={issue} qrLink={qrLink} />
-                    </div>
-                  );
-                })
-                .filter(Boolean)}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Collected */}
-      <section className="min-w-0">
-        <h2 className="text-base sm:text-xl font-semibold flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-          Collected
-          {collectedIssues.length > 0 && (
-            <span className="text-xs sm:text-sm font-normal text-gray-500">({collectedIssues.length})</span>
-          )}
-        </h2>
-        <p className="text-xs text-gray-500 mb-3">
-          Zines you&apos;ve collected by scanning a Collection QR code.
-        </p>
-        {collectedIssues.length === 0 ? (
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-dashed border-purple-300 rounded-lg sm:rounded-xl p-4 sm:p-8 text-center">
-            <h3 className="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-2">No collected zines yet</h3>
-            <p className="text-gray-600 text-xs sm:text-sm">Scan a Collection QR code from a zine to add it here.</p>
+        {owned.length > 0 && <section className="mt-8 space-y-3">
+          <h2 className="text-xl font-semibold">Collection QR codes</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {owned.map(zine => <CollectionQrCard key={zine.id} zine={zine} />)}
           </div>
-        ) : (
-          <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:overflow-visible lg:pb-0 snap-x snap-mandatory lg:snap-none">
-            {collectedIssues.map((issue) => (
-              <div key={issue.id} className="min-w-[150px] w-[150px] flex-shrink-0 lg:min-w-0 lg:w-auto snap-start">
-                <CollectedCard issue={issue} router={router} />
-              </div>
+        </section>}
+        <section className="mt-8 space-y-3">
+          <h2 className="text-xl font-semibold">Collected</h2>
+          {collected.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {collected.map(zine => (
+              <Link key={zine.id} href={`/issues/${encodeURIComponent(zine.slug)}`} className={`${tile} hover:border-black hover:underline`}>
+                <ZineCover src={zine.cover_img_url} title={zine.title} />
+                <h3 className="p-2.5 text-sm font-semibold">{zine.title || "Untitled zine"}</h3>
+              </Link>
             ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+          </div> : <p className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-600">Save a zine from its reader to start your collection.</p>}
+        </section>
+      </>}
 
-function CollectedCard({
-  issue,
-  router,
-}: {
-  issue: CollectedIssue;
-  router: ReturnType<typeof useRouter>;
-}) {
-  return (
-    <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-purple-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
-      <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-        {issue.cover_img_url ? (
-          <img
-            src={issue.cover_img_url}
-            alt={issue.title || "Zine cover"}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <p className="text-xs">No cover</p>
-          </div>
-        )}
-        <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
-          <span className="text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full shadow-sm bg-purple-500 text-white">
-            Collected
-          </span>
-        </div>
-      </div>
-      <div className="p-2 sm:p-4 flex flex-col flex-1 min-w-0">
-        <h3 className="font-bold text-sm sm:text-base mb-1 sm:mb-2 line-clamp-2 flex-1 text-gray-900">
-          {issue.title || "(Untitled)"}
-        </h3>
-        <p className="text-[10px] sm:text-xs text-gray-500 mb-2">
-          Collected {new Date(issue.collected_at).toLocaleDateString()}
-        </p>
-        {issue.slug && (
-          <button
-            onClick={() => router.push(`/issues/${issue.slug}`)}
-            className="w-full bg-purple-500 hover:bg-purple-600 text-white px-2 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-medium text-xs sm:text-sm transition"
-          >
-            View
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ZineQRCard({
-  issue,
-  qrLink,
-}: {
-  issue: Issue;
-  qrLink: IssueQrLink;
-}) {
-  function handleDownload() {
-    if (!qrLink.qr_path) return;
-    const link = document.createElement("a");
-    link.href = qrLink.qr_path;
-    link.download = `qr-${issue.slug || issue.id}.png`;
-    link.click();
-  }
-
-  return (
-    <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-green-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
-      <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden p-2">
-        {qrLink.qr_path ? (
-          <img
-            src={qrLink.qr_path}
-            alt={`QR for ${issue.title}`}
-            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <p className="text-xs">Pending</p>
-          </div>
-        )}
-      </div>
-      <div className="p-2 sm:p-3 flex flex-col flex-1 min-w-0">
-        <h3 className="font-bold text-xs sm:text-sm mb-2 line-clamp-2 flex-1 text-gray-900">
-          {issue.title || "(Untitled)"}
-        </h3>
-        <button
-          onClick={handleDownload}
-          disabled={!qrLink.qr_path}
-          className="w-full bg-green-500 hover:bg-green-600 text-white px-2 py-1.5 rounded-md sm:rounded-lg font-medium text-xs transition disabled:opacity-40"
-        >
-          ↓ Download
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function IssueCard({
-  issue,
-  router,
-  isSaved = false,
-}: {
-  issue: Issue;
-  router: ReturnType<typeof useRouter>;
-  isSaved?: boolean;
-}) {
-  return (
-    <div className="group rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
-      <div className="relative aspect-[1/1] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-        {issue.cover_img_url ? (
-          <img
-            src={issue.cover_img_url}
-            alt={issue.title || "Zine cover"}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <p className="text-xs">No cover</p>
-          </div>
-        )}
-        <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
-          <span
-            className={`text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full shadow-sm ${
-              isSaved ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
-            }`}
-          >
-            {isSaved ? "Saved" : "Published"}
-          </span>
-        </div>
-      </div>
-      <div className="p-2 sm:p-4 flex flex-col flex-1 min-w-0">
-        <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 flex-1 text-gray-900">
-          {issue.title || "(Untitled)"}
-        </h3>
-        <p className="text-[10px] sm:text-xs text-gray-700 mb-2 sm:mb-4">
-          {isSaved
-            ? `Saved ${new Date(issue.created_at!).toLocaleDateString()}`
-            : `Published ${new Date(issue.published_at!).toLocaleDateString()}`}
-        </p>
-        <div className="flex gap-1 sm:gap-2">
-          <button
-            onClick={() => router.push(`/zinemat?id=${issue.id}`)}
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-medium text-xs sm:text-sm transition"
-          >
-            Edit
-          </button>
-          {!isSaved && issue.slug && (
-            <button
-              onClick={() => router.push(`/issues/${issue.slug}`)}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-medium text-xs sm:text-sm transition"
-            >
-              View
+      {action && (
+        <ActionDialog title={action.status === "published" ? "Unpublish this zine?" : "Delete this draft forever?"} onDismiss={() => setAction(null)} busy={saving}>
+          <p className="mt-3 break-words text-sm font-semibold">{action.title || "Untitled zine"}</p>
+          {action.status === "published" ? (
+            <fieldset disabled={saving} className="mt-3 space-y-2 text-sm">
+              <legend className="mb-2 text-neutral-700">Choose what happens to copies in readers’ collections.</legend>
+              <label className="flex min-h-11 items-center gap-2 rounded-lg border p-2"><input type="radio" name="saved-copies" checked={collectionChoice === "keep"} onChange={() => setCollectionChoice("keep")} /> Keep saved copies</label>
+              <label className="flex min-h-11 items-center gap-2 rounded-lg border p-2"><input type="radio" name="saved-copies" checked={collectionChoice === "remove"} onChange={() => setCollectionChoice("remove")} /> Remove saved copies</label>
+            </fieldset>
+          ) : <p className="mt-2 text-sm text-neutral-700">This permanently deletes the draft and its files.</p>}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <button type="button" autoFocus className={button} disabled={saving} onClick={() => setAction(null)}>Cancel</button>
+            <button type="button" className={`${button} border-red-800 bg-red-700 text-white hover:bg-red-800`} disabled={saving} onClick={() => void apply()}>
+              {saving ? "Working…" : action.status === "published" ? "Unpublish" : "Delete forever"}
             </button>
+          </div>
+          {error && <p className="mt-2 text-sm text-red-800" role="alert">{error}</p>}
+        </ActionDialog>
+      )}
+    </main>
+  );
+}
+
+function OwnedCard({ zine, manage }: { zine: OwnedZine; manage: (zine: OwnedZine) => void }) {
+  const published = zine.status === "published";
+  return (
+    <article className={tile}>
+      <ZineCover src={zine.cover_img_url} title={zine.title} />
+      <div className="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
+        <h3 className="break-words font-semibold">{zine.title || "Untitled zine"}</h3>
+        {!published && zine.wasPublished && <p className="text-xs text-neutral-600">Unpublished</p>}
+        <div className="mt-auto flex flex-wrap gap-1.5">
+          <Link href={`/zinemat?id=${zine.id}`} className={button}>Edit</Link>
+          {(published || !zine.wasPublished) && (
+            <button type="button" onClick={() => manage(zine)} className={`${button} border-red-200 text-red-800 hover:bg-red-50`}>{published ? "Unpublish" : "Delete"}</button>
           )}
+          {published && <Link href={`/issues/${encodeURIComponent(zine.slug)}`} className={button}>View</Link>}
         </div>
       </div>
-    </div>
+    </article>
+  );
+}
+
+function CollectionQrCard({ zine }: { zine: OwnedZine }) {
+  const [error, setError] = useState(false);
+  const url = qrUrl(zine.id, "collection");
+  async function download() {
+    setError(false);
+    try {
+      const QRCode = await import("qrcode");
+      const src = await QRCode.toDataURL(url, { ...qrPngOptions, type: "image/png" });
+      const link = document.createElement("a");
+      link.href = src;
+      link.download = `collection-qr-${zine.slug || zine.id}.png`;
+      link.click();
+    } catch {
+      setError(true);
+    }
+  }
+  return (
+    <article className={`${tile} items-center gap-2 p-2.5`}>
+      <div className="w-20"><IssueQRCode fullRedirectUrl={url} label={zine.title || "this zine"} /></div>
+      <p className="min-w-0 break-words text-center text-sm font-semibold">{zine.title || "Untitled zine"}</p>
+      <button type="button" className={`${button} mt-auto`} onClick={() => void download()}>Download QR</button>
+      {error && <p className="text-xs text-red-800" role="alert">Couldn’t download this QR.</p>}
+    </article>
   );
 }

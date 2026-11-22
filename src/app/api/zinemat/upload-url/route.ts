@@ -27,11 +27,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid upload request" }, { status: 400 });
     }
 
-    const { data: issue, error: lookupError } = await supabase
-      .from("issues")
-      .select("profile_id")
-      .eq("id", issueId)
-      .maybeSingle();
+    const [{ data: issue, error: lookupError }, retired] = await Promise.all([
+      supabase.from("issues").select("profile_id").eq("id", issueId).maybeSingle(),
+      supabase.from("deleted_zine_drafts").select("id").eq("id", issueId).maybeSingle(),
+    ]);
+    if (retired.error) return NextResponse.json({ error: "Could not verify the draft" }, { status: 500 });
+    if (retired.data) return NextResponse.json({ error: "This draft was deleted." }, { status: 404 });
     if (lookupError) return NextResponse.json({ error: "Could not verify the draft" }, { status: 500 });
     if ((issue && issue.profile_id !== await getOrCreateProfileId(userId)) || (type === "canvas" && !issue)) {
       return NextResponse.json({ error: "Draft not found" }, { status: 404 });

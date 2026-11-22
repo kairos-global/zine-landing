@@ -52,3 +52,22 @@ body:has(> .zg-map-page) > nav {
   .zg-pin-selected { @apply bg-[#AAEEFF] ring-[3px] ring-white; }
   .zg-pin span { @apply block size-1.5 rounded-full bg-black; }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .zine-action-dialog[open] {
+    animation: zine-dialog-in 220ms cubic-bezier(.2, .75, .3, 1) both;
+  }
+  .zine-action-dialog[open]::backdrop {
+    animation: zine-backdrop-in 180ms ease-out both;
+  }
+}
+
+@keyframes zine-dialog-in {
+  from { opacity: 0; transform: translateY(12px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes zine-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

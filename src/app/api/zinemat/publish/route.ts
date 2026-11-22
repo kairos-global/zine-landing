@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 import { getOrCreateProfileId } from "@/lib/profile";
 import { slugFromTitle, ensureUniqueSlug } from "@/lib/slug";
-import { syncZineLinks } from "@/lib/zine-qr-storage";
+import { ensureCollectionQr } from "@/lib/zine-qr-storage";
 import { isZineCategoryKey, ZineCategoryKey } from "@/lib/zine-categories";
 
 export const dynamic = "force-dynamic";
@@ -166,8 +166,7 @@ export async function POST(req: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const rawLinks = formData.get("interactiveLinks");
-    const processedLinks = await syncZineLinks(supabase, issueId, slug, rawLinks ? JSON.parse(String(rawLinks)) : []);
+    const collectionQr = await ensureCollectionQr(supabase, issueId, slug);
 
     const { error: writeError } = await supabase.from("issues").update(updates).eq("id", issueId).eq("profile_id", profileId);
     if (writeError) return NextResponse.json({ error: writeError.message }, { status: 500 });
@@ -178,7 +177,7 @@ export async function POST(req: Request) {
       slug,
       cover_img_url,
       pdf_url,
-      interactiveLinks: processedLinks,
+      collectionQr,
     });
   } catch (err) {
     console.error("Publish error:", err);
