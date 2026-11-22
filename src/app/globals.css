@@ -24,6 +24,18 @@ body {
   color: var(--foreground);
   font-family: var(--font-space-grotesk), sans-serif;
 }
+body:has(> .zg-map-page) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body:has(> .zg-map-page) > nav {
+  flex-shrink: 0;
+}
+
 @layer components {
   .eyebrow { @apply text-[11px] font-bold uppercase tracking-[.16em] text-gray-500; }
   .editor-button { @apply rounded-lg border-2 border-black bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-30; }
