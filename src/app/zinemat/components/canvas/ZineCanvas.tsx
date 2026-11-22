@@ -1,123 +1,254 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import clsx from "clsx";
+import { useEffect, useRef, useState } from "react";
+import type { ZineFormat } from "../interactivity/BasicsSection";
+import {
+  canvasHasArtwork, emptyPage, exportArtwork, frames, importCanvasImage, pageCount, renderArtwork,
+  type CanvasState, type TextLayer,
+} from "./canvas-art";
 
-type Frame = "full" | "inset" | "portrait" | "split";
-type Page = { image: string; frame: Frame; frameSet: boolean };
-type TextLayer = { id: string; text: string; x: number; y: number; size: number };
-type CanvasState = { pages: Page[]; background: string; backgroundSet: boolean; texts: TextLayer[] };
-type SaveState = "loading" | "saved" | "saving" | "error";
+const control = "min-h-11 rounded-lg border px-3 text-sm font-semibold disabled:opacity-40";
+const selected = "border-yellow-400 bg-[#F2DC6F]/40";
 
-const freshState = (): CanvasState => ({ pages: Array.from({ length: 8 }, () => ({ image: "", frame: "full" as Frame, frameSet: false })), background: "#FFF7D6", backgroundSet: false, texts: [] });
-/**
- * Where each page lands on the printed sheet.
- *
- * Fold a sheet in eight and the pages do not sit in reading order. The bottom
- * row runs back cover, front cover, 2, 3; the top row carries pages 7 down to 4
- * and prints upside down. Getting this wrong is the single most common way a
- * hand-made mini zine is ruined, so it is written out as a table rather than
- * computed — a formula would be shorter and would hide the thing worth
- * checking.
- *
- *     7 ↑↓   6 ↑↓   5 ↑↓   4 ↑↓
- *      8      1      2      3
- *             ^ front cover
- *
- * Listed in the order the CSS grid fills its cells: left to right, top row
- * first.
- */
-const sheetCells: { page: number; flipped: boolean }[] = [
-  { page: 7, flipped: true }, { page: 6, flipped: true }, { page: 5, flipped: true }, { page: 4, flipped: true },
-  { page: 8, flipped: false }, { page: 1, flipped: false }, { page: 2, flipped: false }, { page: 3, flipped: false },
-];
-
-const frames: { id: Frame; label: string; hint: string }[] = [
-  { id: "full", label: "Full bleed", hint: "Edge to edge" }, { id: "inset", label: "Gallery", hint: "Wide margin" },
-  { id: "portrait", label: "Portrait", hint: "Tall crop" }, { id: "split", label: "Offset", hint: "Editorial crop" },
-];
-
-export default function ZineCanvas({ issueId }: { issueId: string }) {
-  const [state, setState] = useState<CanvasState>(freshState);
-  const [mode, setMode] = useState<"page" | "top">("page");
+export default function ZineCanvas({ state, format, title, onChange, onImportingChange }: {
+  state: CanvasState;
+  format: ZineFormat;
+  title: string;
+  onChange: React.Dispatch<React.SetStateAction<CanvasState>>;
+  onImportingChange: (importing: boolean) => void;
+}) {
+  const [view, setView] = useState<"page" | "sheet">("page");
   const [page, setPage] = useState(0);
-  const [saveState, setSaveState] = useState<SaveState>("loading");
-  const [loaded, setLoaded] = useState(false);
-  const [naming, setNaming] = useState(false);
-  const [title, setTitle] = useState("Untitled canvas");
-  const [textDraft, setTextDraft] = useState("");
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const preview = useRef<HTMLCanvasElement>(null);
+  const count = pageCount(state, format);
+  const index = Math.min(page, count - 1);
+  const sheet = format === "mini" && view === "sheet";
+  const current = state.pages[index] ?? emptyPage();
+  const layers = sheet ? state.texts : current.texts ?? [];
 
-  useEffect(() => { fetch(`/api/canvas/${issueId}`).then(async response => {
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
-    if (data.state) setState({ ...freshState(), ...data.state });
-    setTitle(data.title || "Untitled canvas"); setLoaded(true); setSaveState("saved");
-  }).catch(() => setSaveState("error")); }, [issueId]);
+  useEffect(() => {
+    let active = true;
+    renderArtwork(state, format, index, 700, sheet).then(artwork => {
+      const target = preview.current;
+      if (!active || !target) return;
+      target.width = artwork.width;
+      target.height = artwork.height;
+      target.getContext("2d")!.drawImage(artwork, 0, 0);
+    }).catch(() => {
+      if (active) setError("The page preview couldn’t open.");
+    });
+    return () => { active = false; };
+  }, [state, format, index, sheet]);
 
-  const save = useCallback(async (next: CanvasState, nextTitle?: string) => {
-    setSaveState("saving");
-    try { const response = await fetch(`/api/canvas/${issueId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: next, title: nextTitle }) });
-      if (!response.ok) throw new Error(); setSaveState("saved");
-    } catch { setSaveState("error"); }
-  }, [issueId]);
-
-  useEffect(() => { if (!loaded) return; setSaveState("saving"); if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(() => save(state), 700); return () => { if (saveTimer.current) clearTimeout(saveTimer.current); }; }, [state, loaded, save]);
-  const update = (fn: (value: CanvasState) => CanvasState) => setState(current => fn(current));
-
-  async function chooseImages(files: FileList | null) {
-    if (!files) return;
-    // A file picker hands files over in no guaranteed order, so sort by name:
-    // a set called 1.jpg to 8.jpg has already said which page each one is.
-    const selected = Array.from(files)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
-      .slice(0, 8);
-    const urls = await Promise.all(selected.map(file => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); })));
-    update(current => ({ ...current, pages: current.pages.map((item, index) => urls[index] ? { ...item, image: urls[index] } : item) }));
+  function selectPage(next: number) {
+    setPage(next);
+    setView("page");
   }
-  function movePage(index: number, direction: number) { const target = index + direction; if (target < 0 || target > 7) return; update(current => { const pages = [...current.pages]; [pages[index], pages[target]] = [pages[target], pages[index]]; return { ...current, pages }; }); setPage(target); }
-  function addText() { if (!textDraft.trim()) return; update(current => ({ ...current, texts: [...current.texts, { id: crypto.randomUUID(), text: textDraft.trim(), x: 10 + (current.texts.length * 7) % 60, y: 12 + (current.texts.length * 11) % 65, size: 24 }] })); setTextDraft(""); }
-  function positionText(id: string, axis: "x" | "y", value: number) { update(current => ({ ...current, texts: current.texts.map(text => text.id === id ? { ...text, [axis]: value } : text) })); }
 
-  const imageCount = state.pages.filter(item => item.image).length;
-  const framesSet = imageCount === 8 && state.pages.every(item => item.frameSet);
-  const readyToName = imageCount === 8 && framesSet && state.backgroundSet && state.texts.length > 0;
-  const steps = [{ label: "8 images selected", done: imageCount === 8, detail: `${imageCount}/8` }, { label: "Frames set", done: framesSet }, { label: "Global color set", done: state.backgroundSet }, { label: "Text added in top view", done: state.texts.length > 0 }, { label: "Name your zine", done: title !== "Untitled canvas" }];
+  function updateLayers(update: (layers: TextLayer[]) => TextLayer[]) {
+    onChange(previous => sheet
+      ? { ...previous, texts: update(previous.texts) }
+      : {
+          ...previous,
+          pages: previous.pages.map((item, position) => position === index
+            ? { ...item, texts: update(item.texts ?? []) }
+            : item),
+        });
+  }
 
-  if (!loaded && saveState !== "error") return <div className="p-16 text-center font-semibold">Opening your canvas…</div>;
-  return <main className="min-h-screen bg-[#E9E7DF] text-[#171717]">
-    <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b-2 border-black bg-[#FFFDF5] px-4 py-3 sm:px-7">
-      <div><a href="/zinemat" className="text-xs font-bold uppercase tracking-widest">← ZineMat</a><h1 className="text-lg font-bold">{title}</h1></div>
-      <div className="flex rounded-xl border-2 border-black bg-white p-1" aria-label="Editor view">
-        <button onClick={() => setMode("page")} className={clsx("rounded-lg px-4 py-2 text-sm font-bold", mode === "page" && "bg-black text-white")}>▣ Page view</button>
-        <button onClick={() => setMode("top")} className={clsx("rounded-lg px-4 py-2 text-sm font-bold", mode === "top" && "bg-[#AAEEFF]")}>⊞ Top view</button>
+  function changeLayer(id: string, values: Partial<TextLayer>) {
+    updateLayers(items => items.map(item => item.id === id ? { ...item, ...values } : item));
+  }
+
+  async function chooseImages(files: FileList) {
+    setError("");
+    setImporting(true);
+    onImportingChange(true);
+    const chosen = Array.from(files)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
+      .slice(0, count - index);
+    try {
+      const images: string[] = [];
+      for (const file of chosen) images.push(await importCanvasImage(file));
+      onChange(previous => ({
+        ...previous,
+        pages: previous.pages.map((item, position) => images[position - index]
+          ? { ...item, image: images[position - index] }
+          : item),
+      }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Couldn’t import the images.");
+    } finally {
+      setImporting(false);
+      onImportingChange(false);
+    }
+  }
+
+  function movePage(direction: -1 | 1) {
+    const next = index + direction;
+    if (next < 0 || next >= count) return;
+    onChange(previous => {
+      const pages = [...previous.pages];
+      [pages[index], pages[next]] = [pages[next], pages[index]];
+      return { ...previous, pages };
+    });
+    setPage(next);
+  }
+
+  async function downloadPdf() {
+    setError("");
+    setExporting(true);
+    try {
+      const { pdf } = await exportArtwork(state, format);
+      const url = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title.trim().replace(/[^\p{L}\p{N}-]+/gu, "-") || "zine"}.pdf`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch {
+      setError("Couldn’t make the PDF. Try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {format === "mini" && (
+          <div className="flex gap-2" role="group" aria-label="Canvas view">
+            <button type="button" aria-pressed={!sheet} className={`${control} ${!sheet ? selected : ""}`} onClick={() => setView("page")}>Page view</button>
+            <button type="button" aria-pressed={sheet} className={`${control} ${sheet ? selected : ""}`} onClick={() => setView("sheet")}>Print sheet</button>
+          </div>
+        )}
+        <button type="button" onClick={downloadPdf} disabled={exporting || !canvasHasArtwork(state, format)} className={control}>
+          {exporting ? "Making PDF…" : "Download PDF"}
+        </button>
       </div>
-      <div className={clsx("text-xs font-bold", saveState === "error" ? "text-red-600" : "text-gray-600")}><span className={clsx("mr-2 inline-block h-2 w-2 rounded-full", saveState === "saved" ? "bg-green-500" : saveState === "error" ? "bg-red-500" : "animate-pulse bg-amber-500")} />{saveState === "saved" ? "All changes saved" : saveState === "error" ? "Autosave failed" : "Autosaving…"}</div>
-    </header>
-
-    <div className="mx-auto grid max-w-[1500px] gap-5 p-4 lg:grid-cols-[260px_1fr_280px] lg:p-6">
-      <aside className="space-y-5 rounded-2xl border-2 border-black bg-[#FFFDF5] p-4">
-        <div><p className="eyebrow">1 · Images</p><label className="mt-2 block cursor-pointer rounded-xl border-2 border-dashed border-black bg-white p-4 text-center text-sm font-bold hover:bg-[#AAEEFF]">Choose up to 8 images<input type="file" accept="image/*" multiple className="sr-only" onChange={event => chooseImages(event.target.files)} /></label><p className="mt-2 text-xs text-gray-500">Images fill pages 1–8 in filename order.</p></div>
-        {mode === "page" ? <div><p className="eyebrow">2 · Frame</p><div className="mt-2 grid grid-cols-2 gap-2">{frames.map(frame => <button key={frame.id} onClick={() => update(current => ({ ...current, pages: current.pages.map((item, index) => index === page ? { ...item, frame: frame.id, frameSet: true } : item) }))} className={clsx("rounded-lg border-2 p-2 text-left", state.pages[page].frameSet && state.pages[page].frame === frame.id ? "border-black bg-[#FFEA69]" : "border-gray-300 bg-white")}><span className="block text-xs font-bold">{frame.label}</span><span className="text-[10px] text-gray-500">{frame.hint}</span></button>)}</div></div> : <div className="rounded-xl bg-[#AAEEFF] p-3 text-sm"><b>Top view is for type.</b><br />Switch to Page view to crop and frame individual images.</div>}
-        <div><p className="eyebrow">3 · Global background</p><div className="mt-2 flex items-center gap-3"><input type="color" value={state.background} onChange={event => update(current => ({ ...current, background: event.target.value, backgroundSet: true }))} className="h-11 w-14 cursor-pointer rounded border"/><p className="text-xs text-gray-500">Applies consistently to all 8 pages.</p></div></div>
-      </aside>
-
-      <section className="min-w-0">
-        {mode === "page" ? <>
-          <div className="mb-3 flex items-center justify-between"><button onClick={() => movePage(page, -1)} disabled={page === 0} className="editor-button">← Move</button><b>Page {page + 1} of 8</b><button onClick={() => movePage(page, 1)} disabled={page === 7} className="editor-button">Move →</button></div>
-          <div className="mx-auto aspect-[3/4] max-h-[680px] overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}><PageImage item={state.pages[page]} /></div>
-          <div className="mt-5 grid grid-cols-8 gap-2">{state.pages.map((item, index) => <button key={index} onClick={() => setPage(index)} className={clsx("aspect-[3/4] overflow-hidden border-2", page === index ? "border-black ring-2 ring-[#65CBF1]" : "border-gray-400")} style={{ background: state.background }}><PageImage item={item} /><span className="sr-only">Page {index + 1}</span></button>)}</div>
-        </> : <>
-          <div className="mb-3"><b>Top view · complete print sheet</b><p className="text-xs text-gray-600">This is the sheet as it prints, already imposed: the top row is pages 7 to 4 upside down, and the bottom row is the back cover, the front cover, 2 and 3. Add and position type across the whole layout — images and frames are locked in this view.</p></div>
-          <div className="relative grid aspect-[11/8.5] grid-cols-4 grid-rows-2 overflow-hidden border-2 border-black shadow-[8px_8px_0_#000]" style={{ background: state.background }}>{sheetCells.map(cell => <div key={cell.page} className="relative overflow-hidden border border-black/20"><div className={clsx("h-full w-full", cell.flipped && "rotate-180")}><PageImage item={state.pages[cell.page - 1]}/></div><span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] text-white">{cell.page}</span></div>)}{state.texts.map(text => <div key={text.id} className="absolute cursor-move border border-dashed border-black/40 bg-white/30 px-1 font-bold leading-none" style={{ left: `${text.x}%`, top: `${text.y}%`, fontSize: `${Math.max(10, text.size / 2)}px` }}>{text.text}</div>)}</div>
-        </>}
-      </section>
-
-      <aside className="rounded-2xl border-2 border-black bg-[#FFFDF5] p-4"><p className="eyebrow">4 · Type layer</p>{mode === "top" ? <><textarea value={textDraft} onChange={event => setTextDraft(event.target.value)} placeholder="Write something…" className="mt-2 w-full rounded-lg border-2 border-black p-3 text-sm"/><button onClick={addText} className="mt-2 w-full rounded-lg border-2 border-black bg-[#AAEEFF] py-2 text-sm font-bold">+ Add to sheet</button><div className="mt-4 space-y-4">{state.texts.map(text => <div key={text.id} className="rounded-lg border bg-white p-2"><div className="flex justify-between text-xs font-bold"><span className="truncate">{text.text}</span><button onClick={() => update(current => ({ ...current, texts: current.texts.filter(item => item.id !== text.id) }))}>×</button></div><label className="mt-2 block text-[10px]">Horizontal<input type="range" min="0" max="85" value={text.x} onChange={e => positionText(text.id, "x", +e.target.value)} className="w-full"/></label><label className="block text-[10px]">Vertical<input type="range" min="0" max="85" value={text.y} onChange={e => positionText(text.id, "y", +e.target.value)} className="w-full"/></label></div>)}</div></> : <div className="mt-2 rounded-xl bg-gray-100 p-4 text-sm">Type is edited only in <b>Top view</b>, so it can move freely across page boundaries.<button onClick={() => setMode("top")} className="mt-3 block font-bold underline">Open top view →</button></div>}</aside>
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+        <div className="min-w-0 space-y-3">
+          <p className="text-center text-sm font-semibold" aria-live="polite">
+            {sheet ? "Mini zine print sheet" : `Page ${index + 1} of ${count}${index === 0 ? " · Cover" : ""}`}
+          </p>
+          <div
+            className="relative mx-auto overflow-hidden rounded-lg border border-yellow-300 shadow-sm"
+            style={{ background: state.background, width: sheet ? "100%" : "min(100%, 290px)", aspectRatio: sheet ? "792/612" : format === "mini" ? "198/306" : "612/792" }}
+          >
+            <canvas ref={preview} className="block size-full" role="img" aria-label={sheet ? "Print sheet preview" : `Artwork on page ${index + 1}`} />
+            {!sheet && !current.image && !layers.length && (
+              <span className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-black/50">Blank page</span>
+            )}
+          </div>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8 lg:grid-cols-4" role="group" aria-label="Canvas pages">
+            {Array.from({ length: count }, (_, position) => {
+              const item = state.pages[position];
+              const hasArtwork = item?.image || item?.texts?.length;
+              return (
+                <button
+                  key={position}
+                  type="button"
+                  onClick={() => selectPage(position)}
+                  aria-label={`${position === 0 ? "Cover, page 1" : `Page ${position + 1}`}${hasArtwork ? ", with artwork" : ", blank"}`}
+                  aria-pressed={!sheet && index === position}
+                  className={`${control} ${!sheet && index === position ? selected : "border-yellow-200"}`}
+                >
+                  {position + 1}{hasArtwork ? " ·" : ""}
+                </button>
+              );
+            })}
+          </div>
+          {!sheet && <div className="flex flex-wrap gap-2">
+            <button type="button" className={control} disabled={index === 0} onClick={() => movePage(-1)}>← Move page</button>
+            <button type="button" className={control} disabled={index === count - 1} onClick={() => movePage(1)}>Move page →</button>
+            {format === "half_letter" && count < 24 &&
+              <button type="button" className={control} onClick={() => {
+                onChange(previous => ({
+                  ...previous,
+                  halfLetterPages: count + 4,
+                  pages: [...previous.pages, ...Array.from({ length: Math.max(0, count + 4 - previous.pages.length) }, emptyPage)],
+                }));
+                setPage(count);
+              }}>Add 4 pages</button>}
+            {format === "half_letter" && count > 4 && !state.pages.slice(count - 4, count).some(item => item.image || item.texts?.length) &&
+              <button type="button" className={control} onClick={() => onChange(previous => ({ ...previous, halfLetterPages: count - 4 }))}>
+                Remove last 4 blank pages
+              </button>}
+          </div>}
+        </div>
+        <div className="space-y-3">
+          <div className="space-y-3 rounded-xl border border-yellow-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">{sheet ? "Text on the sheet" : "Page text"}</h3>
+              <button type="button" className={`${control} ${selected}`} onClick={() => updateLayers(items => [...items, {
+                id: crypto.randomUUID(), text: "New text", x: 10, y: 10 + items.length * 10 % 60, size: sheet ? 28 : 52,
+              }])}>Add text</button>
+            </div>
+            {layers.map((layer, position) => (
+              <div key={layer.id} className="space-y-2 rounded-lg border p-2">
+                <label className="block text-xs font-medium">
+                  Text {position + 1}
+                  <textarea
+                    value={layer.text}
+                    onChange={event => changeLayer(layer.id, { text: event.target.value })}
+                    maxLength={500}
+                    rows={2}
+                    className="mt-1 block w-full rounded-lg border p-2 text-base"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["x", "Horizontal", 0, 95],
+                    ["y", "Vertical", 0, 95],
+                    ["size", "Size", 10, 180],
+                  ] as const).map(([key, label, min, max]) => (
+                    <label key={key} className="min-w-0 text-xs font-medium">
+                      {label}
+                      <input type="range" min={min} max={max} value={layer[key]} onChange={event => changeLayer(layer.id, { [key]: event.target.valueAsNumber })} className="block h-9 w-full accent-[#1E7FA8]" />
+                    </label>
+                  ))}
+                  <label className="text-xs font-medium">Text color
+                    <input type="color" value={layer.color ?? "#171717"} onChange={event => changeLayer(layer.id, { color: event.target.value })} className="block h-9 w-12 cursor-pointer" />
+                  </label>
+                </div>
+                <button type="button" className={control} onClick={() => updateLayers(items => items.filter(item => item.id !== layer.id))}>
+                  Remove text {position + 1}
+                </button>
+              </div>
+            ))}
+          </div>
+          {!sheet && <div className="space-y-2 rounded-xl border border-yellow-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className={`${control} inline-flex cursor-pointer items-center focus-within:ring-2 focus-within:ring-[#65CBF1]`}>
+                {importing ? "Importing…" : current.image ? "Replace or import images" : "Import images"}
+                <input type="file" accept="image/*" multiple disabled={importing} className="sr-only" onChange={event => {
+                  if (event.target.files?.length) void chooseImages(event.target.files);
+                  event.target.value = "";
+                }} />
+              </label>
+              {current.image && <button type="button" className={control} onClick={() => onChange(previous => ({
+                ...previous, pages: previous.pages.map((item, position) => position === index ? { ...item, image: "" } : item),
+              }))}>Remove image</button>}
+            </div>
+            <p className="text-xs text-gray-600">Multiple images fill pages from page {index + 1}, in filename order.</p>
+            {current.image && <div className="grid grid-cols-2 gap-2" role="group" aria-label="Image frame">
+              {frames.map(frame => (
+                <button key={frame.id} type="button" aria-pressed={current.frame === frame.id} className={`${control} ${current.frame === frame.id ? selected : ""}`} onClick={() => onChange(previous => ({
+                  ...previous, pages: previous.pages.map((item, position) => position === index ? { ...item, frame: frame.id } : item),
+                }))}>{frame.label}</button>
+              ))}
+            </div>}
+          </div>}
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-yellow-200 p-3 text-sm font-semibold">
+            Page background
+            <input type="color" value={state.background} onChange={event => onChange(previous => ({ ...previous, background: event.target.value }))} className="h-11 w-14 cursor-pointer" />
+          </label>
+        </div>
+      </div>
     </div>
-
-    <footer className="sticky bottom-0 z-20 border-t-2 border-black bg-[#171717] px-4 py-3 text-white"><div className="mx-auto flex max-w-[1450px] flex-wrap items-center gap-2"><b className="mr-2 text-sm">Canvas checklist</b>{steps.map((step, index) => <span key={step.label} className={clsx("rounded-full border px-3 py-1 text-xs", step.done ? "border-green-400 bg-green-400/20" : "border-white/30 text-white/60")}>{step.done ? "✓" : index + 1} {step.label} {step.detail}</span>)}<button disabled={!readyToName} onClick={() => setNaming(true)} className="ml-auto rounded-lg bg-[#FFEA69] px-4 py-2 text-sm font-bold text-black disabled:bg-gray-600 disabled:text-gray-300">Finish & name →</button></div></footer>
-    {naming && <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"><div className="w-full max-w-md rounded-2xl border-2 border-black bg-[#FFFDF5] p-6 shadow-[8px_8px_0_#AAEEFF]"><p className="eyebrow">Final step</p><h2 className="mt-1 text-2xl font-bold">Name your mini zine</h2><p className="mt-2 text-sm text-gray-600">Your canvas already exists and is saved. This name will identify it in your library.</p><input autoFocus value={title === "Untitled canvas" ? "" : title} onChange={e => setTitle(e.target.value)} placeholder="My brilliant zine" className="mt-5 w-full rounded-lg border-2 border-black p-3"/><div className="mt-4 flex justify-end gap-2"><button onClick={() => setNaming(false)} className="px-4 py-2">Not yet</button><button disabled={!title.trim() || title === "Untitled canvas"} onClick={() => { save(state, title); setNaming(false); }} className="rounded-lg border-2 border-black bg-[#FFEA69] px-4 py-2 font-bold disabled:opacity-40">Name & finish</button></div></div></div>}
-  </main>;
+  );
 }
-
-function PageImage({ item }: { item: Page }) { if (!item.image) return <div className="grid h-full place-items-center text-xs font-bold text-black/30">Add image</div>; return <div className={clsx("h-full w-full", item.frame === "inset" && "p-[10%]", item.frame === "portrait" && "px-[18%] py-[5%]", item.frame === "split" && "pr-[28%] pb-[15%]")}><img src={item.image} alt="Selected zine page" className="h-full w-full border-black object-cover" /></div>; }

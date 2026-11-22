@@ -1,57 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import Script from "next/script";
 import Link from "next/link";
 
-// ─── PDF.js via CDN (no npm install needed) ────────────────────────────────
-const PDFJS_VERSION = "3.11.174";
-const PDFJS_CDN = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
+import type { PDFDocumentProxy } from "pdfjs-dist";
+import { openZinePdf, renderPdfPage } from "@/lib/zine-pdf";
+import { mapFromPdfUrl, miniPanel } from "@/lib/zine-view-map";
 
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  interface Window { pdfjsLib: any; }
-}
+const MINI_LABELS = ["Front Cover", "Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6", "Back Cover"];
 
-// ─── Mini-zine panel map ────────────────────────────────────────────────────
-// Physical layout on a letter sheet (4 cols × 2 rows):
-//   Row 0 (top, UPSIDE DOWN):  [Pg6] [Pg5] [Pg4] [Pg3]
-//   Row 1 (bottom, right-up):  [Back][Front][Pg1] [Pg2]
-//
-// Reading order → virtual page index 1-8:
-const MINI_PANELS = [
-  { row: 1, col: 1, rotate: 0,   label: "Front Cover" },
-  { row: 1, col: 2, rotate: 0,   label: "Page 1"      },
-  { row: 1, col: 3, rotate: 0,   label: "Page 2"      },
-  { row: 0, col: 3, rotate: 180, label: "Page 3"      },
-  { row: 0, col: 2, rotate: 180, label: "Page 4"      },
-  { row: 0, col: 1, rotate: 180, label: "Page 5"      },
-  { row: 0, col: 0, rotate: 180, label: "Page 6"      },
-  { row: 1, col: 0, rotate: 0,   label: "Back Cover"  },
-] as const;
-
-/** Crop one panel out of a full-sheet canvas and optionally rotate 180°. */
-function extractPanel(
-  src: HTMLCanvasElement,
-  row: number,
-  col: number,
-  rotate: number
-): string {
-  const cw = Math.floor(src.width / 4);
-  const ch = Math.floor(src.height / 2);
-  const out = document.createElement("canvas");
-  out.width = cw;
-  out.height = ch;
-  const ctx = out.getContext("2d")!;
-  if (rotate === 180) {
-    ctx.translate(cw, ch);
-    ctx.rotate(Math.PI);
-  }
-  ctx.drawImage(src, col * cw, row * ch, cw, ch, 0, 0, cw, ch);
-  return out.toDataURL("image/jpeg", 0.93);
-}
-
-// ─── Props ─────────────────────────────────────────────────────────────────
 interface FlipViewerProps {
   pdfUrl: string;
   title: string;
@@ -66,11 +23,10 @@ export default function FlipViewer({
   slug,
   zineFormat = "half_letter",
 }: FlipViewerProps) {
-  const isMini = zineFormat === "mini";
+  const viewMap = mapFromPdfUrl(pdfUrl) ?? (zineFormat === "mini" ? "mini-center" : "pages");
+  const isMini = viewMap !== "pages";
 
-  const [scriptLoaded, setScriptLoaded] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [pdf, setPdf] = useState<any>(null);
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);           // virtual page count
   const [currentPage, setCurrentPage] = useState(1);
   const [pageCache, setPageCache] = useState<Map<number, string>>(new Map());
@@ -80,71 +36,52 @@ export default function FlipViewer({
   const [error, setError] = useState<string | null>(null);
   const flipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Load PDF once script is ready ────────────────────────────────────────
+  const miniSheet = useRef<Promise<HTMLCanvasElement> | null>(null);
+  const requestedPages = useRef(new Set<number>());
+
   useEffect(() => {
-    if (!scriptLoaded || !pdfUrl) return;
-    const lib = window.pdfjsLib;
-    lib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
-
-    lib.getDocument({ url: pdfUrl, withCredentials: false }).promise
-      .then(async (doc: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-        setPdf(doc);
-        // For mini: always 8 virtual pages; for half-letter: real page count
-        setNumPages(isMini ? 8 : doc.numPages);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        setError(`Could not load PDF: ${err.message}`);
-        setLoading(false);
-      });
-  }, [scriptLoaded, pdfUrl, isMini]);
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-
-  /** Render PDF page N to an off-screen canvas and return it. */
-  const renderPdfPageToCanvas = useCallback(
-    async (pageNum: number): Promise<HTMLCanvasElement | null> => {
-      if (!pdf) return null;
+    let active = true;
+    let task: Awaited<ReturnType<typeof openZinePdf>> | undefined;
+    setLoading(true);
+    setError(null);
+    setPdf(null);
+    setPageCache(new Map());
+    setCurrentPage(1);
+    miniSheet.current = null;
+    requestedPages.current = new Set();
+    void (async () => {
       try {
-        const page = await pdf.getPage(pageNum);
-        const base = page.getViewport({ scale: 1 });
-        const scale = Math.min(2.0, 1200 / base.width);   // high-res for mini cropping
-        const vp = page.getViewport({ scale });
-        const canvas = document.createElement("canvas");
-        canvas.width = vp.width;
-        canvas.height = vp.height;
-        const ctx = canvas.getContext("2d")!;
-        await page.render({ canvasContext: ctx, viewport: vp }).promise;
-        return canvas;
+        task = await openZinePdf(pdfUrl);
+        if (!active) {
+          await task.destroy();
+          return;
+        }
+        const doc = await task.promise;
+        if (!active) return;
+        setPdf(doc);
+        setNumPages(isMini ? 8 : doc.numPages);
       } catch {
-        return null;
+        if (active) setError("Could not load PDF.");
+      } finally {
+        if (active) setLoading(false);
       }
-    },
-    [pdf]
-  );
+    })();
+    return () => {
+      active = false;
+      if (task) void task.destroy().catch(() => {});
+    };
+  }, [pdfUrl, isMini]);
 
-  /**
-   * Produce a data-URL for virtual page `vp` (1-indexed).
-   *  - Mini:       render the one PDF page → extract the right panel.
-   *  - Half-letter: render PDF page vp directly.
-   */
-  const renderVirtualPage = useCallback(
-    async (vp: number): Promise<string> => {
-      if (!pdf) return "";
-      if (isMini) {
-        const panel = MINI_PANELS[vp - 1];
-        if (!panel) return "";
-        const canvas = await renderPdfPageToCanvas(1); // mini is always 1 PDF page
-        if (!canvas) return "";
-        return extractPanel(canvas, panel.row, panel.col, panel.rotate);
-      } else {
-        const canvas = await renderPdfPageToCanvas(vp);
-        if (!canvas) return "";
-        return canvas.toDataURL("image/jpeg", 0.92);
-      }
-    },
-    [pdf, isMini, renderPdfPageToCanvas]
-  );
+  const renderVirtualPage = useCallback(async (page: number) => {
+    if (!pdf) return "";
+    try {
+      if (viewMap === "pages") return (await renderPdfPage(pdf, page)).canvas.toDataURL("image/jpeg", 0.92);
+      miniSheet.current ??= renderPdfPage(pdf, 1, 2200).then(result => result.canvas);
+      return miniPanel(await miniSheet.current, viewMap, page).toDataURL("image/jpeg", 0.93);
+    } catch {
+      return "";
+    }
+  }, [pdf, viewMap]);
 
   // ── Pre-render current + neighbours ──────────────────────────────────────
   useEffect(() => {
@@ -152,21 +89,16 @@ export default function FlipViewer({
     const needed = [currentPage - 1, currentPage, currentPage + 1, currentPage + 2]
       .filter((p) => p >= 1 && p <= numPages);
 
-    needed.forEach((vp) => {
-      setPageCache((prev) => {
-        if (prev.has(vp)) return prev;
-        renderVirtualPage(vp).then((url) => {
-          if (!url) return;
-          setPageCache((c) => {
-            if (c.has(vp)) return c;
-            const next = new Map(c);
-            next.set(vp, url);
-            return next;
-          });
-        });
-        return prev;
+    const requests = requestedPages.current;
+    for (const page of needed) {
+      if (requests.has(page)) continue;
+      requests.add(page);
+      void renderVirtualPage(page).then(url => {
+        if (requests !== requestedPages.current) return;
+        if (url) setPageCache(cache => new Map(cache).set(page, url));
+        else requests.delete(page);
       });
-    });
+    }
   }, [pdf, currentPage, numPages, renderVirtualPage]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -213,23 +145,13 @@ export default function FlipViewer({
   // ── Derived display values ────────────────────────────────────────────────
   const currentImg  = pageCache.get(currentPage) ?? "";
   const pendingImg  = pendingPage ? (pageCache.get(pendingPage) ?? "") : "";
-  const pageLabel   = isMini ? MINI_PANELS[currentPage - 1]?.label ?? "" : "";
+  const pageLabel   = isMini ? MINI_LABELS[currentPage - 1] ?? "" : "";
 
   // ── Loading / error ───────────────────────────────────────────────────────
-  const scriptTag = (
-    <Script
-      src={`${PDFJS_CDN}/pdf.min.js`}
-      strategy="afterInteractive"
-      onLoad={() => setScriptLoaded(true)}
-      onError={() => setError("Failed to load PDF viewer.")}
-    />
-  );
-
   if (loading && !error) {
     return (
       <>
-        {scriptTag}
-        <div className="flex min-h-screen flex-col items-center justify-center bg-black text-white gap-4">
+          <div className="flex min-h-screen flex-col items-center justify-center bg-black text-white gap-4">
           <Spinner />
           <p className="text-sm text-white/50">Loading {title}…</p>
         </div>
@@ -251,7 +173,6 @@ export default function FlipViewer({
   // ── Main viewer ───────────────────────────────────────────────────────────
   return (
     <>
-      {scriptTag}
       <div
         className="flex min-h-screen flex-col bg-black select-none"
         onTouchStart={onTouchStart}
@@ -341,7 +262,7 @@ export default function FlipViewer({
                 return (
                   <button
                     key={pg}
-                    aria-label={`Go to ${isMini ? MINI_PANELS[i]?.label : `page ${pg}`}`}
+                    aria-label={`Go to ${isMini ? MINI_LABELS[i] : `page ${pg}`}`}
                     onClick={() => navigateTo(pg, pg > currentPage ? "forward" : "backward")}
                     className={`rounded-full transition-all duration-200 ${
                       pg === currentPage

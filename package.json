@@ -22,6 +22,7 @@
     "nanoid": "^5.1.5",
     "next": "15.5.29",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "6.3.289",
     "posthog-js": "^1.268.4",
     "posthog-node": "^5.9.1",
     "qrcode": "^1.5.4",

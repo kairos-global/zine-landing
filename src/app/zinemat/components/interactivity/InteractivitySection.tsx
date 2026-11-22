@@ -207,7 +207,7 @@ export default function InteractivitySection({
               <button
                 type="button"
                 onClick={() => downloadQR(issueQrLink.qr_path || issueQrImageUrl, slug || "issue")}
-                className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+                className="text-sm font-medium min-h-11 px-3 py-1.5 rounded-lg transition-colors"
                 style={{ backgroundColor: GREEN, color: "white" }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN)}
@@ -264,7 +264,7 @@ export default function InteractivitySection({
                     `collection-${slug || issueId || "qr"}`
                   )
                 }
-                className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+                className="text-sm font-medium min-h-11 px-3 py-1.5 rounded-lg transition-colors"
                 style={{ backgroundColor: GREEN, color: "white" }}
                 onMouseEnter={(e) =>
                   ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)
@@ -286,7 +286,7 @@ export default function InteractivitySection({
               <label className="text-xs font-medium text-gray-600">Label</label>
               <input
                 name="label"
-                className="w-full rounded-xl border px-3 py-2 text-sm"
+                className="min-h-11 w-full rounded-xl border px-3 py-2 text-base"
                 placeholder="e.g. My Instagram"
                 disabled={!issueId}
               />
@@ -295,7 +295,7 @@ export default function InteractivitySection({
               <label className="text-xs font-medium text-gray-600">Link URL</label>
               <input
                 name="url"
-                className="w-full rounded-xl border px-3 py-2 text-sm"
+                className="min-h-11 w-full rounded-xl border px-3 py-2 text-base"
                 placeholder="https://your-link.com"
                 disabled={!issueId}
               />
@@ -309,7 +309,7 @@ export default function InteractivitySection({
                 </div>
               </div>
               <button
-                className="ml-auto rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 transition-colors"
+                className="ml-auto min-h-11 rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 transition-colors"
                 style={{ backgroundColor: "black" }}
                 type="submit"
                 disabled={!issueId || regularLinks.length >= maxLinks}
@@ -342,7 +342,7 @@ export default function InteractivitySection({
                 return (
                   <div key={l.id} className="rounded-xl border bg-white p-4">
                     {/* Title + URL + Remove */}
-                    <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="mb-3 flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-base mb-1">
                           {l.label || `Link ${index + 1}`}
@@ -358,14 +358,14 @@ export default function InteractivitySection({
                       </div>
                       <button
                         onClick={() => remove(l.id)}
-                        className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition flex-shrink-0"
+                        className="text-xs text-red-500 hover:text-red-700 min-h-11 px-2 rounded border border-red-200 hover:bg-red-50 transition flex-shrink-0"
                       >
                         ✕
                       </button>
                     </div>
 
                     {/* Generate QR checkbox + QR preview row */}
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       {/* Checkbox */}
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <GreenCheckbox checked={l.generateQR} onChange={() => toggleQR(l.id)} />
@@ -378,7 +378,7 @@ export default function InteractivitySection({
                           <button
                             type="button"
                             onClick={() => downloadQR(qrUrl, l.label || `link-${index + 1}`)}
-                            className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                            className="text-sm font-medium min-h-11 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
                             style={{ backgroundColor: GREEN, color: "white" }}
                             onMouseEnter={(e) =>
                               ((e.currentTarget as HTMLElement).style.backgroundColor = GREEN_DARK)

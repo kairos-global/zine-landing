@@ -53,12 +53,14 @@ export async function POST(req: Request) {
 
     const { data: existing, error: fetchError } = await supabase
       .from("issues")
-      .select("id, status, published_at, cover_img_url, pdf_url, title, slug")
+      .select("id, status, published_at, cover_img_url, pdf_url, title, slug, profile_id")
       .eq("id", issueId)
       .maybeSingle();
 
-    console.log("💾 [Save] Existing issue:", existing);
-    if (fetchError) console.error("💾 [Save] Fetch error:", fetchError);
+    if (fetchError) return NextResponse.json({ error: "Could not verify the draft" }, { status: 500 });
+    if (existing && existing.profile_id !== profileId) {
+      return NextResponse.json({ error: "Draft not found" }, { status: 404 });
+    }
 
     const title = (formData.get("title") as string) || existing?.title || "Untitled";
     const baseSlug = slugFromTitle(title);

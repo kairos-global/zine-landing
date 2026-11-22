@@ -1,22 +1,29 @@
 "use client";
 
+import { ZINE_CATEGORIES, type ZineCategoryKey } from "@/lib/zine-categories";
+
 export type ZineFormat = "mini" | "half_letter";
 export type Basics = { title: string; zine_format: ZineFormat };
 
 export default function BasicsSection({
   value,
   onChange,
+  category,
+  onCategoryChange,
 }: {
   value: Basics;
   onChange: (next: Basics) => void;
+  category: ZineCategoryKey | null;
+  onCategoryChange: (category: ZineCategoryKey | null) => void;
 }) {
   return (
     <div className="space-y-4">
       {/* Title */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Title *</label>
+        <label htmlFor="zinemat-title" className="text-sm font-medium">Title *</label>
         <input
-          className="w-full rounded-xl border px-3 py-2"
+          id="zinemat-title"
+          className="min-h-11 w-full rounded-xl border px-3 py-2 text-base"
           value={value.title}
           placeholder="Enter your zine title"
           onChange={(e) => onChange({ ...value, title: e.target.value })}
@@ -26,8 +33,8 @@ export default function BasicsSection({
 
       {/* Format */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Format *</label>
-        <div className="grid grid-cols-2 gap-2">
+        <p id="zinemat-format" className="text-sm font-medium">Format *</p>
+        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="zinemat-format">
           {(
             [
               {
@@ -47,6 +54,7 @@ export default function BasicsSection({
               <button
                 key={id}
                 type="button"
+                aria-pressed={selected}
                 onClick={() => onChange({ ...value, zine_format: id })}
                 className={`rounded-xl border-2 p-3 text-left transition ${
                   selected
@@ -61,6 +69,17 @@ export default function BasicsSection({
           })}
         </div>
       </div>
+      <label className="block text-sm font-medium">
+        Category <span className="font-normal text-gray-500">· Optional</span>
+        <select
+          value={category ?? ""}
+          onChange={event => onCategoryChange(event.target.value ? event.target.value as ZineCategoryKey : null)}
+          className="mt-2 block min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-base"
+        >
+          <option value="">No category</option>
+          {ZINE_CATEGORIES.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+        </select>
+      </label>
     </div>
   );
 }
